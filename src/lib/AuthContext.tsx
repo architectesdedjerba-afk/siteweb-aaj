@@ -14,6 +14,7 @@ interface AuthContextValue {
   profile: UserProfile | null;
   loading: boolean;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
   isRepresentative: boolean;
   isActive: boolean;
 }
@@ -23,6 +24,7 @@ const AuthContext = createContext<AuthContextValue>({
   profile: null,
   loading: true,
   isAdmin: false,
+  isSuperAdmin: false,
   isRepresentative: false,
   isActive: false,
 });
@@ -64,12 +66,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return unsubscribe;
   }, [user]);
 
-  const isAdmin = profile?.role === 'admin';
+  const isSuperAdmin = profile?.role === 'super-admin';
+  const isAdmin = profile?.role === 'admin' || isSuperAdmin;
   const isRepresentative = profile?.role === 'representative' || isAdmin;
   const isActive = profile?.status === 'active';
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isRepresentative, isActive }}>
+    <AuthContext.Provider
+      value={{ user, profile, loading, isAdmin, isSuperAdmin, isRepresentative, isActive }}
+    >
       {children}
     </AuthContext.Provider>
   );

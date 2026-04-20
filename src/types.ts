@@ -5,7 +5,7 @@
 
 import type { Timestamp } from 'firebase/firestore';
 
-export type UserRole = 'admin' | 'member' | 'representative';
+export type UserRole = 'super-admin' | 'admin' | 'member' | 'representative';
 export type UserStatus = 'pending' | 'active' | 'suspended';
 export type MemberCategory = 'Architecte' | 'Architecte Stagiaire';
 

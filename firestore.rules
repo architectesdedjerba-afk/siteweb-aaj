@@ -22,7 +22,14 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return userExists() && userDoc().get('role', 'member') == "admin";
+      return userExists() && (
+        userDoc().get('role', 'member') == "admin" ||
+        userDoc().get('role', 'member') == "super-admin"
+      );
+    }
+
+    function isSuperAdmin() {
+      return userExists() && userDoc().get('role', 'member') == "super-admin";
     }
 
     function isRepresentative() {
