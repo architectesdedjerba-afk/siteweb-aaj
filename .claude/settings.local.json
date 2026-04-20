@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l \"D:/association-des-architectes-de-jerba/src/pages/\"*.tsx \"D:/association-des-architectes-de-jerba/src/index.css\")",
+      "Bash(npm install:*)",
+      "Bash(where npm.cmd)",
+      "Bash(where node.exe)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files \\(x86\\)/**)",
+      "Read(//c/Users/Yassine Mestiri/AppData/Roaming/**)",
+      "Bash(cmd.exe /c \"where node\")",
+      "Bash(cmd.exe /c \"where npm\")"
+    ]
+  }
+}

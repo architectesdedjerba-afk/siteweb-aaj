@@ -1,0 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Montserrat", sans-serif;
+
+  --color-aaj-dark: #0A192F;
+  --color-aaj-royal: #0047AB;
+  --color-aaj-soft: #E6F0FF;
+  --color-aaj-gray: #505F79;
+  --color-aaj-border: #D8E2EF;
+
+  --color-aaj-success: #059669;
+  --color-aaj-success-soft: #D1FAE5;
+  --color-aaj-error: #DC2626;
+  --color-aaj-error-soft: #FEE2E2;
+  --color-aaj-warning: #D97706;
+  --color-aaj-warning-soft: #FEF3C7;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply font-sans text-aaj-dark bg-white antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight text-aaj-dark font-extrabold;
+  }
+
+  /* Focus visible pour accessibilité clavier */
+  :focus-visible {
+    outline: 2px solid var(--color-aaj-royal);
+    outline-offset: 2px;
+  }
+
+  /* Respect des préférences utilisateur */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .border-aaj {
+    @apply border-aaj-border;
+  }
+
+  /* Skip-to-content link */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .focus\:not-sr-only:focus {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: 0;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+}
