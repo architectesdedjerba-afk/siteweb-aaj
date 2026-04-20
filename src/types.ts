@@ -9,6 +9,12 @@ export type UserRole = 'super-admin' | 'admin' | 'member' | 'representative';
 export type UserStatus = 'pending' | 'active' | 'suspended';
 export type MemberCategory = 'Architecte' | 'Architecte Stagiaire';
 
+export interface Cotisation {
+  paid: boolean;
+  paidAt?: Timestamp | string;
+  amount?: number;
+}
+
 export interface UserProfile {
   uid: string;
   displayName: string;
@@ -23,6 +29,7 @@ export interface UserProfile {
   address?: string;
   photoBase64?: string;
   createdAt?: Timestamp | string;
+  cotisations?: Record<string, Cotisation>;
 }
 
 export type EventType = 'Past' | 'Future';

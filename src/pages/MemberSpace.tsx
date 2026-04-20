@@ -79,6 +79,8 @@ export const MemberSpacePage = () => {
   const [annuaireViewMode, setAnnuaireViewMode] = useState<'grid' | 'list'>('grid');
   const [fabBottom, setFabBottom] = useState(100);
   const [editingMember, setEditingMember] = useState<any>(null);
+  const [editSelectedYears, setEditSelectedYears] = useState<string[]>([]);
+  const [editBulkAmount, setEditBulkAmount] = useState<string>('');
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [isResetMode, setIsResetMode] = useState(false);
@@ -635,6 +637,127 @@ export const MemberSpacePage = () => {
     }
   };
 
+  const getMemberStartYear = (member: any): number => {
+    const now = new Date().getFullYear();
+    const raw = member?.createdAt;
+    if (!raw) return now;
+    try {
+      if (typeof raw?.toDate === 'function') return raw.toDate().getFullYear();
+      const d = new Date(raw);
+      if (!isNaN(d.getTime())) return d.getFullYear();
+    } catch {
+      return now;
+    }
+    return now;
+  };
+
+  const getCotisationYears = (member: any): string[] => {
+    const currentYear = new Date().getFullYear();
+    const startYear = Math.min(getMemberStartYear(member), currentYear);
+    const endYear = currentYear + 3;
+    const years: string[] = [];
+    for (let y = startYear; y <= endYear; y++) years.push(String(y));
+    Object.keys(member?.cotisations || {}).forEach((y) => {
+      if (!years.includes(y)) years.push(y);
+    });
+    return years.sort();
+  };
+
+  const currentYearLabel = String(new Date().getFullYear());
+
+  const openMemberEditor = (member: any) => {
+    setEditingMember({
+      ...member,
+      cotisations: { ...(member.cotisations || {}) },
+    });
+    setEditSelectedYears([]);
+    setEditBulkAmount('');
+  };
+
+  const toggleCotisationYear = (year: string) => {
+    setEditingMember((prev: any) => {
+      if (!prev) return prev;
+      const current = prev.cotisations || {};
+      const entry = current[year];
+      const nextEntry = entry?.paid
+        ? { ...entry, paid: false, paidAt: '' }
+        : { ...entry, paid: true, paidAt: new Date().toISOString() };
+      return { ...prev, cotisations: { ...current, [year]: nextEntry } };
+    });
+  };
+
+  const updateCotisationAmount = (year: string, amount: string) => {
+    setEditingMember((prev: any) => {
+      if (!prev) return prev;
+      const current = prev.cotisations || {};
+      const entry = current[year] || { paid: false };
+      const n = amount === '' ? undefined : Number(amount);
+      return {
+        ...prev,
+        cotisations: { ...current, [year]: { ...entry, amount: n } },
+      };
+    });
+  };
+
+  const toggleYearSelection = (year: string) => {
+    setEditSelectedYears((prev) =>
+      prev.includes(year) ? prev.filter((y) => y !== year) : [...prev, year]
+    );
+  };
+
+  const payMultipleYears = () => {
+    if (editSelectedYears.length === 0) return;
+    const amountNum = editBulkAmount === '' ? undefined : Number(editBulkAmount);
+    setEditingMember((prev: any) => {
+      if (!prev) return prev;
+      const current = { ...(prev.cotisations || {}) };
+      const nowIso = new Date().toISOString();
+      editSelectedYears.forEach((year) => {
+        current[year] = {
+          paid: true,
+          paidAt: nowIso,
+          ...(amountNum !== undefined ? { amount: amountNum } : {}),
+        };
+      });
+      return { ...prev, cotisations: current };
+    });
+    setEditSelectedYears([]);
+    setEditBulkAmount('');
+  };
+
+  const handleSaveMember = async () => {
+    if (!isAdmin || !editingMember) return;
+    setIsSaving(true);
+    try {
+      const displayName =
+        `${editingMember.firstName || ''} ${editingMember.lastName || ''}`.trim() ||
+        editingMember.displayName;
+      const payload: any = {
+        firstName: editingMember.firstName || '',
+        lastName: editingMember.lastName || '',
+        displayName,
+        email: editingMember.email || '',
+        mobile: editingMember.mobile || '',
+        category: editingMember.category || 'Architecte',
+        licenseNumber: editingMember.licenseNumber || '',
+        address: editingMember.address || '',
+        role: editingMember.role || 'member',
+        status: editingMember.status || 'active',
+        cotisations: editingMember.cotisations || {},
+      };
+      await updateDoc(doc(db, 'users', editingMember.uid), payload);
+      alert('Fiche adhérent mise à jour avec succès.');
+      setEditingMember(null);
+      setEditSelectedYears([]);
+      setEditBulkAmount('');
+    } catch (err) {
+      console.error('Error updating member:', err);
+      alert("Erreur lors de la mise à jour de l'adhérent.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleAddMember = async (e: FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return;
@@ -1125,13 +1248,11 @@ export const MemberSpacePage = () => {
                               >
                                 <div className="flex justify-between items-start">
                                   <span className="text-[9px] font-black text-aaj-gray uppercase tracking-widest">
-                                    {item.createdAt
-                                      ?.toDate?.()
-                                      ?.toLocaleDateString('fr-FR', {
-                                        day: 'numeric',
-                                        month: 'short',
-                                        year: 'numeric',
-                                      }) || 'Récemment'}
+                                    {item.createdAt?.toDate?.()?.toLocaleDateString('fr-FR', {
+                                      day: 'numeric',
+                                      month: 'short',
+                                      year: 'numeric',
+                                    }) || 'Récemment'}
                                   </span>
                                   {item.fileBase64 && (
                                     <a
@@ -1493,13 +1614,11 @@ export const MemberSpacePage = () => {
                         >
                           <div className="flex justify-between items-start mb-4">
                             <span className="text-[10px] font-black text-aaj-royal uppercase tracking-widest">
-                              {item.createdAt
-                                ?.toDate?.()
-                                ?.toLocaleDateString('fr-FR', {
-                                  day: 'numeric',
-                                  month: 'long',
-                                  year: 'numeric',
-                                })}
+                              {item.createdAt?.toDate?.()?.toLocaleDateString('fr-FR', {
+                                day: 'numeric',
+                                month: 'long',
+                                year: 'numeric',
+                              })}
                             </span>
                             {item.fileBase64 && (
                               <a
@@ -1997,13 +2116,11 @@ export const MemberSpacePage = () => {
                                   </span>
                                   <span className="text-[8px] text-aaj-gray">•</span>
                                   <span className="text-[9px] font-bold text-aaj-gray uppercase tracking-widest">
-                                    {msg.createdAt
-                                      ?.toDate?.()
-                                      ?.toLocaleDateString('fr-FR', {
-                                        day: 'numeric',
-                                        month: 'short',
-                                        year: 'numeric',
-                                      })}
+                                    {msg.createdAt?.toDate?.()?.toLocaleDateString('fr-FR', {
+                                      day: 'numeric',
+                                      month: 'short',
+                                      year: 'numeric',
+                                    })}
                                   </span>
                                 </div>
                                 <p className="text-xs text-aaj-dark font-medium line-clamp-1">
@@ -2235,46 +2352,66 @@ export const MemberSpacePage = () => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-aaj-border">
-                          {allUsers.map((member) => (
-                            <tr key={member.uid} className="hover:bg-slate-50/50 transition-colors">
-                              <td className="p-4">
-                                <p className="text-sm font-black uppercase tracking-tight">
-                                  {member.displayName}
-                                </p>
-                                <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest">
-                                  {member.email}
-                                </p>
-                              </td>
-                              <td className="p-4">
-                                {member.status === 'suspended' ? (
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-700 text-[9px] font-black uppercase tracking-widest border border-red-100">
-                                    <XCircle size={10} /> Suspendu
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-[9px] font-black uppercase tracking-widest border border-green-100">
-                                    <CheckCircle2 size={10} /> Actif
-                                  </span>
-                                )}
-                              </td>
-                              <td className="p-4">
-                                <p className="text-xs font-bold text-aaj-dark">2026</p>
-                              </td>
-                              <td className="p-4 text-right">
-                                <button
-                                  onClick={() => setEditingMember(member)}
-                                  className="text-[10px] font-black text-aaj-royal uppercase tracking-widest hover:underline px-3"
-                                >
-                                  Éditer
-                                </button>
-                                <button
-                                  onClick={() => handleToggleSuspense(member)}
-                                  className={`text-[10px] font-black uppercase tracking-widest hover:underline px-3 ${member.status === 'suspended' ? 'text-green-600' : 'text-red-500'}`}
-                                >
-                                  {member.status === 'suspended' ? 'Reprendre' : 'Suspendre'}
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                          {allUsers.map((member) => {
+                            const currentYearPaid = !!member.cotisations?.[currentYearLabel]?.paid;
+                            return (
+                              <tr
+                                key={member.uid}
+                                onClick={() => openMemberEditor(member)}
+                                className="hover:bg-slate-50/50 transition-colors cursor-pointer"
+                              >
+                                <td className="p-4">
+                                  <p className="text-sm font-black uppercase tracking-tight">
+                                    {member.displayName}
+                                  </p>
+                                  <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest">
+                                    {member.email}
+                                  </p>
+                                </td>
+                                <td className="p-4">
+                                  {member.status === 'suspended' ? (
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-700 text-[9px] font-black uppercase tracking-widest border border-red-100">
+                                      <XCircle size={10} /> Suspendu
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-[9px] font-black uppercase tracking-widest border border-green-100">
+                                      <CheckCircle2 size={10} /> Actif
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-4">
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-xs font-bold text-aaj-dark">
+                                      {currentYearLabel}
+                                    </p>
+                                    {currentYearPaid ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[9px] font-black uppercase tracking-widest border border-green-100">
+                                        <CheckCircle2 size={9} /> Payée
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[9px] font-black uppercase tracking-widest border border-amber-100">
+                                        <XCircle size={9} /> Non payée
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => openMemberEditor(member)}
+                                    className="text-[10px] font-black text-aaj-royal uppercase tracking-widest hover:underline px-3"
+                                  >
+                                    Éditer
+                                  </button>
+                                  <button
+                                    onClick={() => handleToggleSuspense(member)}
+                                    className={`text-[10px] font-black uppercase tracking-widest hover:underline px-3 ${member.status === 'suspended' ? 'text-green-600' : 'text-red-500'}`}
+                                  >
+                                    {member.status === 'suspended' ? 'Reprendre' : 'Suspendre'}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -3377,7 +3514,7 @@ export const MemberSpacePage = () => {
           )}
         </AnimatePresence>
 
-        {/* Edit Member Role Modal */}
+        {/* Edit Member Modal */}
         <AnimatePresence>
           {editingMember && (
             <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
@@ -3392,13 +3529,11 @@ export const MemberSpacePage = () => {
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="relative w-full max-w-lg bg-white rounded shadow-2xl overflow-hidden"
+                className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded shadow-2xl overflow-hidden flex flex-col"
               >
                 <div className="p-8 border-b border-aaj-border flex justify-between items-center bg-slate-50">
                   <div>
-                    <h3 className="text-xl font-black uppercase tracking-tight">
-                      Privilèges & Rôles
-                    </h3>
+                    <h3 className="text-xl font-black uppercase tracking-tight">Fiche Adhérent</h3>
                     <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest mt-1">
                       Édition de : {editingMember.firstName} {editingMember.lastName}
                     </p>
@@ -3407,71 +3542,310 @@ export const MemberSpacePage = () => {
                     onClick={() => setEditingMember(null)}
                     className="text-aaj-gray hover:text-aaj-dark transition-colors"
                   >
-                    <XCircle size={24} />
+                    <X size={24} />
                   </button>
                 </div>
 
-                <div className="p-8 space-y-8">
-                  <div className="space-y-4">
-                    <h4 className="text-[11px] font-black uppercase tracking-widest text-aaj-dark">
-                      Rôle principal du membre
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-8 space-y-10">
+                  {/* Informations personnelles */}
+                  <section className="space-y-4">
+                    <h4 className="text-[11px] font-black uppercase tracking-widest text-aaj-dark border-b border-aaj-border pb-2">
+                      Informations personnelles
                     </h4>
-                    <div className="grid grid-cols-1 gap-4">
-                      {[
-                        {
-                          id: 'member',
-                          label: 'Membre Standard',
-                          desc: "Accès classique à l'espace adhérent.",
-                        },
-                        {
-                          id: 'representative',
-                          label: 'Représentant Association',
-                          desc: 'Peut déposer les avis de commissions techniques.',
-                        },
-                        {
-                          id: 'admin',
-                          label: 'Administrateur (Bureau)',
-                          desc: 'Accès complet à la gestion du site et des adhésions.',
-                        },
-                      ].map((role) => (
-                        <button
-                          key={role.id}
-                          onClick={() => setEditingMember({ ...editingMember, role: role.id })}
-                          className={`w-full p-6 border rounded text-left transition-all ${
-                            editingMember.role === role.id
-                              ? 'border-aaj-royal bg-blue-50/50 ring-1 ring-aaj-royal'
-                              : 'border-aaj-border hover:border-aaj-royal/30 bg-white'
-                          }`}
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Prénom
+                        </label>
+                        <input
+                          type="text"
+                          value={editingMember.firstName || ''}
+                          onChange={(e) =>
+                            setEditingMember({ ...editingMember, firstName: e.target.value })
+                          }
+                          className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Nom
+                        </label>
+                        <input
+                          type="text"
+                          value={editingMember.lastName || ''}
+                          onChange={(e) =>
+                            setEditingMember({ ...editingMember, lastName: e.target.value })
+                          }
+                          className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Email
+                        </label>
+                        <input
+                          type="email"
+                          value={editingMember.email || ''}
+                          onChange={(e) =>
+                            setEditingMember({ ...editingMember, email: e.target.value })
+                          }
+                          className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Téléphone
+                        </label>
+                        <input
+                          type="tel"
+                          value={editingMember.mobile || ''}
+                          onChange={(e) =>
+                            setEditingMember({ ...editingMember, mobile: e.target.value })
+                          }
+                          className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Catégorie
+                        </label>
+                        <select
+                          value={editingMember.category || 'Architecte'}
+                          onChange={(e) =>
+                            setEditingMember({ ...editingMember, category: e.target.value })
+                          }
+                          className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold uppercase tracking-widest"
                         >
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-[11px] font-black uppercase tracking-widest">
-                              {role.label}
-                            </span>
-                            {editingMember.role === role.id && (
-                              <CheckCircle2 size={16} className="text-aaj-royal" />
-                            )}
-                          </div>
-                          <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-wide leading-relaxed">
-                            {role.desc}
-                          </p>
-                        </button>
-                      ))}
+                          <option value="Architecte">Architecte</option>
+                          <option value="Architecte Stagiaire">Architecte Stagiaire</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Matricule
+                        </label>
+                        <input
+                          type="text"
+                          value={editingMember.licenseNumber || ''}
+                          onChange={(e) =>
+                            setEditingMember({ ...editingMember, licenseNumber: e.target.value })
+                          }
+                          className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
+                        />
+                      </div>
+                      <div className="space-y-2 col-span-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Ville / Adresse
+                        </label>
+                        <input
+                          type="text"
+                          value={editingMember.address || ''}
+                          onChange={(e) =>
+                            setEditingMember({ ...editingMember, address: e.target.value })
+                          }
+                          className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  </section>
+
+                  {/* Rôle & Statut */}
+                  <section className="space-y-4">
+                    <h4 className="text-[11px] font-black uppercase tracking-widest text-aaj-dark border-b border-aaj-border pb-2">
+                      Rôle & Statut
+                    </h4>
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Rôle
+                        </label>
+                        <select
+                          value={editingMember.role || 'member'}
+                          onChange={(e) =>
+                            setEditingMember({ ...editingMember, role: e.target.value })
+                          }
+                          className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold uppercase tracking-widest"
+                        >
+                          <option value="member">Membre Standard</option>
+                          <option value="representative">Représentant Association</option>
+                          <option value="admin">Administrateur (Bureau)</option>
+                          <option value="super-admin">Super Admin</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Statut
+                        </label>
+                        <select
+                          value={editingMember.status || 'active'}
+                          onChange={(e) =>
+                            setEditingMember({ ...editingMember, status: e.target.value })
+                          }
+                          className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold uppercase tracking-widest"
+                        >
+                          <option value="active">Actif</option>
+                          <option value="suspended">Suspendu</option>
+                          <option value="pending">En attente</option>
+                        </select>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Cotisations */}
+                  <section className="space-y-4">
+                    <div className="flex justify-between items-center border-b border-aaj-border pb-2">
+                      <h4 className="text-[11px] font-black uppercase tracking-widest text-aaj-dark">
+                        Cotisations annuelles
+                      </h4>
+                      <span className="text-[9px] text-aaj-gray font-bold uppercase tracking-widest">
+                        Année en cours : {currentYearLabel}
+                      </span>
+                    </div>
+
+                    <div className="border border-aaj-border rounded overflow-hidden">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="bg-slate-50 border-b border-aaj-border">
+                          <tr>
+                            <th className="p-3 w-10 text-[9px] font-black uppercase tracking-widest text-aaj-gray">
+                              <input
+                                type="checkbox"
+                                checked={
+                                  editSelectedYears.length > 0 &&
+                                  editSelectedYears.length ===
+                                    getCotisationYears(editingMember).length
+                                }
+                                onChange={(e) => {
+                                  if (e.target.checked)
+                                    setEditSelectedYears(getCotisationYears(editingMember));
+                                  else setEditSelectedYears([]);
+                                }}
+                              />
+                            </th>
+                            <th className="p-3 text-[9px] font-black uppercase tracking-widest text-aaj-gray">
+                              Année
+                            </th>
+                            <th className="p-3 text-[9px] font-black uppercase tracking-widest text-aaj-gray">
+                              Statut
+                            </th>
+                            <th className="p-3 text-[9px] font-black uppercase tracking-widest text-aaj-gray">
+                              Montant (TND)
+                            </th>
+                            <th className="p-3 text-[9px] font-black uppercase tracking-widest text-aaj-gray">
+                              Date de paiement
+                            </th>
+                            <th className="p-3 text-[9px] font-black uppercase tracking-widest text-aaj-gray text-right">
+                              Action
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-aaj-border">
+                          {getCotisationYears(editingMember).map((year) => {
+                            const entry = editingMember.cotisations?.[year];
+                            const isPaid = !!entry?.paid;
+                            const isCurrent = year === currentYearLabel;
+                            const isFuture = Number(year) > Number(currentYearLabel);
+                            const paidAtStr = entry?.paidAt
+                              ? typeof entry.paidAt === 'string'
+                                ? new Date(entry.paidAt).toLocaleDateString('fr-FR')
+                                : entry.paidAt?.toDate?.()?.toLocaleDateString('fr-FR') || '-'
+                              : '-';
+                            return (
+                              <tr key={year} className={isCurrent ? 'bg-blue-50/30' : ''}>
+                                <td className="p-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={editSelectedYears.includes(year)}
+                                    onChange={() => toggleYearSelection(year)}
+                                  />
+                                </td>
+                                <td className="p-3">
+                                  <span className="text-xs font-black text-aaj-dark">{year}</span>
+                                  {isFuture && (
+                                    <span className="ml-2 text-[9px] font-black uppercase tracking-widest text-aaj-royal">
+                                      Avance
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-3">
+                                  {isPaid ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[9px] font-black uppercase tracking-widest border border-green-100">
+                                      <CheckCircle2 size={9} /> Payée
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[9px] font-black uppercase tracking-widest border border-amber-100">
+                                      <XCircle size={9} /> Non payée
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-3">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value={entry?.amount ?? ''}
+                                    onChange={(e) => updateCotisationAmount(year, e.target.value)}
+                                    placeholder="—"
+                                    className="w-24 bg-slate-50/50 border border-aaj-border rounded px-2 py-1 text-xs font-bold"
+                                  />
+                                </td>
+                                <td className="p-3 text-xs font-bold text-aaj-gray">{paidAtStr}</td>
+                                <td className="p-3 text-right">
+                                  <button
+                                    onClick={() => toggleCotisationYear(year)}
+                                    className={`text-[10px] font-black uppercase tracking-widest hover:underline px-2 ${isPaid ? 'text-red-500' : 'text-green-600'}`}
+                                  >
+                                    {isPaid ? 'Annuler' : 'Valider'}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="bg-slate-50 border border-aaj-border rounded p-4 flex flex-wrap items-end gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Montant par année (optionnel)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={editBulkAmount}
+                          onChange={(e) => setEditBulkAmount(e.target.value)}
+                          placeholder="Ex: 150"
+                          className="w-32 bg-white border border-aaj-border rounded px-3 py-2 text-xs font-bold"
+                        />
+                      </div>
+                      <button
+                        onClick={payMultipleYears}
+                        disabled={editSelectedYears.length === 0}
+                        className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        <CheckCircle2 size={12} />
+                        Payer{' '}
+                        {editSelectedYears.length > 0
+                          ? `${editSelectedYears.length} année(s)`
+                          : 'les années cochées'}
+                      </button>
+                      <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest flex-1 min-w-[12rem]">
+                        Cochez plusieurs années (y compris futures) pour les valider d&apos;un coup
+                        — paiement en avance pris en charge.
+                      </p>
+                    </div>
+                  </section>
                 </div>
 
                 <div className="p-8 bg-slate-50 border-t border-aaj-border flex gap-4">
                   <button
-                    onClick={() => {
-                      // Logic would be: await updateDoc(doc(db, 'users', editingMember.uid), { role: editingMember.role });
-                      alert(
-                        `Le rôle de ${editingMember.firstName} a été mis à jour avec succès en tant que ${editingMember.role}.`
-                      );
-                      setEditingMember(null);
-                    }}
-                    className="flex-1 bg-aaj-dark text-white py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all flex items-center justify-center gap-3"
+                    onClick={handleSaveMember}
+                    disabled={isSaving}
+                    className="flex-1 bg-aaj-dark text-white py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all flex items-center justify-center gap-3 disabled:opacity-60"
                   >
-                    Enregistrer les Privilèges
+                    {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}{' '}
+                    Enregistrer la fiche
                   </button>
                   <button
                     onClick={() => setEditingMember(null)}
@@ -3519,13 +3893,11 @@ export const MemberSpacePage = () => {
                 <div className="p-8 overflow-y-auto flex-1 custom-scrollbar">
                   <div className="text-sm font-black text-aaj-gray uppercase tracking-widest mb-6 border-b border-aaj-border pb-4">
                     Publié le{' '}
-                    {selectedNews.createdAt
-                      ?.toDate?.()
-                      ?.toLocaleDateString('fr-FR', {
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric',
-                      })}
+                    {selectedNews.createdAt?.toDate?.()?.toLocaleDateString('fr-FR', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })}
                   </div>
                   <div className="text-sm text-aaj-dark leading-relaxed font-medium whitespace-pre-wrap mb-8">
                     {selectedNews.content}
