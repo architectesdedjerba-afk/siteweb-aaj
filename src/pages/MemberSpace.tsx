@@ -713,7 +713,6 @@ export const MemberSpacePage = () => {
     try {
       await signOut(auth);
       setUserProfile(null);
-      setDemoAdmin(false);
     } catch (err) {
       console.error("Logout Error:", err);
     }
