@@ -82,6 +82,7 @@ export const MemberSpacePage = () => {
   const [authLoading, setAuthLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [userRole, setUserRole] = useState<Role | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSaving, setIsSaving] = useState(false);
   const [annuaireViewMode, setAnnuaireViewMode] = useState<'grid' | 'list'>('grid');
@@ -130,9 +131,14 @@ export const MemberSpacePage = () => {
     city: 'Houmt Souk',
   });
 
-  const isSuperAdmin = userProfile?.role === 'super-admin';
+  const isSuperAdmin = userProfile?.role === 'super-admin' || userRole?.isAllAccess === true;
   const isAdmin = userProfile?.role === 'admin' || isSuperAdmin;
   const isRepresentative = userProfile?.role === 'representative' || isAdmin;
+
+  const can = (key: string): boolean => {
+    if (isSuperAdmin) return true;
+    return userRole?.permissions?.[key] === true;
+  };
 
   const [newAccount, setNewAccount] = useState({
     firstName: '',
@@ -259,10 +265,19 @@ export const MemberSpacePage = () => {
     return () => unsubscribe();
   }, [user]);
 
+  const needsAdminData =
+    isAdmin ||
+    can('members.manage') ||
+    can('profileRequests.manage') ||
+    can('roles.manage') ||
+    can('users.editRole') ||
+    can('users.editStatus');
+
   useEffect(() => {
-    if (!user || !isAdmin) {
+    if (!user || !needsAdminData) {
       setAllUsers([]);
       setProfileRequests([]);
+      setRolesList([]);
       return;
     }
 
@@ -324,7 +339,7 @@ export const MemberSpacePage = () => {
       unsubscribeRequests();
       unsubscribeRoles();
     };
-  }, [user, isAdmin, isSuperAdmin]);
+  }, [user, needsAdminData, isSuperAdmin]);
 
   useEffect(() => {
     if (!user) {
@@ -440,6 +455,31 @@ export const MemberSpacePage = () => {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const roleId = userProfile?.role;
+    if (!roleId) {
+      setUserRole(null);
+      return;
+    }
+    const unsubscribe = onSnapshot(
+      doc(db, 'roles', roleId),
+      (snap) => {
+        if (snap.exists()) {
+          setUserRole({ id: snap.id, ...snap.data() } as Role);
+        } else {
+          const fallback = DEFAULT_ROLES.find((r) => r.id === roleId);
+          setUserRole(fallback ? { ...fallback } : null);
+        }
+      },
+      (err) => {
+        console.warn('Role subscription error (falling back to defaults):', err);
+        const fallback = DEFAULT_ROLES.find((r) => r.id === roleId);
+        setUserRole(fallback ? { ...fallback } : null);
+      }
+    );
+    return () => unsubscribe();
+  }, [userProfile?.role]);
 
   const handleUpdatePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!user || !e.target.files?.[0]) return;
@@ -559,7 +599,7 @@ export const MemberSpacePage = () => {
 
   const handleAddDocument = async (e: FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) return;
+    if (!can('library.manage')) return;
 
     if (!newDoc.url && !newDoc.fileBase64) {
       alert('Veuillez fournir un lien ou uploader un document.');
@@ -614,7 +654,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleDeleteDocument = async (docId: string) => {
-    if (!isAdmin) return;
+    if (!can('library.manage')) return;
     if (window.confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) {
       try {
         await deleteDoc(doc(db, 'documents', docId));
@@ -639,7 +679,7 @@ export const MemberSpacePage = () => {
 
   const handleAddNews = async (e: FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) return;
+    if (!can('news.manage')) return;
     setIsSaving(true);
     try {
       await addDoc(collection(db, 'news'), {
@@ -660,7 +700,7 @@ export const MemberSpacePage = () => {
 
   const handleAddPV = async (e: FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) return;
+    if (!can('commissions.create')) return;
     if (!newPV.fileBase64) {
       alert('Veuillez sélectionner un fichier PV.');
       return;
@@ -771,7 +811,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleSaveMember = async () => {
-    if (!isAdmin || !editingMember) return;
+    if (!can('members.manage') || !editingMember) return;
     setIsSaving(true);
     try {
       const displayName =
@@ -805,7 +845,7 @@ export const MemberSpacePage = () => {
 
   const handleAddMember = async (e: FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) return;
+    if (!can('members.manage')) return;
     setIsSaving(true);
     try {
       const memberId = `member_${Date.now()}`;
@@ -854,7 +894,7 @@ export const MemberSpacePage = () => {
 
   const handleCreateAccount = async (e: FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) return;
+    if (!can('accounts.create')) return;
     if (!isSuperAdmin && (newAccount.role === 'admin' || newAccount.role === 'super-admin')) {
       setAccountCreateMsg({
         type: 'error',
@@ -970,7 +1010,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleUpdateMessageStatus = async (messageId: string, updates: any) => {
-    if (!isAdmin) return;
+    if (!can('messages.inbox')) return;
     try {
       await updateDoc(doc(db, 'contact_messages', messageId), updates);
     } catch (err) {
@@ -980,7 +1020,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleToggleSuspense = async (targetUser: any) => {
-    if (!isAdmin) return;
+    if (!can('users.editStatus')) return;
     const newStatus = targetUser.status === 'suspended' ? 'active' : 'suspended';
     const action = newStatus === 'suspended' ? 'suspendre' : 'reprendre';
 
@@ -999,7 +1039,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleUpdateRole = async (targetUser: any, newRole: string) => {
-    if (!isSuperAdmin) return;
+    if (!can('users.editRole')) return;
     if (targetUser.uid === user?.uid) {
       alert('Vous ne pouvez pas modifier votre propre rôle.');
       return;
@@ -1023,7 +1063,7 @@ export const MemberSpacePage = () => {
     targetUser: any,
     newStatus: 'pending' | 'active' | 'suspended'
   ) => {
-    if (!isSuperAdmin) return;
+    if (!can('users.editStatus')) return;
     if (targetUser.uid === user?.uid) {
       alert('Vous ne pouvez pas modifier votre propre statut.');
       return;
@@ -1041,7 +1081,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleTogglePermission = async (role: Role, permKey: string, value: boolean) => {
-    if (!isSuperAdmin) return;
+    if (!can('roles.manage')) return;
     if (role.isAllAccess) return;
     setSavingRoleId(role.id);
     try {
@@ -1057,7 +1097,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleCreateRole = async () => {
-    if (!isSuperAdmin) return;
+    if (!can('roles.manage')) return;
     const name = newRoleForm.name.trim();
     if (!name) {
       alert('Le nom du rôle est requis.');
@@ -1097,7 +1137,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleDeleteRole = async (role: Role) => {
-    if (!isSuperAdmin) return;
+    if (!can('roles.manage')) return;
     if (role.isSystem) {
       alert('Les rôles système ne peuvent pas être supprimés.');
       return;
@@ -1117,7 +1157,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleTogglePartnerVisibility = async (partnerId: string, currentVisibility: boolean) => {
-    if (!isAdmin) return;
+    if (!can('partners.manage')) return;
     try {
       await updateDoc(doc(db, 'partners', partnerId), {
         isVisible: !currentVisibility,
@@ -1152,7 +1192,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleApproveProfileChange = async (request: any) => {
-    if (!isAdmin) return;
+    if (!can('profileRequests.manage')) return;
     setIsSaving(true);
     try {
       // 1. Update the user document (using setDoc with merge to avoid 'no document to update' error)
@@ -1188,7 +1228,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleRejectProfileChange = async (requestId: string) => {
-    if (!isAdmin) return;
+    if (!can('profileRequests.manage')) return;
     if (window.confirm('Êtes-vous sûr de vouloir rejeter cette demande ?')) {
       try {
         await updateDoc(doc(db, 'profile_updates', requestId), {
@@ -1284,101 +1324,99 @@ export const MemberSpacePage = () => {
                 ))}
               </nav>
 
-              {isAdmin && (
-                <div className="mt-12 space-y-1">
-                  <h3 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-gray px-6 mb-4 mt-8 flex items-center gap-2">
-                    <Shield size={12} className="text-aaj-royal" /> Administration
-                  </h3>
-                  {[
-                    ...(isSuperAdmin
-                      ? [
-                          {
-                            id: 'admin-create-account',
-                            icon: <UserPlus size={18} />,
-                            label: 'Créer Compte',
-                          },
-                          {
-                            id: 'admin-roles',
-                            icon: <KeyRound size={18} />,
-                            label: 'Rôles & Permissions',
-                          },
-                        ]
-                      : []),
-                    { id: 'admin-members', icon: <Users size={18} />, label: 'Gérer Adhésions' },
-                    {
-                      id: 'admin-partners',
-                      icon: <Shield size={18} />,
-                      label: 'Gérer Partenaires',
-                    },
-                    {
-                      id: 'admin-profile-requests',
-                      icon: <CheckCircle2 size={18} />,
-                      label: 'Validations Profils',
-                      badge: profileRequests.filter((r) => r.status === 'pending').length,
-                    },
-                    {
-                      id: 'admin-documents',
-                      icon: <BookOpen size={18} />,
-                      label: 'Gérer Bibliothèque',
-                    },
-                    {
-                      id: 'admin-commissions',
-                      icon: <Building2 size={18} />,
-                      label: 'Dépôts des Avis',
-                    },
-                    { id: 'admin-news', icon: <FileText size={18} />, label: 'Actions & Infos' },
-                    {
-                      id: 'admin-messages',
-                      icon: <Mail size={18} />,
-                      label: 'Messages Entrants',
-                      badge: adminMessages.filter((m) => m.status === 'unread').length,
-                    },
-                  ].map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => setActiveTab(item.id)}
-                      className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
-                        activeTab === item.id
-                          ? 'bg-aaj-dark text-white shadow-lg'
-                          : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
-                      }`}
-                    >
-                      <div className="flex items-center gap-4">
-                        <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>
-                          {item.icon}
-                        </span>
-                        {item.label}
-                      </div>
-                      {item.badge > 0 && (
-                        <span className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
-                          {item.badge}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {(() => {
+                const adminItems = [
+                  {
+                    id: 'admin-create-account',
+                    icon: <UserPlus size={18} />,
+                    label: 'Créer Compte',
+                    perm: 'accounts.create',
+                  },
+                  {
+                    id: 'admin-roles',
+                    icon: <KeyRound size={18} />,
+                    label: 'Rôles & Permissions',
+                    perm: 'roles.manage',
+                  },
+                  {
+                    id: 'admin-members',
+                    icon: <Users size={18} />,
+                    label: 'Gérer Adhésions',
+                    perm: 'members.manage',
+                  },
+                  {
+                    id: 'admin-partners',
+                    icon: <Shield size={18} />,
+                    label: 'Gérer Partenaires',
+                    perm: 'partners.manage',
+                  },
+                  {
+                    id: 'admin-profile-requests',
+                    icon: <CheckCircle2 size={18} />,
+                    label: 'Validations Profils',
+                    perm: 'profileRequests.manage',
+                    badge: profileRequests.filter((r) => r.status === 'pending').length,
+                  },
+                  {
+                    id: 'admin-documents',
+                    icon: <BookOpen size={18} />,
+                    label: 'Gérer Bibliothèque',
+                    perm: 'library.manage',
+                  },
+                  {
+                    id: 'admin-commissions',
+                    icon: <Building2 size={18} />,
+                    label: 'Dépôts des Avis',
+                    perm: 'commissions.create',
+                  },
+                  {
+                    id: 'admin-news',
+                    icon: <FileText size={18} />,
+                    label: 'Actions & Infos',
+                    perm: 'news.manage',
+                  },
+                  {
+                    id: 'admin-messages',
+                    icon: <Mail size={18} />,
+                    label: 'Messages Entrants',
+                    perm: 'messages.inbox',
+                    badge: adminMessages.filter((m) => m.status === 'unread').length,
+                  },
+                ].filter((item) => can(item.perm));
 
-              {!isAdmin && isRepresentative && (
-                <div className="mt-12 space-y-1">
-                  <h3 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-gray px-6 mb-4 mt-8 flex items-center gap-2">
-                    <Shield size={12} className="text-aaj-royal" /> Privilèges
-                  </h3>
-                  <button
-                    onClick={() => setActiveTab('admin-commissions')}
-                    className={`w-full flex items-center gap-4 px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
-                      activeTab === 'admin-commissions'
-                        ? 'bg-aaj-dark text-white shadow-lg'
-                        : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
-                    }`}
-                  >
-                    <span className={activeTab === 'admin-commissions' ? 'text-aaj-royal' : ''}>
-                      <Building2 size={18} />
-                    </span>
-                    Dépôts des Avis
-                  </button>
-                </div>
-              )}
+                if (adminItems.length === 0) return null;
+
+                return (
+                  <div className="mt-12 space-y-1">
+                    <h3 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-gray px-6 mb-4 mt-8 flex items-center gap-2">
+                      <Shield size={12} className="text-aaj-royal" /> Administration
+                    </h3>
+                    {adminItems.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => setActiveTab(item.id)}
+                        className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
+                          activeTab === item.id
+                            ? 'bg-aaj-dark text-white shadow-lg'
+                            : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>
+                            {item.icon}
+                          </span>
+                          {item.label}
+                        </div>
+                        {item.badge > 0 && (
+                          <span className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
+                            {item.badge}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
             </aside>
 
             {/* Main Dashboard Grid */}
@@ -1969,7 +2007,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {isAdmin && activeTab === 'admin-documents' && (
+                {can('library.manage') && activeTab === 'admin-documents' && (
                   <motion.div
                     key="admin-documents"
                     initial={{ opacity: 0, x: 10 }}
@@ -2481,7 +2519,7 @@ export const MemberSpacePage = () => {
                 )}
 
                 {/* Admin Sections */}
-                {activeTab === 'admin-members' && isAdmin && (
+                {activeTab === 'admin-members' && can('members.manage') && (
                   <motion.div
                     key="admin-members"
                     initial={{ opacity: 0, x: 10 }}
@@ -2586,7 +2624,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'admin-roles' && isSuperAdmin && (
+                {activeTab === 'admin-roles' && can('roles.manage') && (
                   <motion.div
                     key="admin-roles"
                     initial={{ opacity: 0, x: 10 }}
@@ -2867,7 +2905,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'admin-partners' && isAdmin && (
+                {activeTab === 'admin-partners' && can('partners.manage') && (
                   <motion.div
                     key="admin-partners"
                     initial={{ opacity: 0, x: 10 }}
@@ -2938,7 +2976,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'admin-create-account' && isSuperAdmin && (
+                {activeTab === 'admin-create-account' && can('accounts.create') && (
                   <motion.div
                     key="admin-create-account"
                     initial={{ opacity: 0, x: 10 }}
@@ -3198,7 +3236,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'admin-messages' && isAdmin && (
+                {activeTab === 'admin-messages' && can('messages.inbox') && (
                   <motion.div
                     key="admin-messages"
                     initial={{ opacity: 0, x: 10 }}
@@ -3428,7 +3466,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'admin-profile-requests' && isAdmin && (
+                {activeTab === 'admin-profile-requests' && can('profileRequests.manage') && (
                   <motion.div
                     key="admin-profile-requests"
                     initial={{ opacity: 0, x: 10 }}
@@ -3537,7 +3575,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'admin-news' && isAdmin && (
+                {activeTab === 'admin-news' && can('news.manage') && (
                   <motion.div
                     key="admin-news"
                     initial={{ opacity: 0, x: 10 }}
@@ -4659,7 +4697,7 @@ export const MemberSpacePage = () => {
           )}
 
           {/* Modal: Add Role */}
-          {isAddRoleModalOpen && isSuperAdmin && (
+          {isAddRoleModalOpen && can('roles.manage') && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
               <motion.div
                 initial={{ opacity: 0 }}
