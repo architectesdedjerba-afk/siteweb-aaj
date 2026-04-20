@@ -132,7 +132,7 @@ service cloud.firestore {
       allow create: if incoming().keys().hasAll(['fullName', 'email', 'phone', 'category', 'matricule', 'city', 'createdAt']) &&
                        incoming().fullName is string && incoming().fullName.size() > 0 && incoming().fullName.size() < 200 &&
                        incoming().email is string && incoming().email.matches('.+@.+\\..+') &&
-                       incoming().category in ['Architecte', 'Architecte Stagiaire'] &&
+                       incoming().category is string && incoming().category.size() > 0 && incoming().category.size() < 100 &&
                        incoming().get('status', 'pending') == 'pending';
       allow read, update, delete: if isAdmin();
     }
@@ -150,6 +150,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, update: if isSuperAdmin();
       allow delete: if isSuperAdmin() && existing().get('isSystem', false) == false;
+    }
+
+    // Admin-configurable lists used by member-creation form
+    // (villes/délégations, memberTypes). Read for any signed-in user so
+    // the dropdowns populate; write restricted to super-admin.
+    match /config/{configId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSuperAdmin();
     }
 
     // Allow connection test

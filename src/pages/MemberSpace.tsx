@@ -75,6 +75,18 @@ import {
   DEFAULT_ROLES,
   sanitizeRoleId,
 } from '../lib/permissions';
+import {
+  DEFAULT_MEMBER_TYPES,
+  DEFAULT_VILLES,
+  MEMBER_TYPES_DOC_PATH,
+  VILLES_DOC_PATH,
+  buildMatricule,
+  computeNextIndex,
+  saveMemberTypes,
+  saveVilles,
+  type MemberType,
+} from '../lib/memberConfig';
+import { SearchableSelect } from '../components/SearchableSelect';
 
 export const MemberSpacePage = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -126,9 +138,20 @@ export const MemberSpacePage = () => {
     email: '',
     phone: '',
     category: 'Architecte',
+    memberTypeLetter: 'A',
+    birthDate: '',
     matricule: '',
     city: 'Houmt Souk',
   });
+  const [villesList, setVillesList] = useState<string[]>(DEFAULT_VILLES);
+  const [memberTypesList, setMemberTypesList] = useState<MemberType[]>(DEFAULT_MEMBER_TYPES);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [newVilleInput, setNewVilleInput] = useState('');
+  const [newTypeInput, setNewTypeInput] = useState({ letter: '', label: '' });
+  const [configMessage, setConfigMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
 
   const isSuperAdmin = userProfile?.role === 'super-admin';
   const isAdmin = userProfile?.role === 'admin' || isSuperAdmin;
@@ -177,6 +200,56 @@ export const MemberSpacePage = () => {
 
   useEffect(() => {
     if (!user) return;
+
+    const unsubVilles = onSnapshot(
+      doc(db, VILLES_DOC_PATH.col, VILLES_DOC_PATH.id),
+      async (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as { list?: string[] };
+          if (Array.isArray(data.list) && data.list.length > 0) {
+            setVillesList(data.list);
+            return;
+          }
+        }
+        if (isSuperAdmin) {
+          try {
+            await saveVilles(DEFAULT_VILLES);
+          } catch (err) {
+            console.warn('Seeding default villes failed:', err);
+          }
+        }
+        setVillesList(DEFAULT_VILLES);
+      },
+      (err) => {
+        console.warn('Villes config read blocked, using defaults.', err);
+        setVillesList(DEFAULT_VILLES);
+      }
+    );
+
+    const unsubTypes = onSnapshot(
+      doc(db, MEMBER_TYPES_DOC_PATH.col, MEMBER_TYPES_DOC_PATH.id),
+      async (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as { list?: MemberType[] };
+          if (Array.isArray(data.list) && data.list.length > 0) {
+            setMemberTypesList(data.list);
+            return;
+          }
+        }
+        if (isSuperAdmin) {
+          try {
+            await saveMemberTypes(DEFAULT_MEMBER_TYPES);
+          } catch (err) {
+            console.warn('Seeding default member types failed:', err);
+          }
+        }
+        setMemberTypesList(DEFAULT_MEMBER_TYPES);
+      },
+      (err) => {
+        console.warn('Member types config read blocked, using defaults.', err);
+        setMemberTypesList(DEFAULT_MEMBER_TYPES);
+      }
+    );
 
     const qNews = query(collection(db, 'news'), orderBy('createdAt', 'desc'));
     const unsubscribeNews = onSnapshot(qNews, (snapshot) => {
@@ -236,13 +309,15 @@ export const MemberSpacePage = () => {
     });
 
     return () => {
+      unsubVilles();
+      unsubTypes();
       unsubscribeNews();
       unsubscribePVs();
       unsubscribeAdminMessages();
       unsubscribeUserMessages();
       unsubscribePartners();
     };
-  }, [user]);
+  }, [user, isSuperAdmin]);
 
   useEffect(() => {
     if (!user) return;
@@ -375,6 +450,19 @@ export const MemberSpacePage = () => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Auto-generate Matricule AAJ when birthDate + type letter are set
+  useEffect(() => {
+    if (!newMember.birthDate || !newMember.memberTypeLetter) return;
+    const existing = allUsers
+      .map((u: any) => (u?.licenseNumber ? String(u.licenseNumber) : ''))
+      .filter(Boolean);
+    const idx = computeNextIndex(existing, newMember.birthDate, newMember.memberTypeLetter);
+    const generated = buildMatricule(newMember.birthDate, newMember.memberTypeLetter, idx);
+    if (generated && generated !== newMember.matricule) {
+      setNewMember((prev) => ({ ...prev, matricule: generated }));
+    }
+  }, [newMember.birthDate, newMember.memberTypeLetter, allUsers]);
 
   // Profile Edit State
   const [profileForm, setProfileForm] = useState({
@@ -803,11 +891,145 @@ export const MemberSpacePage = () => {
     }
   };
 
+  const handleAddVille = async (raw: string) => {
+    const ville = raw.trim();
+    if (!ville) return;
+    if (villesList.some((v) => v.toLowerCase() === ville.toLowerCase())) {
+      setConfigMessage({ type: 'error', text: 'Cette ville existe déjà.' });
+      return;
+    }
+    const next = [...villesList, ville].sort((a, b) => a.localeCompare(b, 'fr'));
+    setConfigSaving(true);
+    try {
+      await saveVilles(next);
+      setVillesList(next);
+      setNewVilleInput('');
+      setConfigMessage({ type: 'success', text: `Ville "${ville}" ajoutée.` });
+    } catch (err) {
+      console.error('Error saving ville:', err);
+      setConfigMessage({ type: 'error', text: "Erreur lors de l'enregistrement de la ville." });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleRemoveVille = async (ville: string) => {
+    if (!window.confirm(`Supprimer la ville "${ville}" de la liste ?`)) return;
+    const next = villesList.filter((v) => v !== ville);
+    setConfigSaving(true);
+    try {
+      await saveVilles(next);
+      setVillesList(next);
+      setConfigMessage({ type: 'success', text: `Ville "${ville}" supprimée.` });
+    } catch (err) {
+      console.error('Error removing ville:', err);
+      setConfigMessage({ type: 'error', text: 'Erreur lors de la suppression.' });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleResetVilles = async () => {
+    if (
+      !window.confirm('Réinitialiser la liste des villes avec toutes les délégations tunisiennes ?')
+    )
+      return;
+    setConfigSaving(true);
+    try {
+      await saveVilles(DEFAULT_VILLES);
+      setVillesList(DEFAULT_VILLES);
+      setConfigMessage({ type: 'success', text: 'Liste des villes réinitialisée.' });
+    } catch (err) {
+      console.error('Error resetting villes:', err);
+      setConfigMessage({ type: 'error', text: 'Erreur lors de la réinitialisation.' });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleAddMemberType = async () => {
+    const letter = newTypeInput.letter.trim().toUpperCase().slice(0, 1);
+    const label = newTypeInput.label.trim();
+    if (!letter || !label) {
+      setConfigMessage({ type: 'error', text: 'La lettre et le libellé sont requis.' });
+      return;
+    }
+    if (memberTypesList.some((t) => t.letter === letter)) {
+      setConfigMessage({ type: 'error', text: `La lettre "${letter}" est déjà utilisée.` });
+      return;
+    }
+    const next = [...memberTypesList, { letter, label }];
+    setConfigSaving(true);
+    try {
+      await saveMemberTypes(next);
+      setMemberTypesList(next);
+      setNewTypeInput({ letter: '', label: '' });
+      setConfigMessage({ type: 'success', text: `Type "${label}" (${letter}) ajouté.` });
+    } catch (err) {
+      console.error('Error saving member type:', err);
+      setConfigMessage({ type: 'error', text: "Erreur lors de l'enregistrement du type." });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleRemoveMemberType = async (letter: string) => {
+    const t = memberTypesList.find((x) => x.letter === letter);
+    if (!t) return;
+    if (!window.confirm(`Supprimer le type "${t.label}" (${letter}) ?`)) return;
+    const next = memberTypesList.filter((x) => x.letter !== letter);
+    setConfigSaving(true);
+    try {
+      await saveMemberTypes(next);
+      setMemberTypesList(next);
+      setConfigMessage({ type: 'success', text: `Type "${t.label}" supprimé.` });
+    } catch (err) {
+      console.error('Error removing member type:', err);
+      setConfigMessage({ type: 'error', text: 'Erreur lors de la suppression.' });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleResetMemberTypes = async () => {
+    if (!window.confirm('Réinitialiser les types de membres par défaut ?')) return;
+    setConfigSaving(true);
+    try {
+      await saveMemberTypes(DEFAULT_MEMBER_TYPES);
+      setMemberTypesList(DEFAULT_MEMBER_TYPES);
+      setConfigMessage({ type: 'success', text: 'Types de membres réinitialisés.' });
+    } catch (err) {
+      console.error('Error resetting member types:', err);
+      setConfigMessage({ type: 'error', text: 'Erreur lors de la réinitialisation.' });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
   const handleAddMember = async (e: FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return;
+    if (!newMember.birthDate) {
+      alert('La date de naissance est requise pour générer le matricule AAJ.');
+      return;
+    }
+    if (!newMember.memberTypeLetter) {
+      alert('Le type de membre est requis pour générer le matricule AAJ.');
+      return;
+    }
     setIsSaving(true);
     try {
+      // Recompute matricule at submit to guard against concurrent additions
+      const existing = allUsers
+        .map((u: any) => (u?.licenseNumber ? String(u.licenseNumber) : ''))
+        .filter(Boolean);
+      const idx = computeNextIndex(existing, newMember.birthDate, newMember.memberTypeLetter);
+      const matricule =
+        buildMatricule(newMember.birthDate, newMember.memberTypeLetter, idx) || newMember.matricule;
+
+      const typeEntry = memberTypesList.find((t) => t.letter === newMember.memberTypeLetter);
+      const memberTypeLabel = typeEntry?.label || newMember.category;
+
       const memberId = `member_${Date.now()}`;
       await setDoc(doc(db, 'users', memberId), {
         uid: memberId,
@@ -816,14 +1038,17 @@ export const MemberSpacePage = () => {
         displayName: `${newMember.firstName} ${newMember.lastName}`,
         email: newMember.email,
         mobile: newMember.phone,
-        category: newMember.category,
-        licenseNumber: newMember.matricule,
+        category: memberTypeLabel,
+        memberType: memberTypeLabel,
+        memberTypeLetter: newMember.memberTypeLetter,
+        birthDate: newMember.birthDate,
+        licenseNumber: matricule,
         address: newMember.city,
         role: 'member',
         status: 'active',
         createdAt: serverTimestamp(),
       });
-      alert('Membre ajouté avec succès !');
+      alert(`Membre ajouté avec succès ! Matricule: ${matricule}`);
       setIsAddMemberModalOpen(false);
       setNewMember({
         firstName: '',
@@ -831,6 +1056,8 @@ export const MemberSpacePage = () => {
         email: '',
         phone: '',
         category: 'Architecte',
+        memberTypeLetter: 'A',
+        birthDate: '',
         matricule: '',
         city: 'Houmt Souk',
       });
@@ -1301,6 +1528,11 @@ export const MemberSpacePage = () => {
                             id: 'admin-roles',
                             icon: <KeyRound size={18} />,
                             label: 'Rôles & Permissions',
+                          },
+                          {
+                            id: 'admin-config',
+                            icon: <Settings size={18} />,
+                            label: 'Paramètres',
                           },
                         ]
                       : []),
@@ -2864,6 +3096,189 @@ export const MemberSpacePage = () => {
                         </tbody>
                       </table>
                     </div>
+                  </motion.div>
+                )}
+
+                {activeTab === 'admin-config' && isSuperAdmin && (
+                  <motion.div
+                    key="admin-config"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="space-y-10"
+                  >
+                    <div>
+                      <span className="text-[10px] uppercase tracking-[3px] text-aaj-royal font-black mb-2 block">
+                        Super Admin
+                      </span>
+                      <h2 className="text-2xl font-black uppercase tracking-tighter">Paramètres</h2>
+                      <p className="text-[11px] text-aaj-gray font-bold uppercase tracking-wider mt-2">
+                        Configurer les listes utilisées lors de l&apos;ajout des adhérents
+                      </p>
+                    </div>
+
+                    {configMessage && (
+                      <div
+                        className={`p-4 rounded border text-[11px] font-bold uppercase tracking-widest ${
+                          configMessage.type === 'success'
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                            : 'bg-red-50 border-red-200 text-red-700'
+                        }`}
+                      >
+                        {configMessage.text}
+                      </div>
+                    )}
+
+                    {/* Member Types */}
+                    <section className="border border-aaj-border rounded overflow-hidden">
+                      <div className="p-5 bg-slate-50 border-b border-aaj-border flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-black uppercase tracking-widest text-aaj-dark">
+                            Types de membres
+                          </h3>
+                          <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-wider mt-1">
+                            Lettre utilisée dans le matricule AAJ + libellé
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleResetMemberTypes}
+                          disabled={configSaving}
+                          className="text-[10px] font-black uppercase tracking-widest text-aaj-gray hover:text-aaj-dark border border-aaj-border px-4 py-2 rounded"
+                        >
+                          Réinitialiser
+                        </button>
+                      </div>
+                      <div className="divide-y divide-aaj-border">
+                        {memberTypesList.map((t) => (
+                          <div
+                            key={t.letter}
+                            className="flex items-center justify-between px-5 py-3"
+                          >
+                            <div className="flex items-center gap-4">
+                              <span className="w-10 h-10 rounded bg-aaj-dark text-white flex items-center justify-center font-black">
+                                {t.letter}
+                              </span>
+                              <span className="text-xs font-bold text-aaj-dark">{t.label}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMemberType(t.letter)}
+                              disabled={configSaving}
+                              className="text-red-500 hover:text-red-700 transition-colors"
+                              title="Supprimer"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))}
+                        {memberTypesList.length === 0 && (
+                          <div className="px-5 py-4 text-[11px] text-aaj-gray italic">
+                            Aucun type configuré.
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-5 bg-slate-50 border-t border-aaj-border grid grid-cols-1 md:grid-cols-[80px_1fr_auto] gap-3">
+                        <input
+                          type="text"
+                          value={newTypeInput.letter}
+                          onChange={(e) =>
+                            setNewTypeInput({
+                              ...newTypeInput,
+                              letter: e.target.value.toUpperCase().slice(0, 1),
+                            })
+                          }
+                          placeholder="Lettre"
+                          maxLength={1}
+                          className="bg-white border border-aaj-border rounded px-3 py-2 text-xs font-black uppercase text-center tracking-widest"
+                        />
+                        <input
+                          type="text"
+                          value={newTypeInput.label}
+                          onChange={(e) =>
+                            setNewTypeInput({ ...newTypeInput, label: e.target.value })
+                          }
+                          placeholder="Libellé du type (ex: Architecte)"
+                          className="bg-white border border-aaj-border rounded px-3 py-2 text-xs font-bold"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddMemberType}
+                          disabled={configSaving}
+                          className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center justify-center gap-2"
+                        >
+                          <Plus size={12} /> Ajouter
+                        </button>
+                      </div>
+                    </section>
+
+                    {/* Villes / Délégations */}
+                    <section className="border border-aaj-border rounded overflow-hidden">
+                      <div className="p-5 bg-slate-50 border-b border-aaj-border flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-black uppercase tracking-widest text-aaj-dark">
+                            Villes / Délégations
+                          </h3>
+                          <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-wider mt-1">
+                            {villesList.length} délégation{villesList.length > 1 ? 's' : ''}{' '}
+                            disponible
+                            {villesList.length > 1 ? 's' : ''}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleResetVilles}
+                          disabled={configSaving}
+                          className="text-[10px] font-black uppercase tracking-widest text-aaj-gray hover:text-aaj-dark border border-aaj-border px-4 py-2 rounded"
+                        >
+                          Restaurer liste complète
+                        </button>
+                      </div>
+                      <div className="p-5 bg-slate-50 border-b border-aaj-border flex gap-3">
+                        <input
+                          type="text"
+                          value={newVilleInput}
+                          onChange={(e) => setNewVilleInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddVille(newVilleInput);
+                            }
+                          }}
+                          placeholder="Ajouter une ville / délégation"
+                          className="flex-1 bg-white border border-aaj-border rounded px-3 py-2 text-xs font-bold"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleAddVille(newVilleInput)}
+                          disabled={configSaving}
+                          className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center justify-center gap-2"
+                        >
+                          <Plus size={12} /> Ajouter
+                        </button>
+                      </div>
+                      <div className="max-h-96 overflow-y-auto custom-scrollbar divide-y divide-aaj-border">
+                        {villesList.map((v) => (
+                          <div key={v} className="flex items-center justify-between px-5 py-2.5">
+                            <span className="text-xs font-bold text-aaj-dark">{v}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveVille(v)}
+                              disabled={configSaving}
+                              className="text-red-500 hover:text-red-700 transition-colors"
+                              title="Supprimer"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        ))}
+                        {villesList.length === 0 && (
+                          <div className="px-5 py-4 text-[11px] text-aaj-gray italic">
+                            Aucune ville configurée.
+                          </div>
+                        )}
+                      </div>
+                    </section>
                   </motion.div>
                 )}
 
@@ -4587,42 +5002,71 @@ export const MemberSpacePage = () => {
                   <div className="grid grid-cols-2 gap-8">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                        Catégorie
-                      </label>
-                      <select
-                        value={newMember.category}
-                        onChange={(e) => setNewMember({ ...newMember, category: e.target.value })}
-                        className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold uppercase tracking-widest"
-                      >
-                        <option value="Architecte">Architecte</option>
-                        <option value="Architecte Stagiaire">Architecte Stagiaire</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                        Matricule
+                        Date de naissance
                       </label>
                       <input
-                        type="text"
+                        type="date"
                         required
-                        value={newMember.matricule}
-                        onChange={(e) => setNewMember({ ...newMember, matricule: e.target.value })}
+                        value={newMember.birthDate}
+                        onChange={(e) => setNewMember({ ...newMember, birthDate: e.target.value })}
                         className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
                       />
                     </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                        Type de membre
+                      </label>
+                      <select
+                        value={newMember.memberTypeLetter}
+                        onChange={(e) => {
+                          const letter = e.target.value;
+                          const t = memberTypesList.find((x) => x.letter === letter);
+                          setNewMember({
+                            ...newMember,
+                            memberTypeLetter: letter,
+                            category: t?.label || newMember.category,
+                          });
+                        }}
+                        required
+                        className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold uppercase tracking-widest"
+                      >
+                        {memberTypesList.map((t) => (
+                          <option key={t.letter} value={t.letter}>
+                            {t.label} ({t.letter})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                      Ville
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={newMember.city}
-                      onChange={(e) => setNewMember({ ...newMember, city: e.target.value })}
-                      className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
-                    />
+                  <div className="grid grid-cols-2 gap-8">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                        Matricule AAJ
+                      </label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={newMember.matricule}
+                        placeholder="Généré automatiquement"
+                        className="w-full bg-slate-100 border border-aaj-border rounded px-4 py-3 text-xs font-bold text-aaj-royal tracking-widest cursor-not-allowed"
+                      />
+                      <p className="text-[9px] text-aaj-gray font-bold uppercase tracking-wider ml-1">
+                        AAJ + mois + année (2 chiffres) + indice + lettre
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                        Ville
+                      </label>
+                      <SearchableSelect
+                        value={newMember.city}
+                        onChange={(v) => setNewMember({ ...newMember, city: v })}
+                        options={villesList}
+                        placeholder="Sélectionner une délégation"
+                        required
+                      />
+                    </div>
                   </div>
 
                   <div className="bg-amber-50 border border-amber-100 p-6 rounded flex items-start gap-4">
