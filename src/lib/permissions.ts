@@ -46,6 +46,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     permissions: [
       { key: 'accounts.create', label: 'Créer des comptes utilisateurs' },
       { key: 'roles.manage', label: 'Gérer les rôles & permissions' },
+      { key: 'config.manage', label: 'Gérer les paramètres (villes, types de membres)' },
       { key: 'users.editRole', label: 'Attribuer des rôles' },
       { key: 'users.editStatus', label: 'Modifier le statut des utilisateurs' },
     ],
