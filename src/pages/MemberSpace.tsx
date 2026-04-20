@@ -39,6 +39,7 @@ import {
   KeyRound,
   Eye,
   EyeOff,
+  Search,
 } from 'lucide-react';
 import {
   signInWithEmailAndPassword,
@@ -82,6 +83,11 @@ export const MemberSpacePage = () => {
   const [editSelectedYears, setEditSelectedYears] = useState<string[]>([]);
   const [editBulkAmount, setEditBulkAmount] = useState<string>('');
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
+  const [rolesSearch, setRolesSearch] = useState('');
+  const [rolesRoleFilter, setRolesRoleFilter] = useState<
+    'all' | 'super-admin' | 'admin' | 'representative' | 'member'
+  >('all');
+  const [rolesUpdatingUid, setRolesUpdatingUid] = useState<string | null>(null);
   const [resetSent, setResetSent] = useState(false);
   const [isResetMode, setIsResetMode] = useState(false);
   const [libraryDocs, setLibraryDocs] = useState<any[]>([]);
@@ -953,6 +959,51 @@ export const MemberSpacePage = () => {
     }
   };
 
+  const handleUpdateRole = async (
+    targetUser: any,
+    newRole: 'super-admin' | 'admin' | 'representative' | 'member'
+  ) => {
+    if (!isSuperAdmin) return;
+    if (targetUser.uid === user?.uid) {
+      alert('Vous ne pouvez pas modifier votre propre rôle.');
+      return;
+    }
+    if ((targetUser.role || 'member') === newRole) return;
+    if (!window.confirm(`Changer le rôle de ${targetUser.displayName} en « ${newRole} » ?`)) {
+      return;
+    }
+    setRolesUpdatingUid(targetUser.uid);
+    try {
+      await updateDoc(doc(db, 'users', targetUser.uid), { role: newRole });
+    } catch (err) {
+      console.error('Error updating role:', err);
+      alert('Erreur lors de la mise à jour du rôle.');
+    } finally {
+      setRolesUpdatingUid(null);
+    }
+  };
+
+  const handleUpdateStatus = async (
+    targetUser: any,
+    newStatus: 'pending' | 'active' | 'suspended'
+  ) => {
+    if (!isSuperAdmin) return;
+    if (targetUser.uid === user?.uid) {
+      alert('Vous ne pouvez pas modifier votre propre statut.');
+      return;
+    }
+    if ((targetUser.status || 'pending') === newStatus) return;
+    setRolesUpdatingUid(targetUser.uid);
+    try {
+      await updateDoc(doc(db, 'users', targetUser.uid), { status: newStatus });
+    } catch (err) {
+      console.error('Error updating status:', err);
+      alert('Erreur lors de la mise à jour du statut.');
+    } finally {
+      setRolesUpdatingUid(null);
+    }
+  };
+
   const handleTogglePartnerVisibility = async (partnerId: string, currentVisibility: boolean) => {
     if (!isAdmin) return;
     try {
@@ -1133,6 +1184,11 @@ export const MemberSpacePage = () => {
                             id: 'admin-create-account',
                             icon: <UserPlus size={18} />,
                             label: 'Créer Compte',
+                          },
+                          {
+                            id: 'admin-roles',
+                            icon: <KeyRound size={18} />,
+                            label: 'Rôles & Permissions',
                           },
                         ]
                       : []),
@@ -2414,6 +2470,256 @@ export const MemberSpacePage = () => {
                           })}
                         </tbody>
                       </table>
+                    </div>
+                  </motion.div>
+                )}
+
+                {activeTab === 'admin-roles' && isSuperAdmin && (
+                  <motion.div
+                    key="admin-roles"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="space-y-8"
+                  >
+                    <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-4">
+                      <div>
+                        <span className="text-[10px] uppercase tracking-[3px] text-aaj-royal font-black mb-2 block">
+                          Super Admin
+                        </span>
+                        <h2 className="text-2xl font-black uppercase tracking-tighter">
+                          Rôles & Permissions
+                        </h2>
+                        <p className="text-[11px] text-aaj-gray font-bold uppercase tracking-wider mt-2">
+                          Attribuer rôles et statuts d&apos;accès aux utilisateurs
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      {[
+                        {
+                          label: 'Super Admins',
+                          count: allUsers.filter((u) => u.role === 'super-admin').length,
+                          color: 'text-purple-600',
+                        },
+                        {
+                          label: 'Administrateurs',
+                          count: allUsers.filter((u) => u.role === 'admin').length,
+                          color: 'text-aaj-royal',
+                        },
+                        {
+                          label: 'Représentants',
+                          count: allUsers.filter((u) => u.role === 'representative').length,
+                          color: 'text-amber-600',
+                        },
+                        {
+                          label: 'Membres',
+                          count: allUsers.filter((u) => u.role === 'member' || !u.role).length,
+                          color: 'text-aaj-dark',
+                        },
+                        {
+                          label: 'Suspendus',
+                          count: allUsers.filter((u) => u.status === 'suspended').length,
+                          color: 'text-red-500',
+                        },
+                      ].map((stat) => (
+                        <div
+                          key={stat.label}
+                          className="border border-aaj-border rounded p-5 bg-white"
+                        >
+                          <p className="text-[9px] font-black uppercase tracking-widest text-aaj-gray mb-2">
+                            {stat.label}
+                          </p>
+                          <p className={`text-3xl font-black ${stat.color}`}>{stat.count}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-col md:flex-row gap-4">
+                      <div className="flex-1 relative">
+                        <Search
+                          size={14}
+                          className="absolute left-4 top-1/2 -translate-y-1/2 text-aaj-gray"
+                        />
+                        <input
+                          type="text"
+                          value={rolesSearch}
+                          onChange={(e) => setRolesSearch(e.target.value)}
+                          placeholder="Rechercher par nom ou email..."
+                          className="w-full pl-11 pr-4 py-3 border border-aaj-border rounded text-sm font-medium focus:border-aaj-royal focus:outline-none"
+                        />
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        {[
+                          { id: 'all', label: 'Tous' },
+                          { id: 'super-admin', label: 'Super Admins' },
+                          { id: 'admin', label: 'Admins' },
+                          { id: 'representative', label: 'Représentants' },
+                          { id: 'member', label: 'Membres' },
+                        ].map((f) => (
+                          <button
+                            key={f.id}
+                            onClick={() => setRolesRoleFilter(f.id as any)}
+                            className={`px-4 py-3 border rounded text-[10px] font-black uppercase tracking-widest transition-all ${
+                              rolesRoleFilter === f.id
+                                ? 'bg-aaj-dark text-white border-aaj-dark'
+                                : 'bg-white text-aaj-gray border-aaj-border hover:border-aaj-royal'
+                            }`}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="border border-aaj-border rounded overflow-hidden">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="bg-slate-50 border-b border-aaj-border">
+                          <tr>
+                            <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
+                              Utilisateur
+                            </th>
+                            <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
+                              Rôle
+                            </th>
+                            <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
+                              Statut
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-aaj-border">
+                          {allUsers
+                            .filter(
+                              (m) =>
+                                rolesRoleFilter === 'all' ||
+                                (m.role || 'member') === rolesRoleFilter
+                            )
+                            .filter((m) => {
+                              const s = rolesSearch.trim().toLowerCase();
+                              if (!s) return true;
+                              return (
+                                (m.displayName || '').toLowerCase().includes(s) ||
+                                (m.email || '').toLowerCase().includes(s)
+                              );
+                            })
+                            .map((member) => {
+                              const isSelf = member.uid === user?.uid;
+                              const isUpdating = rolesUpdatingUid === member.uid;
+                              const currentRole = member.role || 'member';
+                              const currentStatus = member.status || 'pending';
+                              return (
+                                <tr
+                                  key={member.uid}
+                                  className="hover:bg-slate-50/50 transition-colors"
+                                >
+                                  <td className="p-4">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <p className="text-sm font-black uppercase tracking-tight">
+                                        {member.displayName || '—'}
+                                      </p>
+                                      {isSelf && (
+                                        <span className="px-2 py-0.5 rounded-full bg-blue-50 text-aaj-royal text-[8px] font-black uppercase tracking-widest border border-blue-100">
+                                          Vous
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest">
+                                      {member.email}
+                                    </p>
+                                  </td>
+                                  <td className="p-4">
+                                    <select
+                                      value={currentRole}
+                                      disabled={isSelf || isUpdating}
+                                      onChange={(e) =>
+                                        handleUpdateRole(member, e.target.value as any)
+                                      }
+                                      className={`w-full border rounded px-3 py-2 text-[10px] font-black uppercase tracking-widest bg-white ${
+                                        isSelf || isUpdating
+                                          ? 'text-aaj-gray border-aaj-border cursor-not-allowed'
+                                          : 'text-aaj-dark border-aaj-border hover:border-aaj-royal focus:outline-none focus:border-aaj-royal'
+                                      }`}
+                                    >
+                                      <option value="member">Membre</option>
+                                      <option value="representative">Représentant</option>
+                                      <option value="admin">Administrateur</option>
+                                      <option value="super-admin">Super Administrateur</option>
+                                    </select>
+                                  </td>
+                                  <td className="p-4">
+                                    <select
+                                      value={currentStatus}
+                                      disabled={isSelf || isUpdating}
+                                      onChange={(e) =>
+                                        handleUpdateStatus(member, e.target.value as any)
+                                      }
+                                      className={`w-full border rounded px-3 py-2 text-[10px] font-black uppercase tracking-widest bg-white ${
+                                        isSelf || isUpdating
+                                          ? 'text-aaj-gray border-aaj-border cursor-not-allowed'
+                                          : 'text-aaj-dark border-aaj-border hover:border-aaj-royal focus:outline-none focus:border-aaj-royal'
+                                      }`}
+                                    >
+                                      <option value="pending">En attente</option>
+                                      <option value="active">Actif</option>
+                                      <option value="suspended">Suspendu</option>
+                                    </select>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          {allUsers.length === 0 && (
+                            <tr>
+                              <td
+                                colSpan={3}
+                                className="p-8 text-center text-[11px] font-bold text-aaj-gray uppercase tracking-widest"
+                              >
+                                Aucun utilisateur
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="border border-aaj-border rounded p-6 bg-slate-50 space-y-3">
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-aaj-dark">
+                        Définition des rôles
+                      </h4>
+                      <ul className="space-y-2 text-[11px] text-aaj-gray">
+                        <li>
+                          <span className="font-black text-aaj-dark">Membre</span> — Accès à
+                          l&apos;espace adhérent, bibliothèque, messagerie, annuaire.
+                        </li>
+                        <li>
+                          <span className="font-black text-aaj-dark">Représentant</span> — Dépôt des
+                          avis de commissions techniques en plus des droits Membre.
+                        </li>
+                        <li>
+                          <span className="font-black text-aaj-dark">Administrateur</span> — Accès
+                          complet à la gestion du site et des adhésions.
+                        </li>
+                        <li>
+                          <span className="font-black text-aaj-dark">Super Administrateur</span> —
+                          Administrateur + création de comptes et gestion des rôles.
+                        </li>
+                      </ul>
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-aaj-dark pt-2">
+                        Définition des statuts
+                      </h4>
+                      <ul className="space-y-2 text-[11px] text-aaj-gray">
+                        <li>
+                          <span className="font-black text-aaj-dark">En attente</span> — Inscription
+                          non validée, accès limité.
+                        </li>
+                        <li>
+                          <span className="font-black text-aaj-dark">Actif</span> — Accès complet
+                          selon le rôle.
+                        </li>
+                        <li>
+                          <span className="font-black text-aaj-dark">Suspendu</span> — Accès bloqué.
+                        </li>
+                      </ul>
                     </div>
                   </motion.div>
                 )}
