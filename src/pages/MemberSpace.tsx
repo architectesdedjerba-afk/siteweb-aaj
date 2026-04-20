@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, FormEvent, useRef } from 'react';
+import { useState, useEffect, FormEvent, useRef, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import {
   UserCircle,
@@ -68,6 +68,13 @@ import {
 import { auth, db } from '../lib/firebase';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { motion, AnimatePresence } from 'motion/react';
+import type { Role } from '../types';
+import {
+  PERMISSION_GROUPS,
+  ALL_PERMISSION_KEYS,
+  DEFAULT_ROLES,
+  sanitizeRoleId,
+} from '../lib/permissions';
 
 export const MemberSpacePage = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -84,10 +91,12 @@ export const MemberSpacePage = () => {
   const [editBulkAmount, setEditBulkAmount] = useState<string>('');
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
   const [rolesSearch, setRolesSearch] = useState('');
-  const [rolesRoleFilter, setRolesRoleFilter] = useState<
-    'all' | 'super-admin' | 'admin' | 'representative' | 'member'
-  >('all');
+  const [rolesRoleFilter, setRolesRoleFilter] = useState<string>('all');
   const [rolesUpdatingUid, setRolesUpdatingUid] = useState<string | null>(null);
+  const [rolesList, setRolesList] = useState<Role[]>([]);
+  const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
+  const [isAddRoleModalOpen, setIsAddRoleModalOpen] = useState(false);
+  const [newRoleForm, setNewRoleForm] = useState({ name: '', description: '' });
   const [resetSent, setResetSent] = useState(false);
   const [isResetMode, setIsResetMode] = useState(false);
   const [libraryDocs, setLibraryDocs] = useState<any[]>([]);
@@ -281,11 +290,41 @@ export const MemberSpacePage = () => {
       }
     );
 
+    const qRoles = query(collection(db, 'roles'), orderBy('name', 'asc'));
+    const unsubscribeRoles = onSnapshot(
+      qRoles,
+      async (snapshot) => {
+        if (snapshot.empty && isSuperAdmin) {
+          try {
+            for (const r of DEFAULT_ROLES) {
+              await setDoc(doc(db, 'roles', r.id), {
+                id: r.id,
+                name: r.name,
+                description: r.description,
+                permissions: r.permissions,
+                isSystem: r.isSystem,
+                isAllAccess: r.isAllAccess,
+                createdAt: serverTimestamp(),
+              });
+            }
+          } catch (err) {
+            console.error('Error seeding default roles:', err);
+          }
+          return;
+        }
+        setRolesList(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Role));
+      },
+      (err) => {
+        console.warn('Permission restricted for roles list.', err);
+      }
+    );
+
     return () => {
       unsubscribeUsers();
       unsubscribeRequests();
+      unsubscribeRoles();
     };
-  }, [user, isAdmin]);
+  }, [user, isAdmin, isSuperAdmin]);
 
   useEffect(() => {
     if (!user) {
@@ -959,10 +998,7 @@ export const MemberSpacePage = () => {
     }
   };
 
-  const handleUpdateRole = async (
-    targetUser: any,
-    newRole: 'super-admin' | 'admin' | 'representative' | 'member'
-  ) => {
+  const handleUpdateRole = async (targetUser: any, newRole: string) => {
     if (!isSuperAdmin) return;
     if (targetUser.uid === user?.uid) {
       alert('Vous ne pouvez pas modifier votre propre rôle.');
@@ -1001,6 +1037,82 @@ export const MemberSpacePage = () => {
       alert('Erreur lors de la mise à jour du statut.');
     } finally {
       setRolesUpdatingUid(null);
+    }
+  };
+
+  const handleTogglePermission = async (role: Role, permKey: string, value: boolean) => {
+    if (!isSuperAdmin) return;
+    if (role.isAllAccess) return;
+    setSavingRoleId(role.id);
+    try {
+      await updateDoc(doc(db, 'roles', role.id), {
+        [`permissions.${permKey}`]: value,
+      });
+    } catch (err) {
+      console.error('Error toggling permission:', err);
+      alert('Erreur lors de la mise à jour de la permission.');
+    } finally {
+      setSavingRoleId(null);
+    }
+  };
+
+  const handleCreateRole = async () => {
+    if (!isSuperAdmin) return;
+    const name = newRoleForm.name.trim();
+    if (!name) {
+      alert('Le nom du rôle est requis.');
+      return;
+    }
+    const id = sanitizeRoleId(name);
+    if (!id) {
+      alert('Nom de rôle invalide.');
+      return;
+    }
+    if (rolesList.some((r) => r.id === id)) {
+      alert('Un rôle avec cet identifiant existe déjà.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const initialPerms: Record<string, boolean> = Object.fromEntries(
+        ALL_PERMISSION_KEYS.map((k) => [k, false])
+      );
+      await setDoc(doc(db, 'roles', id), {
+        id,
+        name,
+        description: newRoleForm.description.trim() || '',
+        permissions: initialPerms,
+        isSystem: false,
+        isAllAccess: false,
+        createdAt: serverTimestamp(),
+      });
+      setNewRoleForm({ name: '', description: '' });
+      setIsAddRoleModalOpen(false);
+    } catch (err) {
+      console.error('Error creating role:', err);
+      alert('Erreur lors de la création du rôle.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteRole = async (role: Role) => {
+    if (!isSuperAdmin) return;
+    if (role.isSystem) {
+      alert('Les rôles système ne peuvent pas être supprimés.');
+      return;
+    }
+    const affected = allUsers.filter((u) => (u.role || 'member') === role.id).length;
+    if (affected > 0) {
+      alert(`${affected} utilisateur(s) ont ce rôle. Réassignez-les avant de supprimer le rôle.`);
+      return;
+    }
+    if (!window.confirm(`Supprimer le rôle « ${role.name} » ?`)) return;
+    try {
+      await deleteDoc(doc(db, 'roles', role.id));
+    } catch (err) {
+      console.error('Error deleting role:', err);
+      alert('Erreur lors de la suppression du rôle.');
     }
   };
 
@@ -2491,91 +2603,157 @@ export const MemberSpacePage = () => {
                           Rôles & Permissions
                         </h2>
                         <p className="text-[11px] text-aaj-gray font-bold uppercase tracking-wider mt-2">
-                          Attribuer rôles et statuts d&apos;accès aux utilisateurs
+                          Gérer finement les autorisations de chaque rôle
                         </p>
                       </div>
+                      <button
+                        onClick={() => setIsAddRoleModalOpen(true)}
+                        className="bg-aaj-dark text-white px-6 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center gap-2"
+                      >
+                        <Plus size={14} /> Ajouter un rôle
+                      </button>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                      {[
-                        {
-                          label: 'Super Admins',
-                          count: allUsers.filter((u) => u.role === 'super-admin').length,
-                          color: 'text-purple-600',
-                        },
-                        {
-                          label: 'Administrateurs',
-                          count: allUsers.filter((u) => u.role === 'admin').length,
-                          color: 'text-aaj-royal',
-                        },
-                        {
-                          label: 'Représentants',
-                          count: allUsers.filter((u) => u.role === 'representative').length,
-                          color: 'text-amber-600',
-                        },
-                        {
-                          label: 'Membres',
-                          count: allUsers.filter((u) => u.role === 'member' || !u.role).length,
-                          color: 'text-aaj-dark',
-                        },
-                        {
-                          label: 'Suspendus',
-                          count: allUsers.filter((u) => u.status === 'suspended').length,
-                          color: 'text-red-500',
-                        },
-                      ].map((stat) => (
-                        <div
-                          key={stat.label}
-                          className="border border-aaj-border rounded p-5 bg-white"
-                        >
-                          <p className="text-[9px] font-black uppercase tracking-widest text-aaj-gray mb-2">
-                            {stat.label}
-                          </p>
-                          <p className={`text-3xl font-black ${stat.color}`}>{stat.count}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="flex flex-col md:flex-row gap-4">
-                      <div className="flex-1 relative">
-                        <Search
-                          size={14}
-                          className="absolute left-4 top-1/2 -translate-y-1/2 text-aaj-gray"
-                        />
-                        <input
-                          type="text"
-                          value={rolesSearch}
-                          onChange={(e) => setRolesSearch(e.target.value)}
-                          placeholder="Rechercher par nom ou email..."
-                          className="w-full pl-11 pr-4 py-3 border border-aaj-border rounded text-sm font-medium focus:border-aaj-royal focus:outline-none"
-                        />
-                      </div>
-                      <div className="flex gap-2 flex-wrap">
-                        {[
-                          { id: 'all', label: 'Tous' },
-                          { id: 'super-admin', label: 'Super Admins' },
-                          { id: 'admin', label: 'Admins' },
-                          { id: 'representative', label: 'Représentants' },
-                          { id: 'member', label: 'Membres' },
-                        ].map((f) => (
-                          <button
-                            key={f.id}
-                            onClick={() => setRolesRoleFilter(f.id as any)}
-                            className={`px-4 py-3 border rounded text-[10px] font-black uppercase tracking-widest transition-all ${
-                              rolesRoleFilter === f.id
-                                ? 'bg-aaj-dark text-white border-aaj-dark'
-                                : 'bg-white text-aaj-gray border-aaj-border hover:border-aaj-royal'
-                            }`}
-                          >
-                            {f.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
+                    {/* Permission Matrix */}
                     <div className="border border-aaj-border rounded overflow-hidden">
+                      <div className="p-4 bg-slate-50 border-b border-aaj-border">
+                        <h3 className="text-[11px] font-black uppercase tracking-widest text-aaj-dark">
+                          Matrice des permissions
+                        </h3>
+                        <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-wider mt-1">
+                          Cochez pour activer une permission sur un rôle. Le super-admin a toujours
+                          tous les droits.
+                        </p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead className="bg-white border-b border-aaj-border">
+                            <tr>
+                              <th className="sticky left-0 bg-white p-3 text-[10px] font-black uppercase tracking-widest text-aaj-gray min-w-[220px] border-r border-aaj-border">
+                                Permission
+                              </th>
+                              {rolesList.map((r) => (
+                                <th
+                                  key={r.id}
+                                  className="p-3 text-center text-[10px] font-black uppercase tracking-widest text-aaj-dark min-w-[140px]"
+                                >
+                                  <div className="flex flex-col items-center gap-1">
+                                    <span>{r.name}</span>
+                                    {!r.isSystem && (
+                                      <button
+                                        onClick={() => handleDeleteRole(r)}
+                                        className="text-red-500 hover:text-red-700 transition-colors"
+                                        title="Supprimer ce rôle"
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    )}
+                                    {r.isSystem && (
+                                      <span className="text-[8px] font-bold text-aaj-gray">
+                                        Système
+                                      </span>
+                                    )}
+                                  </div>
+                                </th>
+                              ))}
+                              {rolesList.length === 0 && (
+                                <th className="p-3 text-[10px] text-aaj-gray italic">
+                                  Chargement des rôles...
+                                </th>
+                              )}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-aaj-border">
+                            {PERMISSION_GROUPS.map((group) => (
+                              <Fragment key={group.label}>
+                                <tr className="bg-slate-50/60">
+                                  <td
+                                    colSpan={rolesList.length + 1}
+                                    className="p-3 text-[10px] font-black uppercase tracking-[2px] text-aaj-royal"
+                                  >
+                                    {group.label}
+                                  </td>
+                                </tr>
+                                {group.permissions.map((perm) => (
+                                  <tr
+                                    key={perm.key}
+                                    className="hover:bg-slate-50/30 transition-colors"
+                                  >
+                                    <td className="sticky left-0 bg-white p-3 text-[11px] font-bold text-aaj-dark border-r border-aaj-border">
+                                      <div>{perm.label}</div>
+                                      <div className="text-[9px] text-aaj-gray font-mono mt-0.5">
+                                        {perm.key}
+                                      </div>
+                                    </td>
+                                    {rolesList.map((r) => {
+                                      const checked =
+                                        r.isAllAccess === true ||
+                                        r.permissions?.[perm.key] === true;
+                                      const disabled =
+                                        r.isAllAccess === true || savingRoleId === r.id;
+                                      return (
+                                        <td key={r.id} className="p-3 text-center">
+                                          <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            disabled={disabled}
+                                            onChange={(e) =>
+                                              handleTogglePermission(r, perm.key, e.target.checked)
+                                            }
+                                            className={`w-4 h-4 accent-aaj-royal ${
+                                              disabled
+                                                ? 'cursor-not-allowed opacity-60'
+                                                : 'cursor-pointer'
+                                            }`}
+                                          />
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ))}
+                              </Fragment>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* User role assignment */}
+                    <div className="border border-aaj-border rounded overflow-hidden">
+                      <div className="p-4 bg-slate-50 border-b border-aaj-border">
+                        <h3 className="text-[11px] font-black uppercase tracking-widest text-aaj-dark">
+                          Attribution des rôles aux utilisateurs
+                        </h3>
+                      </div>
+                      <div className="p-4 flex flex-col md:flex-row gap-4 border-b border-aaj-border">
+                        <div className="flex-1 relative">
+                          <Search
+                            size={14}
+                            className="absolute left-4 top-1/2 -translate-y-1/2 text-aaj-gray"
+                          />
+                          <input
+                            type="text"
+                            value={rolesSearch}
+                            onChange={(e) => setRolesSearch(e.target.value)}
+                            placeholder="Rechercher par nom ou email..."
+                            className="w-full pl-11 pr-4 py-3 border border-aaj-border rounded text-sm font-medium focus:border-aaj-royal focus:outline-none"
+                          />
+                        </div>
+                        <select
+                          value={rolesRoleFilter}
+                          onChange={(e) => setRolesRoleFilter(e.target.value)}
+                          className="px-4 py-3 border border-aaj-border rounded text-[10px] font-black uppercase tracking-widest bg-white text-aaj-dark focus:outline-none focus:border-aaj-royal"
+                        >
+                          <option value="all">Tous les rôles</option>
+                          {rolesList.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                       <table className="w-full text-left border-collapse">
-                        <thead className="bg-slate-50 border-b border-aaj-border">
+                        <thead className="bg-white border-b border-aaj-border">
                           <tr>
                             <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
                               Utilisateur
@@ -2632,19 +2810,21 @@ export const MemberSpacePage = () => {
                                     <select
                                       value={currentRole}
                                       disabled={isSelf || isUpdating}
-                                      onChange={(e) =>
-                                        handleUpdateRole(member, e.target.value as any)
-                                      }
+                                      onChange={(e) => handleUpdateRole(member, e.target.value)}
                                       className={`w-full border rounded px-3 py-2 text-[10px] font-black uppercase tracking-widest bg-white ${
                                         isSelf || isUpdating
                                           ? 'text-aaj-gray border-aaj-border cursor-not-allowed'
                                           : 'text-aaj-dark border-aaj-border hover:border-aaj-royal focus:outline-none focus:border-aaj-royal'
                                       }`}
                                     >
-                                      <option value="member">Membre</option>
-                                      <option value="representative">Représentant</option>
-                                      <option value="admin">Administrateur</option>
-                                      <option value="super-admin">Super Administrateur</option>
+                                      {rolesList.length === 0 && (
+                                        <option value={currentRole}>{currentRole}</option>
+                                      )}
+                                      {rolesList.map((r) => (
+                                        <option key={r.id} value={r.id}>
+                                          {r.name}
+                                        </option>
+                                      ))}
                                     </select>
                                   </td>
                                   <td className="p-4">
@@ -2652,7 +2832,10 @@ export const MemberSpacePage = () => {
                                       value={currentStatus}
                                       disabled={isSelf || isUpdating}
                                       onChange={(e) =>
-                                        handleUpdateStatus(member, e.target.value as any)
+                                        handleUpdateStatus(
+                                          member,
+                                          e.target.value as 'pending' | 'active' | 'suspended'
+                                        )
                                       }
                                       className={`w-full border rounded px-3 py-2 text-[10px] font-black uppercase tracking-widest bg-white ${
                                         isSelf || isUpdating
@@ -2680,46 +2863,6 @@ export const MemberSpacePage = () => {
                           )}
                         </tbody>
                       </table>
-                    </div>
-
-                    <div className="border border-aaj-border rounded p-6 bg-slate-50 space-y-3">
-                      <h4 className="text-[10px] font-black uppercase tracking-widest text-aaj-dark">
-                        Définition des rôles
-                      </h4>
-                      <ul className="space-y-2 text-[11px] text-aaj-gray">
-                        <li>
-                          <span className="font-black text-aaj-dark">Membre</span> — Accès à
-                          l&apos;espace adhérent, bibliothèque, messagerie, annuaire.
-                        </li>
-                        <li>
-                          <span className="font-black text-aaj-dark">Représentant</span> — Dépôt des
-                          avis de commissions techniques en plus des droits Membre.
-                        </li>
-                        <li>
-                          <span className="font-black text-aaj-dark">Administrateur</span> — Accès
-                          complet à la gestion du site et des adhésions.
-                        </li>
-                        <li>
-                          <span className="font-black text-aaj-dark">Super Administrateur</span> —
-                          Administrateur + création de comptes et gestion des rôles.
-                        </li>
-                      </ul>
-                      <h4 className="text-[10px] font-black uppercase tracking-widest text-aaj-dark pt-2">
-                        Définition des statuts
-                      </h4>
-                      <ul className="space-y-2 text-[11px] text-aaj-gray">
-                        <li>
-                          <span className="font-black text-aaj-dark">En attente</span> — Inscription
-                          non validée, accès limité.
-                        </li>
-                        <li>
-                          <span className="font-black text-aaj-dark">Actif</span> — Accès complet
-                          selon le rôle.
-                        </li>
-                        <li>
-                          <span className="font-black text-aaj-dark">Suspendu</span> — Accès bloqué.
-                        </li>
-                      </ul>
                     </div>
                   </motion.div>
                 )}
@@ -4507,6 +4650,91 @@ export const MemberSpacePage = () => {
                   <button
                     onClick={() => setIsAddMemberModalOpen(false)}
                     className="px-8 border border-aaj-border rounded font-black uppercase tracking-widest text-[11px] text-aaj-gray hover:bg-white transition-all font-bold"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+
+          {/* Modal: Add Role */}
+          {isAddRoleModalOpen && isSuperAdmin && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsAddRoleModalOpen(false)}
+                className="absolute inset-0 bg-aaj-dark/95 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="relative bg-white w-full max-w-lg shadow-2xl rounded overflow-hidden"
+              >
+                <div className="p-8 border-b border-aaj-border bg-slate-50 flex justify-between items-center">
+                  <div>
+                    <h3 className="text-xl font-black uppercase tracking-tighter text-aaj-dark">
+                      Nouveau rôle
+                    </h3>
+                    <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest mt-1">
+                      Les permissions sont vides par défaut. Cochez-les ensuite dans la matrice.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setIsAddRoleModalOpen(false)}
+                    className="text-aaj-gray hover:text-aaj-dark"
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+                <div className="p-8 space-y-6">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray block mb-2">
+                      Nom du rôle *
+                    </label>
+                    <input
+                      type="text"
+                      value={newRoleForm.name}
+                      onChange={(e) => setNewRoleForm({ ...newRoleForm, name: e.target.value })}
+                      placeholder="Ex. Éditeur Bibliothèque"
+                      className="w-full px-4 py-3 border border-aaj-border rounded text-sm focus:border-aaj-royal focus:outline-none"
+                    />
+                    {newRoleForm.name.trim() && (
+                      <p className="text-[10px] text-aaj-gray font-mono mt-2">
+                        ID généré :{' '}
+                        <span className="font-bold">{sanitizeRoleId(newRoleForm.name)}</span>
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray block mb-2">
+                      Description
+                    </label>
+                    <textarea
+                      value={newRoleForm.description}
+                      onChange={(e) =>
+                        setNewRoleForm({ ...newRoleForm, description: e.target.value })
+                      }
+                      rows={3}
+                      placeholder="À quoi sert ce rôle ?"
+                      className="w-full px-4 py-3 border border-aaj-border rounded text-sm focus:border-aaj-royal focus:outline-none resize-none"
+                    />
+                  </div>
+                </div>
+                <div className="p-8 bg-slate-50 border-t border-aaj-border flex gap-3">
+                  <button
+                    onClick={handleCreateRole}
+                    disabled={isSaving || !newRoleForm.name.trim()}
+                    className="flex-1 bg-aaj-dark text-white py-3 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSaving ? 'Création...' : 'Créer le rôle'}
+                  </button>
+                  <button
+                    onClick={() => setIsAddRoleModalOpen(false)}
+                    className="px-6 border border-aaj-border rounded font-black uppercase tracking-widest text-[11px] text-aaj-gray hover:bg-white transition-all"
                   >
                     Annuler
                   </button>

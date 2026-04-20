@@ -146,6 +146,12 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
+    match /roles/{roleId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSuperAdmin();
+      allow delete: if isSuperAdmin() && existing().get('isSystem', false) == false;
+    }
+
     // Allow connection test
     match /_connection_test_/{id} {
       allow read: if isSignedIn();

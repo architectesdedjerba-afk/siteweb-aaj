@@ -5,9 +5,19 @@
 
 import type { Timestamp } from 'firebase/firestore';
 
-export type UserRole = 'super-admin' | 'admin' | 'member' | 'representative';
+export type UserRole = 'super-admin' | 'admin' | 'member' | 'representative' | string;
 export type UserStatus = 'pending' | 'active' | 'suspended';
 export type MemberCategory = 'Architecte' | 'Architecte Stagiaire';
+
+export interface Role {
+  id: string;
+  name: string;
+  description?: string;
+  permissions: Record<string, boolean>;
+  isSystem: boolean;
+  isAllAccess?: boolean;
+  createdAt?: Timestamp | string;
+}
 
 export interface Cotisation {
   paid: boolean;
