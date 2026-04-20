@@ -35,10 +35,7 @@ import {
   FileCode,
   Send,
   X,
-  UserPlus,
   KeyRound,
-  Eye,
-  EyeOff,
   Search,
 } from 'lucide-react';
 import {
@@ -46,11 +43,8 @@ import {
   sendPasswordResetEmail,
   onAuthStateChanged,
   signOut,
-  createUserWithEmailAndPassword,
-  getAuth,
   User,
 } from 'firebase/auth';
-import { initializeApp, deleteApp } from 'firebase/app';
 import {
   doc,
   getDoc,
@@ -66,7 +60,6 @@ import {
   where,
 } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
-import firebaseConfig from '../../firebase-applet-config.json';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Role } from '../types';
 import {
@@ -139,24 +132,6 @@ export const MemberSpacePage = () => {
     if (isSuperAdmin) return true;
     return userRole?.permissions?.[key] === true;
   };
-
-  const [newAccount, setNewAccount] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    password: '',
-    role: 'member' as 'super-admin' | 'admin' | 'representative' | 'member',
-    status: 'active' as 'active' | 'pending' | 'suspended',
-    category: 'Architecte',
-    matricule: '',
-    mobile: '',
-    address: 'Houmt Souk',
-  });
-  const [showAccountPassword, setShowAccountPassword] = useState(false);
-  const [accountCreateMsg, setAccountCreateMsg] = useState<{
-    type: 'success' | 'error';
-    text: string;
-  } | null>(null);
 
   const profileFileInputRef = useRef<HTMLInputElement>(null);
   const libraryFileInputRef = useRef<HTMLInputElement>(null);
@@ -882,104 +857,6 @@ export const MemberSpacePage = () => {
     }
   };
 
-  const generateStrongPassword = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-    const symbols = '!@#$%&*';
-    let pwd = '';
-    for (let i = 0; i < 10; i++) pwd += chars.charAt(Math.floor(Math.random() * chars.length));
-    pwd += symbols.charAt(Math.floor(Math.random() * symbols.length));
-    pwd += Math.floor(Math.random() * 90 + 10);
-    return pwd;
-  };
-
-  const handleCreateAccount = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!can('accounts.create')) return;
-    if (!isSuperAdmin && (newAccount.role === 'admin' || newAccount.role === 'super-admin')) {
-      setAccountCreateMsg({
-        type: 'error',
-        text: 'Seul un super-admin peut créer un compte admin ou super-admin.',
-      });
-      return;
-    }
-    if (newAccount.password.length < 6) {
-      setAccountCreateMsg({
-        type: 'error',
-        text: 'Le mot de passe doit contenir au moins 6 caractères.',
-      });
-      return;
-    }
-    setIsSaving(true);
-    setAccountCreateMsg(null);
-
-    const secondaryName = `Secondary-${Date.now()}`;
-    let secondaryApp;
-    try {
-      secondaryApp = initializeApp(firebaseConfig, secondaryName);
-      const secondaryAuth = getAuth(secondaryApp);
-      const cred = await createUserWithEmailAndPassword(
-        secondaryAuth,
-        newAccount.email.trim(),
-        newAccount.password
-      );
-      const uid = cred.user.uid;
-
-      const profileData: any = {
-        uid,
-        firstName: newAccount.firstName,
-        lastName: newAccount.lastName,
-        displayName: `${newAccount.firstName} ${newAccount.lastName}`.trim(),
-        email: newAccount.email.trim(),
-        role: newAccount.role,
-        status: newAccount.status,
-        createdAt: serverTimestamp(),
-        createdBy: user?.uid || null,
-      };
-      if (newAccount.role === 'member' || newAccount.role === 'representative') {
-        profileData.category = newAccount.category;
-        profileData.licenseNumber = newAccount.matricule;
-        profileData.address = newAccount.address;
-      }
-      if (newAccount.mobile) profileData.mobile = newAccount.mobile;
-
-      await setDoc(doc(db, 'users', uid), profileData);
-
-      setAccountCreateMsg({
-        type: 'success',
-        text: `Compte créé avec succès pour ${newAccount.email} (rôle: ${newAccount.role}).`,
-      });
-      setNewAccount({
-        firstName: '',
-        lastName: '',
-        email: '',
-        password: '',
-        role: 'member',
-        status: 'active',
-        category: 'Architecte',
-        matricule: '',
-        mobile: '',
-        address: 'Houmt Souk',
-      });
-    } catch (err: any) {
-      console.error('Error creating account:', err);
-      let msg = 'Erreur lors de la création du compte.';
-      if (err?.code === 'auth/email-already-in-use') msg = 'Cet email est déjà utilisé.';
-      else if (err?.code === 'auth/invalid-email') msg = 'Email invalide.';
-      else if (err?.code === 'auth/weak-password') msg = 'Mot de passe trop faible.';
-      else if (err?.message) msg = err.message;
-      setAccountCreateMsg({ type: 'error', text: msg });
-    } finally {
-      if (secondaryApp) {
-        try {
-          await deleteApp(secondaryApp);
-        } catch (cleanupErr) {
-          console.warn('Secondary app cleanup failed:', cleanupErr);
-        }
-      }
-      setIsSaving(false);
-    }
-  };
-
   const handleContactAdmin = async (e: FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -1326,12 +1203,6 @@ export const MemberSpacePage = () => {
 
               {(() => {
                 const adminItems = [
-                  {
-                    id: 'admin-create-account',
-                    icon: <UserPlus size={18} />,
-                    label: 'Créer Compte',
-                    perm: 'accounts.create',
-                  },
                   {
                     id: 'admin-roles',
                     icon: <KeyRound size={18} />,
@@ -2973,266 +2844,6 @@ export const MemberSpacePage = () => {
                         </div>
                       ))}
                     </div>
-                  </motion.div>
-                )}
-
-                {activeTab === 'admin-create-account' && can('accounts.create') && (
-                  <motion.div
-                    key="admin-create-account"
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
-                    className="space-y-8"
-                  >
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h2 className="text-2xl font-black uppercase tracking-tighter flex items-center gap-3">
-                          <UserPlus size={22} className="text-aaj-royal" /> Créer un Compte
-                        </h2>
-                        <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest mt-2">
-                          Outil réservé au super-admin — création d&apos;un compte Firebase Auth +
-                          profil Firestore.
-                        </p>
-                      </div>
-                    </div>
-
-                    <form
-                      onSubmit={handleCreateAccount}
-                      className="max-w-3xl bg-slate-50/50 p-10 border border-aaj-border rounded space-y-8"
-                    >
-                      <div className="grid grid-cols-2 gap-8">
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                            Type de compte
-                          </label>
-                          <select
-                            value={newAccount.role}
-                            onChange={(e) =>
-                              setNewAccount({ ...newAccount, role: e.target.value as any })
-                            }
-                            className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold uppercase tracking-widest"
-                          >
-                            <option value="member">Adhérent (member)</option>
-                            <option value="representative">Représentant</option>
-                            <option value="admin">Administrateur</option>
-                            <option value="super-admin">Super-Admin</option>
-                          </select>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                            Statut initial
-                          </label>
-                          <select
-                            value={newAccount.status}
-                            onChange={(e) =>
-                              setNewAccount({ ...newAccount, status: e.target.value as any })
-                            }
-                            className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold uppercase tracking-widest"
-                          >
-                            <option value="active">Actif</option>
-                            <option value="pending">En attente</option>
-                            <option value="suspended">Suspendu</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-8">
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                            Prénom
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={newAccount.firstName}
-                            onChange={(e) =>
-                              setNewAccount({ ...newAccount, firstName: e.target.value })
-                            }
-                            className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                            Nom
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={newAccount.lastName}
-                            onChange={(e) =>
-                              setNewAccount({ ...newAccount, lastName: e.target.value })
-                            }
-                            className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-8">
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                            Email
-                          </label>
-                          <input
-                            type="email"
-                            required
-                            value={newAccount.email}
-                            onChange={(e) =>
-                              setNewAccount({ ...newAccount, email: e.target.value })
-                            }
-                            className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                            Mot de passe initial
-                          </label>
-                          <div className="relative">
-                            <input
-                              type={showAccountPassword ? 'text' : 'password'}
-                              required
-                              minLength={6}
-                              value={newAccount.password}
-                              onChange={(e) =>
-                                setNewAccount({ ...newAccount, password: e.target.value })
-                              }
-                              className="w-full bg-white border border-aaj-border rounded px-4 py-3 pr-20 text-xs font-bold"
-                            />
-                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => setShowAccountPassword((v) => !v)}
-                                className="p-2 text-aaj-gray hover:text-aaj-royal"
-                                title="Afficher/masquer"
-                              >
-                                {showAccountPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setNewAccount({
-                                    ...newAccount,
-                                    password: generateStrongPassword(),
-                                  })
-                                }
-                                className="p-2 text-aaj-gray hover:text-aaj-royal"
-                                title="Générer"
-                              >
-                                <KeyRound size={14} />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {(newAccount.role === 'member' || newAccount.role === 'representative') && (
-                        <>
-                          <div className="grid grid-cols-2 gap-8">
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                                Catégorie
-                              </label>
-                              <select
-                                value={newAccount.category}
-                                onChange={(e) =>
-                                  setNewAccount({ ...newAccount, category: e.target.value })
-                                }
-                                className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold uppercase tracking-widest"
-                              >
-                                <option value="Architecte">Architecte</option>
-                                <option value="Architecte Stagiaire">Architecte Stagiaire</option>
-                              </select>
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                                Matricule
-                              </label>
-                              <input
-                                type="text"
-                                value={newAccount.matricule}
-                                onChange={(e) =>
-                                  setNewAccount({ ...newAccount, matricule: e.target.value })
-                                }
-                                className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold"
-                              />
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-8">
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                                Téléphone
-                              </label>
-                              <input
-                                type="tel"
-                                value={newAccount.mobile}
-                                onChange={(e) =>
-                                  setNewAccount({ ...newAccount, mobile: e.target.value })
-                                }
-                                className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                                Ville
-                              </label>
-                              <input
-                                type="text"
-                                value={newAccount.address}
-                                onChange={(e) =>
-                                  setNewAccount({ ...newAccount, address: e.target.value })
-                                }
-                                className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold"
-                              />
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {(newAccount.role === 'admin' || newAccount.role === 'super-admin') && (
-                        <div className="bg-red-50 border border-red-200 p-6 rounded flex items-start gap-4">
-                          <Shield size={20} className="text-red-600 mt-1 flex-shrink-0" />
-                          <p className="text-[10px] text-red-800 font-bold uppercase tracking-tight leading-relaxed">
-                            Vous êtes sur le point de créer un compte avec des privilèges élevés.
-                            Assurez-vous de l&apos;identité du destinataire et transmettez le mot de
-                            passe par un canal sécurisé.
-                          </p>
-                        </div>
-                      )}
-
-                      {accountCreateMsg && (
-                        <div
-                          className={`p-6 rounded border flex items-start gap-4 ${accountCreateMsg.type === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}
-                        >
-                          {accountCreateMsg.type === 'success' ? (
-                            <CheckCircle2
-                              size={20}
-                              className="text-green-600 mt-0.5 flex-shrink-0"
-                            />
-                          ) : (
-                            <XCircle size={20} className="text-red-600 mt-0.5 flex-shrink-0" />
-                          )}
-                          <p
-                            className={`text-[11px] font-bold uppercase tracking-tight leading-relaxed ${accountCreateMsg.type === 'success' ? 'text-green-800' : 'text-red-800'}`}
-                          >
-                            {accountCreateMsg.text}
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="flex gap-4">
-                        <button
-                          type="submit"
-                          disabled={isSaving}
-                          className="flex-1 bg-aaj-dark text-white py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                        >
-                          {isSaving ? (
-                            <Loader2 size={16} className="animate-spin" />
-                          ) : (
-                            <UserPlus size={16} />
-                          )}{' '}
-                          Créer le compte
-                        </button>
-                      </div>
-                    </form>
                   </motion.div>
                 )}
 
