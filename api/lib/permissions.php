@@ -171,24 +171,23 @@ function require_super_admin(array $user): void
 }
 
 /**
- * Idempotent seeding of built-in roles on first boot.
- * Runs cheaply (single UPSERT per default role).
+ * Seed built-in roles on first boot. INSERT IGNORE so that any later
+ * permission customization by a super-admin (via the Rôles & Permissions
+ * matrix) is NOT clobbered on subsequent API calls.
+ *
+ * The super-admin role is the only exception: we force it to keep
+ * isAllAccess=1 and a full permissions map, because that role is a
+ * privileged escape hatch that should never be locked down.
  */
 function seed_default_roles_if_missing(): void
 {
     $pdo = db();
-    $stmt = $pdo->prepare(
-        'INSERT INTO roles (id, name, description, permissions, is_system, is_all_access, created_at)
-         VALUES (:id, :name, :description, :permissions, 1, :is_all_access, NOW())
-         ON DUPLICATE KEY UPDATE
-            name = VALUES(name),
-            description = VALUES(description),
-            permissions = VALUES(permissions),
-            is_system = 1,
-            is_all_access = VALUES(is_all_access)'
+    $insert = $pdo->prepare(
+        'INSERT IGNORE INTO roles (id, name, description, permissions, is_system, is_all_access, created_at)
+         VALUES (:id, :name, :description, :permissions, 1, :is_all_access, NOW())'
     );
     foreach (default_roles() as $r) {
-        $stmt->execute([
+        $insert->execute([
             ':id' => $r['id'],
             ':name' => $r['name'],
             ':description' => $r['description'],
@@ -196,4 +195,15 @@ function seed_default_roles_if_missing(): void
             ':is_all_access' => $r['isAllAccess'] ? 1 : 0,
         ]);
     }
+
+    // Safety net: the super-admin role must always be all-access.
+    $pdo->prepare(
+        'UPDATE roles
+            SET is_all_access = 1,
+                is_system = 1,
+                permissions = :permissions
+          WHERE id = "super-admin"'
+    )->execute([
+        ':permissions' => json_encode(permissions_all_true(), JSON_UNESCAPED_UNICODE),
+    ]);
 }

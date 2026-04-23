@@ -360,42 +360,14 @@ export const MemberSpacePage = () => {
       }
     );
 
+    // The 4 system roles are seeded server-side on every API boot
+    // (see api/lib/permissions.php → seed_default_roles_if_missing).
+    // The client only needs to subscribe and render.
     const qRoles = query(collection(db, 'roles'), orderBy('name', 'asc'));
     const unsubscribeRoles = onSnapshot(
       qRoles,
-      async (snapshot) => {
-        const fresh = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Role);
-        setRolesList(fresh);
-
-        if (!isSuperAdmin) return;
-
-        // Migrate old dotted-key seeds: if none of the new underscore keys are
-        // present as top-level permission keys, overwrite the 4 default docs.
-        const hasNewFormat = fresh.some(
-          (r) =>
-            r.permissions &&
-            ALL_PERMISSION_KEYS.some((k) => Object.prototype.hasOwnProperty.call(r.permissions, k))
-        );
-        const needsMigration = !snapshot.empty && !hasNewFormat;
-        const needsSeed = snapshot.empty || needsMigration;
-
-        if (needsSeed) {
-          try {
-            for (const r of DEFAULT_ROLES) {
-              await setDoc(doc(db, 'roles', r.id), {
-                id: r.id,
-                name: r.name,
-                description: r.description,
-                permissions: r.permissions,
-                isSystem: r.isSystem,
-                isAllAccess: r.isAllAccess,
-                createdAt: serverTimestamp(),
-              });
-            }
-          } catch (err) {
-            console.error('Error seeding default roles:', err);
-          }
-        }
+      (snapshot) => {
+        setRolesList(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Role));
       },
       (err) => {
         console.warn('Permission restricted for roles list.', err);
