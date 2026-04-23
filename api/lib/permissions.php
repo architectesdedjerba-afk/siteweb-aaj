@@ -23,6 +23,7 @@ const ALL_PERMISSION_KEYS = [
     'messages_inbox',
     'accounts_create',
     'roles_manage',
+    'config_manage',
     'users_editRole',
     'users_editStatus',
 ];

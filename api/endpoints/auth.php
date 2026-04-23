@@ -184,13 +184,17 @@ function auth_create_account(): void
     }
 
     $uid = new_id(24);
+    $letter = $body['memberTypeLetter'] ?? null;
+    if ($letter !== null) $letter = strtoupper(substr((string)$letter, 0, 1));
     $pdo->prepare(
         'INSERT INTO users
             (uid, email, password_hash, display_name, first_name, last_name,
-             role, status, category, license_number, mobile, address, cotisations, created_at)
+             role, status, category, member_type, member_type_letter, birth_date,
+             license_number, mobile, address, cotisations, created_at)
          VALUES
             (:uid, :email, :password_hash, :display_name, :first_name, :last_name,
-             :role, :status, :category, :license_number, :mobile, :address, :cotisations, NOW())'
+             :role, :status, :category, :member_type, :member_type_letter, :birth_date,
+             :license_number, :mobile, :address, :cotisations, NOW())'
     )->execute([
         ':uid' => $uid,
         ':email' => $email,
@@ -201,6 +205,9 @@ function auth_create_account(): void
         ':role' => (string)($body['role'] ?? 'member'),
         ':status' => (string)($body['status'] ?? 'active'),
         ':category' => $body['category'] ?? null,
+        ':member_type' => $body['memberType'] ?? null,
+        ':member_type_letter' => $letter,
+        ':birth_date' => $body['birthDate'] ?? null,
         ':license_number' => $body['licenseNumber'] ?? null,
         ':mobile' => $body['mobile'] ?? null,
         ':address' => $body['address'] ?? null,

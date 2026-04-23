@@ -31,22 +31,25 @@ CREATE TABLE IF NOT EXISTS roles (
 -- Passwords are hashed with password_hash() (bcrypt/argon2id).
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
-  uid            VARCHAR(64)  NOT NULL,
-  email          VARCHAR(255) NOT NULL,
-  password_hash  VARCHAR(255) NULL,
-  must_reset     TINYINT(1)   NOT NULL DEFAULT 0,
-  display_name   VARCHAR(200) NOT NULL DEFAULT '',
-  first_name     VARCHAR(100) NULL,
-  last_name      VARCHAR(100) NULL,
-  role           VARCHAR(64)  NOT NULL DEFAULT 'member',
-  status         VARCHAR(32)  NOT NULL DEFAULT 'pending',
-  category       VARCHAR(64)  NULL,
-  license_number VARCHAR(100) NULL,
-  mobile         VARCHAR(50)  NULL,
-  address        VARCHAR(200) NULL,
-  photo_url      TEXT NULL,
-  cotisations    JSON NULL,
-  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  uid                 VARCHAR(64)  NOT NULL,
+  email               VARCHAR(255) NOT NULL,
+  password_hash       VARCHAR(255) NULL,
+  must_reset          TINYINT(1)   NOT NULL DEFAULT 0,
+  display_name        VARCHAR(200) NOT NULL DEFAULT '',
+  first_name          VARCHAR(100) NULL,
+  last_name           VARCHAR(100) NULL,
+  role                VARCHAR(64)  NOT NULL DEFAULT 'member',
+  status              VARCHAR(32)  NOT NULL DEFAULT 'pending',
+  category            VARCHAR(100) NULL,
+  member_type         VARCHAR(100) NULL,
+  member_type_letter  CHAR(1)      NULL,
+  birth_date          VARCHAR(10)  NULL,
+  license_number      VARCHAR(100) NULL,
+  mobile              VARCHAR(50)  NULL,
+  address             VARCHAR(200) NULL,
+  photo_url           TEXT NULL,
+  cotisations         JSON NULL,
+  created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (uid),
   UNIQUE KEY uq_users_email (email),
   KEY idx_users_role (role),
@@ -224,6 +227,27 @@ CREATE TABLE IF NOT EXISTS password_resets (
   KEY idx_resets_uid (uid),
   KEY idx_resets_expires (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -------------------------------------------------------------
+-- config — admin-editable key/value lookup lists (villes, memberTypes)
+-- Each row is a single named document; `value` is a JSON blob the
+-- frontend spreads onto the snapshot (e.g. value.list is the array).
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS config (
+  id         VARCHAR(64) NOT NULL,
+  value      JSON NOT NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Post-migration hardening (safe to re-run; IF NOT EXISTS avoids error
+-- when the column is already present). Covers instances that were
+-- provisioned before member-type + birth-date tracking landed.
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS member_type        VARCHAR(100) NULL AFTER category,
+  ADD COLUMN IF NOT EXISTS member_type_letter CHAR(1)      NULL AFTER member_type,
+  ADD COLUMN IF NOT EXISTS birth_date         VARCHAR(10)  NULL AFTER member_type_letter;
 
 -- -------------------------------------------------------------
 -- files — metadata for uploaded files stored on disk

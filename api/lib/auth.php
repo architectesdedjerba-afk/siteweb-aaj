@@ -61,20 +61,23 @@ function user_profile_view(array $row): array
         $cotisations = json_decode((string)$row['cotisations'], true);
     }
     return [
-        'id'            => $row['uid'],
-        'uid'           => $row['uid'],
-        'email'         => $row['email'],
-        'displayName'   => $row['display_name'] ?? '',
-        'firstName'     => $row['first_name'] ?? null,
-        'lastName'      => $row['last_name'] ?? null,
-        'role'          => $row['role'] ?? 'member',
-        'status'        => $row['status'] ?? 'pending',
-        'category'      => $row['category'] ?? null,
-        'licenseNumber' => $row['license_number'] ?? null,
-        'mobile'        => $row['mobile'] ?? null,
-        'address'       => $row['address'] ?? null,
-        'photoBase64'   => $row['photo_url'] ?? null, // kept as field name for compat; value may be a URL
-        'cotisations'   => $cotisations,
-        'createdAt'     => iso_datetime($row['created_at'] ?? null),
+        'id'                => $row['uid'],
+        'uid'               => $row['uid'],
+        'email'             => $row['email'],
+        'displayName'       => $row['display_name'] ?? '',
+        'firstName'         => $row['first_name'] ?? null,
+        'lastName'          => $row['last_name'] ?? null,
+        'role'              => $row['role'] ?? 'member',
+        'status'            => $row['status'] ?? 'pending',
+        'category'          => $row['category'] ?? null,
+        'memberType'        => $row['member_type'] ?? null,
+        'memberTypeLetter'  => $row['member_type_letter'] ?? null,
+        'birthDate'         => $row['birth_date'] ?? null,
+        'licenseNumber'     => $row['license_number'] ?? null,
+        'mobile'            => $row['mobile'] ?? null,
+        'address'           => $row['address'] ?? null,
+        'photoBase64'       => $row['photo_url'] ?? null, // kept as field name for compat; value may be a URL
+        'cotisations'       => $cotisations,
+        'createdAt'         => iso_datetime($row['created_at'] ?? null),
     ];
 }

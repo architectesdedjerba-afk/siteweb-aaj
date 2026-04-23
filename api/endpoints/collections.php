@@ -63,12 +63,15 @@ function build_specs(): array
             if (array_key_exists('lastName', $p))      $row['last_name'] = $p['lastName'];
             if (array_key_exists('role', $p))          $row['role'] = (string)$p['role'];
             if (array_key_exists('status', $p))        $row['status'] = (string)$p['status'];
-            if (array_key_exists('category', $p))      $row['category'] = $p['category'];
-            if (array_key_exists('licenseNumber', $p)) $row['license_number'] = $p['licenseNumber'];
-            if (array_key_exists('mobile', $p))        $row['mobile'] = $p['mobile'];
-            if (array_key_exists('address', $p))       $row['address'] = $p['address'];
-            if (array_key_exists('photoBase64', $p))   $row['photo_url'] = $p['photoBase64'];
-            if (array_key_exists('cotisations', $p))   $row['cotisations'] = $p['cotisations'] === null ? null : json_encode($p['cotisations'], JSON_UNESCAPED_UNICODE);
+            if (array_key_exists('category', $p))          $row['category'] = $p['category'];
+            if (array_key_exists('memberType', $p))        $row['member_type'] = $p['memberType'];
+            if (array_key_exists('memberTypeLetter', $p))  $row['member_type_letter'] = $p['memberTypeLetter'] === null ? null : strtoupper(substr((string)$p['memberTypeLetter'], 0, 1));
+            if (array_key_exists('birthDate', $p))         $row['birth_date'] = $p['birthDate'];
+            if (array_key_exists('licenseNumber', $p))     $row['license_number'] = $p['licenseNumber'];
+            if (array_key_exists('mobile', $p))            $row['mobile'] = $p['mobile'];
+            if (array_key_exists('address', $p))           $row['address'] = $p['address'];
+            if (array_key_exists('photoBase64', $p))       $row['photo_url'] = $p['photoBase64'];
+            if (array_key_exists('cotisations', $p))       $row['cotisations'] = $p['cotisations'] === null ? null : json_encode($p['cotisations'], JSON_UNESCAPED_UNICODE);
             return $row;
         },
         'canList' => fn(?array $u) => $u && (is_admin($u) || user_has_permission($u, 'members_manage') || user_has_permission($u, 'roles_manage') || user_has_permission($u, 'users_editRole') || user_has_permission($u, 'users_editStatus')),
@@ -372,7 +375,9 @@ function build_specs(): array
                 if (empty($p[$k]) || !is_string($p[$k])) json_error('invalid_input', "Champ requis : $k", 400);
             }
             if (!filter_var($p['email'], FILTER_VALIDATE_EMAIL)) json_error('invalid_email', 'Email invalide.', 400);
-            if (!in_array($p['category'], ['Architecte','Architecte Stagiaire'], true)) json_error('invalid_category', 'Catégorie invalide.', 400);
+            if (!is_string($p['category']) || $p['category'] === '' || strlen($p['category']) > 100) {
+                json_error('invalid_category', 'Catégorie invalide.', 400);
+            }
         },
         'beforeInsert' => function (array $p): array {
             $p['status'] = $p['status'] ?? 'pending';
@@ -425,6 +430,36 @@ function build_specs(): array
         'canCreate' => fn(?array $u, array $p) => true,
         'canUpdate' => fn(array $u, array $r, array $patch) => is_admin($u) || user_has_permission($u, 'partners_manage'),
         'canDelete' => fn(array $u, array $r) => is_admin($u) || user_has_permission($u, 'partners_manage'),
+    ];
+
+    // ---------------- config ----------------
+    // Admin-editable lookup lists used by the member-creation form:
+    //   config/villes       → { list: string[] }
+    //   config/memberTypes  → { list: { letter, label }[] }
+    // Each document id is a well-known key; the JSON payload is spread
+    // onto the view so the frontend can read item.list directly.
+    $specs['config'] = [
+        'table' => 'config',
+        'idColumn' => 'id',
+        'orderBy' => ['id', 'ASC'],
+        'toView' => function (array $r) {
+            $value = is_string($r['value']) ? (json_decode($r['value'], true) ?: []) : (array)$r['value'];
+            return array_merge(
+                ['id' => $r['id'], 'updatedAt' => iso_datetime($r['updated_at'] ?? null)],
+                $value
+            );
+        },
+        'toRow' => function (array $p) {
+            // Everything except reserved meta fields is stored as JSON in `value`.
+            $value = $p;
+            unset($value['id'], $value['updatedAt'], $value['createdAt']);
+            return ['value' => json_encode($value, JSON_UNESCAPED_UNICODE)];
+        },
+        'canList' => fn(?array $u) => (bool)$u,
+        'canGet'  => fn(?array $u, array $r) => (bool)$u,
+        'canCreate' => fn(?array $u, array $p) => $u && (is_super_admin($u) || user_has_permission($u, 'config_manage')),
+        'canUpdate' => fn(array $u, array $r, array $patch) => is_super_admin($u) || user_has_permission($u, 'config_manage'),
+        'canDelete' => fn(array $u, array $r) => is_super_admin($u) || user_has_permission($u, 'config_manage'),
     ];
 
     return $specs;
