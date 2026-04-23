@@ -154,7 +154,7 @@ export const TUNISIAN_DELEGATIONS: string[] = [
   'Sbikha',
   // Kasserine
   'El Ayoun',
-  'Ezzouhour',
+  'Ezzouhour (Kasserine)',
   'Fériana',
   'Foussana',
   'Haïdra',

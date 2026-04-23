@@ -18,7 +18,7 @@ export const DEFAULT_MEMBER_TYPES: MemberType[] = [
   { letter: 'S', label: 'Architecte Stagiaire' },
 ];
 
-export const DEFAULT_VILLES: string[] = [...TUNISIAN_DELEGATIONS].sort((a, b) =>
+export const DEFAULT_VILLES: string[] = Array.from(new Set(TUNISIAN_DELEGATIONS)).sort((a, b) =>
   a.localeCompare(b, 'fr')
 );
 

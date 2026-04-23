@@ -51,9 +51,24 @@ export function SearchableSelect({
   }, [open]);
 
   const filtered = useMemo(() => {
+    // Dedupe defensively — upstream data may contain duplicates that would
+    // otherwise collide on React `key={opt}` and cause ghost entries.
+    const unique = Array.from(new Set(options));
     const q = query.trim().toLowerCase();
-    if (!q) return options;
-    return options.filter((o) => o.toLowerCase().includes(q));
+    if (!q) return unique;
+    // Rank: exact match > starts-with > word-starts-with > includes.
+    const scored = unique
+      .map((opt) => {
+        const lower = opt.toLowerCase();
+        if (lower === q) return { opt, score: 0 };
+        if (lower.startsWith(q)) return { opt, score: 1 };
+        if (lower.split(/\s+/).some((w) => w.startsWith(q))) return { opt, score: 2 };
+        if (lower.includes(q)) return { opt, score: 3 };
+        return { opt, score: -1 };
+      })
+      .filter((x) => x.score >= 0)
+      .sort((a, b) => a.score - b.score || a.opt.localeCompare(b.opt, 'fr'));
+    return scored.map((x) => x.opt);
   }, [options, query]);
 
   return (
