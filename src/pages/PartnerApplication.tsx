@@ -7,8 +7,7 @@ import { useState, FormEvent } from 'react';
 import { motion } from 'motion/react';
 import { CheckCircle2, Loader2, ArrowLeft, Handshake } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { api } from '../services/api';
 import { useToast } from '../lib/toast';
 import {
   email as vEmail,
@@ -74,11 +73,7 @@ export const PartnerApplicationPage = () => {
     }
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, 'partner_applications'), {
-        ...form,
-        status: 'pending',
-        createdAt: serverTimestamp(),
-      });
+      await api.submitPartnerApplication(form);
       setSubmitted(true);
       toast.success('Proposition reçue.');
     } catch (err) {

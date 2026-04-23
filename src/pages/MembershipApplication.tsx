@@ -7,8 +7,7 @@ import { motion } from 'motion/react';
 import { ArrowLeft, CheckCircle2, Loader2, Upload } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { api } from '../services/api';
 import { useToast } from '../lib/toast';
 import {
   email as vEmail,
@@ -65,7 +64,7 @@ export const MembershipApplicationPage = () => {
     }
     setSubmitting(true);
     try {
-      await addDoc(collection(db, 'membership_applications'), {
+      await api.submitMembershipApplication({
         fullName: form.fullName,
         phone: form.phone,
         email: form.email,
@@ -73,8 +72,6 @@ export const MembershipApplicationPage = () => {
         matricule: form.matricule,
         city: form.city,
         cvFileName: form.cvFileName,
-        status: 'pending',
-        createdAt: serverTimestamp(),
       });
       setSubmitted(true);
       toast.success('Demande envoyée.');

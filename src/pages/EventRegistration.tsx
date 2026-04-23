@@ -7,8 +7,7 @@ import { motion } from 'motion/react';
 import { ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { api } from '../services/api';
 import { useToast } from '../lib/toast';
 import {
   email as vEmail,
@@ -62,10 +61,7 @@ export const EventRegistrationPage = () => {
     }
     setSubmitting(true);
     try {
-      await addDoc(collection(db, 'event_registrations'), {
-        ...form,
-        createdAt: serverTimestamp(),
-      });
+      await api.submitEventRegistration(form);
       setSubmitted(true);
       toast.success('Inscription enregistrée.');
     } catch (err) {
