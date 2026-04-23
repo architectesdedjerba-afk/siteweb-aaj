@@ -52,3 +52,9 @@ jobs:
             **/.git*/**
             **/node_modules/**
             **/.env*
+
+      - name: Deploy Firestore & Storage rules
+        if: ${{ secrets.FIREBASE_TOKEN != '' }}
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: npx firebase-tools deploy --only firestore:rules,firestore:indexes,storage --non-interactive --force --token "$FIREBASE_TOKEN"
