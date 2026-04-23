@@ -1,22 +1,23 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap');
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
-  --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Montserrat", sans-serif;
+  --font-sans: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Montserrat', sans-serif;
 
-  --color-aaj-dark: #0A192F;
-  --color-aaj-royal: #0047AB;
-  --color-aaj-soft: #E6F0FF;
-  --color-aaj-gray: #505F79;
-  --color-aaj-border: #D8E2EF;
+  --color-aaj-dark: #0a192f;
+  --color-aaj-royal: #0047ab;
+  --color-aaj-soft: #e6f0ff;
+  --color-aaj-gray: #3f4a5c;
+  --color-aaj-gray-light: #6b7689;
+  --color-aaj-border: #d8e2ef;
 
   --color-aaj-success: #059669;
-  --color-aaj-success-soft: #D1FAE5;
-  --color-aaj-error: #DC2626;
-  --color-aaj-error-soft: #FEE2E2;
-  --color-aaj-warning: #D97706;
-  --color-aaj-warning-soft: #FEF3C7;
+  --color-aaj-success-soft: #d1fae5;
+  --color-aaj-error: #dc2626;
+  --color-aaj-error-soft: #fee2e2;
+  --color-aaj-warning: #d97706;
+  --color-aaj-warning-soft: #fef3c7;
 }
 
 @layer base {
@@ -28,7 +29,12 @@
     @apply font-sans text-aaj-dark bg-white antialiased;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-display tracking-tight text-aaj-dark font-extrabold;
   }
 
@@ -40,7 +46,9 @@
 
   /* Respect des préférences utilisateur */
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
+    *,
+    *::before,
+    *::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
