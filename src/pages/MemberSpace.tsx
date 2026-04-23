@@ -29,6 +29,7 @@ import {
   List,
   Grid,
   Trash2,
+  Pencil,
   PlusCircle,
   Download,
   FileSpreadsheet,
@@ -142,6 +143,8 @@ export const MemberSpacePage = () => {
   const [configSaving, setConfigSaving] = useState(false);
   const [newVilleInput, setNewVilleInput] = useState('');
   const [newTypeInput, setNewTypeInput] = useState({ letter: '', label: '' });
+  const [editingTypeLetter, setEditingTypeLetter] = useState<string | null>(null);
+  const [editTypeInput, setEditTypeInput] = useState({ letter: '', label: '' });
   const [configMessage, setConfigMessage] = useState<{
     type: 'success' | 'error';
     text: string;
@@ -919,6 +922,15 @@ export const MemberSpacePage = () => {
     }
   };
 
+  const describeFirestoreError = (err: unknown, fallback: string): string => {
+    const anyErr = err as { code?: string; message?: string } | null;
+    if (anyErr?.code === 'permission-denied') {
+      return 'Permissions insuffisantes : déployez les règles Firestore (`firebase deploy --only firestore:rules`).';
+    }
+    if (anyErr?.message) return `${fallback} — ${anyErr.message}`;
+    return fallback;
+  };
+
   const handleAddVille = async (raw: string) => {
     const ville = raw.trim();
     if (!ville) return;
@@ -935,7 +947,10 @@ export const MemberSpacePage = () => {
       setConfigMessage({ type: 'success', text: `Ville "${ville}" ajoutée.` });
     } catch (err) {
       console.error('Error saving ville:', err);
-      setConfigMessage({ type: 'error', text: "Erreur lors de l'enregistrement de la ville." });
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, "Erreur lors de l'enregistrement de la ville."),
+      });
     } finally {
       setConfigSaving(false);
     }
@@ -951,7 +966,10 @@ export const MemberSpacePage = () => {
       setConfigMessage({ type: 'success', text: `Ville "${ville}" supprimée.` });
     } catch (err) {
       console.error('Error removing ville:', err);
-      setConfigMessage({ type: 'error', text: 'Erreur lors de la suppression.' });
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, 'Erreur lors de la suppression.'),
+      });
     } finally {
       setConfigSaving(false);
     }
@@ -969,7 +987,10 @@ export const MemberSpacePage = () => {
       setConfigMessage({ type: 'success', text: 'Liste des villes réinitialisée.' });
     } catch (err) {
       console.error('Error resetting villes:', err);
-      setConfigMessage({ type: 'error', text: 'Erreur lors de la réinitialisation.' });
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, 'Erreur lors de la réinitialisation.'),
+      });
     } finally {
       setConfigSaving(false);
     }
@@ -995,7 +1016,57 @@ export const MemberSpacePage = () => {
       setConfigMessage({ type: 'success', text: `Type "${label}" (${letter}) ajouté.` });
     } catch (err) {
       console.error('Error saving member type:', err);
-      setConfigMessage({ type: 'error', text: "Erreur lors de l'enregistrement du type." });
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, "Erreur lors de l'enregistrement du type."),
+      });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const startEditMemberType = (t: MemberType) => {
+    setEditingTypeLetter(t.letter);
+    setEditTypeInput({ letter: t.letter, label: t.label });
+    setConfigMessage(null);
+  };
+
+  const cancelEditMemberType = () => {
+    setEditingTypeLetter(null);
+    setEditTypeInput({ letter: '', label: '' });
+  };
+
+  const handleUpdateMemberType = async () => {
+    if (!editingTypeLetter) return;
+    const newLetter = editTypeInput.letter.trim().toUpperCase().slice(0, 1);
+    const newLabel = editTypeInput.label.trim();
+    if (!newLetter || !newLabel) {
+      setConfigMessage({ type: 'error', text: 'La lettre et le libellé sont requis.' });
+      return;
+    }
+    if (newLetter !== editingTypeLetter && memberTypesList.some((t) => t.letter === newLetter)) {
+      setConfigMessage({ type: 'error', text: `La lettre "${newLetter}" est déjà utilisée.` });
+      return;
+    }
+    const next = memberTypesList.map((t) =>
+      t.letter === editingTypeLetter ? { letter: newLetter, label: newLabel } : t
+    );
+    setConfigSaving(true);
+    try {
+      await saveMemberTypes(next);
+      setMemberTypesList(next);
+      setEditingTypeLetter(null);
+      setEditTypeInput({ letter: '', label: '' });
+      setConfigMessage({
+        type: 'success',
+        text: `Type "${newLabel}" (${newLetter}) mis à jour.`,
+      });
+    } catch (err) {
+      console.error('Error updating member type:', err);
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, 'Erreur lors de la mise à jour du type.'),
+      });
     } finally {
       setConfigSaving(false);
     }
@@ -1013,7 +1084,10 @@ export const MemberSpacePage = () => {
       setConfigMessage({ type: 'success', text: `Type "${t.label}" supprimé.` });
     } catch (err) {
       console.error('Error removing member type:', err);
-      setConfigMessage({ type: 'error', text: 'Erreur lors de la suppression.' });
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, 'Erreur lors de la suppression.'),
+      });
     } finally {
       setConfigSaving(false);
     }
@@ -1028,7 +1102,10 @@ export const MemberSpacePage = () => {
       setConfigMessage({ type: 'success', text: 'Types de membres réinitialisés.' });
     } catch (err) {
       console.error('Error resetting member types:', err);
-      setConfigMessage({ type: 'error', text: 'Erreur lors de la réinitialisation.' });
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, 'Erreur lors de la réinitialisation.'),
+      });
     } finally {
       setConfigSaving(false);
     }
@@ -3073,28 +3150,85 @@ export const MemberSpacePage = () => {
                         </button>
                       </div>
                       <div className="divide-y divide-aaj-border">
-                        {memberTypesList.map((t) => (
-                          <div
-                            key={t.letter}
-                            className="flex items-center justify-between px-5 py-3"
-                          >
-                            <div className="flex items-center gap-4">
-                              <span className="w-10 h-10 rounded bg-aaj-dark text-white flex items-center justify-center font-black">
-                                {t.letter}
-                              </span>
-                              <span className="text-xs font-bold text-aaj-dark">{t.label}</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveMemberType(t.letter)}
-                              disabled={configSaving}
-                              className="text-red-500 hover:text-red-700 transition-colors"
-                              title="Supprimer"
+                        {memberTypesList.map((t) =>
+                          editingTypeLetter === t.letter ? (
+                            <div
+                              key={t.letter}
+                              className="px-5 py-3 bg-slate-50 grid grid-cols-1 md:grid-cols-[80px_1fr_auto_auto] gap-3 items-center"
                             >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        ))}
+                              <input
+                                type="text"
+                                value={editTypeInput.letter}
+                                onChange={(e) =>
+                                  setEditTypeInput({
+                                    ...editTypeInput,
+                                    letter: e.target.value.toUpperCase().slice(0, 1),
+                                  })
+                                }
+                                placeholder="Lettre"
+                                maxLength={1}
+                                className="bg-white border border-aaj-border rounded px-3 py-2 text-xs font-black uppercase text-center tracking-widest"
+                              />
+                              <input
+                                type="text"
+                                value={editTypeInput.label}
+                                onChange={(e) =>
+                                  setEditTypeInput({ ...editTypeInput, label: e.target.value })
+                                }
+                                placeholder="Libellé"
+                                className="bg-white border border-aaj-border rounded px-3 py-2 text-xs font-bold"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleUpdateMemberType}
+                                disabled={configSaving}
+                                className="bg-aaj-dark text-white px-4 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center justify-center gap-2"
+                              >
+                                <CheckCircle2 size={12} /> Enregistrer
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelEditMemberType}
+                                disabled={configSaving}
+                                className="border border-aaj-border text-aaj-gray px-4 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-white transition-all"
+                              >
+                                Annuler
+                              </button>
+                            </div>
+                          ) : (
+                            <div
+                              key={t.letter}
+                              className="flex items-center justify-between px-5 py-3"
+                            >
+                              <div className="flex items-center gap-4">
+                                <span className="w-10 h-10 rounded bg-aaj-dark text-white flex items-center justify-center font-black">
+                                  {t.letter}
+                                </span>
+                                <span className="text-xs font-bold text-aaj-dark">{t.label}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => startEditMemberType(t)}
+                                  disabled={configSaving}
+                                  className="text-aaj-gray hover:text-aaj-royal transition-colors"
+                                  title="Modifier"
+                                >
+                                  <Pencil size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveMemberType(t.letter)}
+                                  disabled={configSaving}
+                                  className="text-red-500 hover:text-red-700 transition-colors"
+                                  title="Supprimer"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        )}
                         {memberTypesList.length === 0 && (
                           <div className="px-5 py-4 text-[11px] text-aaj-gray italic">
                             Aucun type configuré.
