@@ -317,11 +317,11 @@ export const MemberSpacePage = () => {
 
   const needsAdminData =
     isAdmin ||
-    can('members.manage') ||
-    can('profileRequests.manage') ||
-    can('roles.manage') ||
-    can('users.editRole') ||
-    can('users.editStatus');
+    can('members_manage') ||
+    can('profileRequests_manage') ||
+    can('roles_manage') ||
+    can('users_editRole') ||
+    can('users_editStatus');
 
   useEffect(() => {
     if (!user || !needsAdminData) {
@@ -359,7 +359,22 @@ export const MemberSpacePage = () => {
     const unsubscribeRoles = onSnapshot(
       qRoles,
       async (snapshot) => {
-        if (snapshot.empty && isSuperAdmin) {
+        const fresh = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Role);
+        setRolesList(fresh);
+
+        if (!isSuperAdmin) return;
+
+        // Migrate old dotted-key seeds: if none of the new underscore keys are
+        // present as top-level permission keys, overwrite the 4 default docs.
+        const hasNewFormat = fresh.some(
+          (r) =>
+            r.permissions &&
+            ALL_PERMISSION_KEYS.some((k) => Object.prototype.hasOwnProperty.call(r.permissions, k))
+        );
+        const needsMigration = !snapshot.empty && !hasNewFormat;
+        const needsSeed = snapshot.empty || needsMigration;
+
+        if (needsSeed) {
           try {
             for (const r of DEFAULT_ROLES) {
               await setDoc(doc(db, 'roles', r.id), {
@@ -375,9 +390,7 @@ export const MemberSpacePage = () => {
           } catch (err) {
             console.error('Error seeding default roles:', err);
           }
-          return;
         }
-        setRolesList(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Role));
       },
       (err) => {
         console.warn('Permission restricted for roles list.', err);
@@ -662,7 +675,7 @@ export const MemberSpacePage = () => {
 
   const handleAddDocument = async (e: FormEvent) => {
     e.preventDefault();
-    if (!can('library.manage')) return;
+    if (!can('library_manage')) return;
 
     if (!newDoc.url && !newDoc.fileBase64) {
       alert('Veuillez fournir un lien ou uploader un document.');
@@ -717,7 +730,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleDeleteDocument = async (docId: string) => {
-    if (!can('library.manage')) return;
+    if (!can('library_manage')) return;
     if (window.confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) {
       try {
         await deleteDoc(doc(db, 'documents', docId));
@@ -742,7 +755,7 @@ export const MemberSpacePage = () => {
 
   const handleAddNews = async (e: FormEvent) => {
     e.preventDefault();
-    if (!can('news.manage')) return;
+    if (!can('news_manage')) return;
     setIsSaving(true);
     try {
       await addDoc(collection(db, 'news'), {
@@ -763,7 +776,7 @@ export const MemberSpacePage = () => {
 
   const handleAddPV = async (e: FormEvent) => {
     e.preventDefault();
-    if (!can('commissions.create')) return;
+    if (!can('commissions_create')) return;
     if (!newPV.fileBase64) {
       alert('Veuillez sélectionner un fichier PV.');
       return;
@@ -874,7 +887,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleSaveMember = async () => {
-    if (!can('members.manage') || !editingMember) return;
+    if (!can('members_manage') || !editingMember) return;
     setIsSaving(true);
     try {
       const displayName =
@@ -1023,7 +1036,7 @@ export const MemberSpacePage = () => {
 
   const handleAddMember = async (e: FormEvent) => {
     e.preventDefault();
-    if (!can('members.manage')) return;
+    if (!can('members_manage')) return;
     if (!newMember.birthDate) {
       alert('La date de naissance est requise pour générer le matricule AAJ.');
       return;
@@ -1114,7 +1127,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleUpdateMessageStatus = async (messageId: string, updates: any) => {
-    if (!can('messages.inbox')) return;
+    if (!can('messages_inbox')) return;
     try {
       await updateDoc(doc(db, 'contact_messages', messageId), updates);
     } catch (err) {
@@ -1124,7 +1137,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleToggleSuspense = async (targetUser: any) => {
-    if (!can('users.editStatus')) return;
+    if (!can('users_editStatus')) return;
     const newStatus = targetUser.status === 'suspended' ? 'active' : 'suspended';
     const action = newStatus === 'suspended' ? 'suspendre' : 'reprendre';
 
@@ -1143,7 +1156,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleUpdateRole = async (targetUser: any, newRole: string) => {
-    if (!can('users.editRole')) return;
+    if (!can('users_editRole')) return;
     if (targetUser.uid === user?.uid) {
       alert('Vous ne pouvez pas modifier votre propre rôle.');
       return;
@@ -1167,7 +1180,7 @@ export const MemberSpacePage = () => {
     targetUser: any,
     newStatus: 'pending' | 'active' | 'suspended'
   ) => {
-    if (!can('users.editStatus')) return;
+    if (!can('users_editStatus')) return;
     if (targetUser.uid === user?.uid) {
       alert('Vous ne pouvez pas modifier votre propre statut.');
       return;
@@ -1185,7 +1198,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleTogglePermission = async (role: Role, permKey: string, value: boolean) => {
-    if (!can('roles.manage')) return;
+    if (!can('roles_manage')) return;
     if (role.isAllAccess) return;
     setSavingRoleId(role.id);
     try {
@@ -1201,7 +1214,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleCreateRole = async () => {
-    if (!can('roles.manage')) return;
+    if (!can('roles_manage')) return;
     const name = newRoleForm.name.trim();
     if (!name) {
       alert('Le nom du rôle est requis.');
@@ -1232,16 +1245,16 @@ export const MemberSpacePage = () => {
       });
       setNewRoleForm({ name: '', description: '' });
       setIsAddRoleModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating role:', err);
-      alert('Erreur lors de la création du rôle.');
+      alert(`Erreur lors de la création du rôle.\n${err?.code || ''} ${err?.message || err}`);
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDeleteRole = async (role: Role) => {
-    if (!can('roles.manage')) return;
+    if (!can('roles_manage')) return;
     if (role.isSystem) {
       alert('Les rôles système ne peuvent pas être supprimés.');
       return;
@@ -1261,7 +1274,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleTogglePartnerVisibility = async (partnerId: string, currentVisibility: boolean) => {
-    if (!can('partners.manage')) return;
+    if (!can('partners_manage')) return;
     try {
       await updateDoc(doc(db, 'partners', partnerId), {
         isVisible: !currentVisibility,
@@ -1296,7 +1309,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleApproveProfileChange = async (request: any) => {
-    if (!can('profileRequests.manage')) return;
+    if (!can('profileRequests_manage')) return;
     setIsSaving(true);
     try {
       // 1. Update the user document (using setDoc with merge to avoid 'no document to update' error)
@@ -1332,7 +1345,7 @@ export const MemberSpacePage = () => {
   };
 
   const handleRejectProfileChange = async (requestId: string) => {
-    if (!can('profileRequests.manage')) return;
+    if (!can('profileRequests_manage')) return;
     if (window.confirm('Êtes-vous sûr de vouloir rejeter cette demande ?')) {
       try {
         await updateDoc(doc(db, 'profile_updates', requestId), {
@@ -1434,56 +1447,56 @@ export const MemberSpacePage = () => {
                     id: 'admin-roles',
                     icon: <KeyRound size={18} />,
                     label: 'Rôles & Permissions',
-                    perm: 'roles.manage',
+                    perm: 'roles_manage',
                   },
                   {
                     id: 'admin-config',
                     icon: <Settings size={18} />,
                     label: 'Paramètres',
-                    perm: 'config.manage',
+                    perm: 'config_manage',
                   },
                   {
                     id: 'admin-members',
                     icon: <Users size={18} />,
                     label: 'Gérer Adhésions',
-                    perm: 'members.manage',
+                    perm: 'members_manage',
                   },
                   {
                     id: 'admin-partners',
                     icon: <Shield size={18} />,
                     label: 'Gérer Partenaires',
-                    perm: 'partners.manage',
+                    perm: 'partners_manage',
                   },
                   {
                     id: 'admin-profile-requests',
                     icon: <CheckCircle2 size={18} />,
                     label: 'Validations Profils',
-                    perm: 'profileRequests.manage',
+                    perm: 'profileRequests_manage',
                     badge: profileRequests.filter((r) => r.status === 'pending').length,
                   },
                   {
                     id: 'admin-documents',
                     icon: <BookOpen size={18} />,
                     label: 'Gérer Bibliothèque',
-                    perm: 'library.manage',
+                    perm: 'library_manage',
                   },
                   {
                     id: 'admin-commissions',
                     icon: <Building2 size={18} />,
                     label: 'Dépôts des Avis',
-                    perm: 'commissions.create',
+                    perm: 'commissions_create',
                   },
                   {
                     id: 'admin-news',
                     icon: <FileText size={18} />,
                     label: 'Actions & Infos',
-                    perm: 'news.manage',
+                    perm: 'news_manage',
                   },
                   {
                     id: 'admin-messages',
                     icon: <Mail size={18} />,
                     label: 'Messages Entrants',
-                    perm: 'messages.inbox',
+                    perm: 'messages_inbox',
                     badge: adminMessages.filter((m) => m.status === 'unread').length,
                   },
                 ].filter((item) => can(item.perm));
@@ -2111,7 +2124,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {can('library.manage') && activeTab === 'admin-documents' && (
+                {can('library_manage') && activeTab === 'admin-documents' && (
                   <motion.div
                     key="admin-documents"
                     initial={{ opacity: 0, x: 10 }}
@@ -2623,7 +2636,7 @@ export const MemberSpacePage = () => {
                 )}
 
                 {/* Admin Sections */}
-                {activeTab === 'admin-members' && can('members.manage') && (
+                {activeTab === 'admin-members' && can('members_manage') && (
                   <motion.div
                     key="admin-members"
                     initial={{ opacity: 0, x: 10 }}
@@ -2728,7 +2741,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'admin-roles' && can('roles.manage') && (
+                {activeTab === 'admin-roles' && can('roles_manage') && (
                   <motion.div
                     key="admin-roles"
                     initial={{ opacity: 0, x: 10 }}
@@ -3009,7 +3022,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'admin-config' && can('config.manage') && (
+                {activeTab === 'admin-config' && can('config_manage') && (
                   <motion.div
                     key="admin-config"
                     initial={{ opacity: 0, x: 10 }}
@@ -3192,7 +3205,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'admin-partners' && can('partners.manage') && (
+                {activeTab === 'admin-partners' && can('partners_manage') && (
                   <motion.div
                     key="admin-partners"
                     initial={{ opacity: 0, x: 10 }}
@@ -3263,7 +3276,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'admin-messages' && can('messages.inbox') && (
+                {activeTab === 'admin-messages' && can('messages_inbox') && (
                   <motion.div
                     key="admin-messages"
                     initial={{ opacity: 0, x: 10 }}
@@ -3493,7 +3506,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'admin-profile-requests' && can('profileRequests.manage') && (
+                {activeTab === 'admin-profile-requests' && can('profileRequests_manage') && (
                   <motion.div
                     key="admin-profile-requests"
                     initial={{ opacity: 0, x: 10 }}
@@ -3602,7 +3615,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'admin-news' && can('news.manage') && (
+                {activeTab === 'admin-news' && can('news_manage') && (
                   <motion.div
                     key="admin-news"
                     initial={{ opacity: 0, x: 10 }}
@@ -4753,7 +4766,7 @@ export const MemberSpacePage = () => {
           )}
 
           {/* Modal: Add Role */}
-          {isAddRoleModalOpen && can('roles.manage') && (
+          {isAddRoleModalOpen && can('roles_manage') && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
               <motion.div
                 initial={{ opacity: 0 }}

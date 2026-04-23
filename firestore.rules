@@ -74,8 +74,8 @@ service cloud.firestore {
     // ==========================================
 
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin() || hasPermission('members.manage') || hasPermission('roles.manage');
-      allow list: if isAdmin() || hasPermission('members.manage') || hasPermission('roles.manage') || hasPermission('users.editRole') || hasPermission('users.editStatus');
+      allow get: if isOwner(userId) || isAdmin() || hasPermission('members_manage') || hasPermission('roles_manage');
+      allow list: if isAdmin() || hasPermission('members_manage') || hasPermission('roles_manage') || hasPermission('users_editRole') || hasPermission('users_editStatus');
 
       // Self-create: forced to role=member, status=pending
       allow create: if (
@@ -83,52 +83,52 @@ service cloud.firestore {
         incoming().get('role', 'member') == 'member' &&
         incoming().get('status', 'pending') == 'pending' &&
         isValidUser(incoming())
-      ) || isAdmin() || hasPermission('members.manage') || hasPermission('accounts.create');
+      ) || isAdmin() || hasPermission('members_manage') || hasPermission('accounts_create');
 
-      allow update: if isAdmin() || hasPermission('members.manage') || hasPermission('users.editRole') || hasPermission('users.editStatus') || (
+      allow update: if isAdmin() || hasPermission('members_manage') || hasPermission('users_editRole') || hasPermission('users_editStatus') || (
         isOwner(userId) &&
         isActive() &&
         incoming().get('role', existing().get('role', 'member')) == existing().get('role', 'member') &&
         incoming().get('status', existing().get('status', 'active')) == existing().get('status', 'active') &&
         isValidUser(incoming())
       );
-      allow delete: if isAdmin() || hasPermission('members.manage');
+      allow delete: if isAdmin() || hasPermission('members_manage');
     }
 
     match /news/{newsId} {
       allow read: if true;
-      allow write: if isAdmin() || hasPermission('news.manage');
+      allow write: if isAdmin() || hasPermission('news_manage');
     }
 
     match /partners/{partnerId} {
       allow read: if true;
-      allow write: if isAdmin() || hasPermission('partners.manage');
+      allow write: if isAdmin() || hasPermission('partners_manage');
     }
 
     match /commission_pvs/{pvId} {
       allow read: if isAdmin() || (isSignedIn() && isActive());
-      allow write: if isAdmin() || hasPermission('commissions.create') || (isRepresentative() && isActive());
+      allow write: if isAdmin() || hasPermission('commissions_create') || (isRepresentative() && isActive());
     }
 
     match /contact_messages/{msgId} {
-      allow get: if isAdmin() || hasPermission('messages.inbox') || (isSignedIn() && existing().userId == request.auth.uid);
-      allow list: if isAdmin() || hasPermission('messages.inbox') || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow get: if isAdmin() || hasPermission('messages_inbox') || (isSignedIn() && existing().userId == request.auth.uid);
+      allow list: if isAdmin() || hasPermission('messages_inbox') || (isSignedIn() && resource.data.userId == request.auth.uid);
 
       allow create: if isSignedIn() && isActive() && incoming().userId == request.auth.uid;
-      allow update, delete: if isAdmin() || hasPermission('messages.inbox');
+      allow update, delete: if isAdmin() || hasPermission('messages_inbox');
     }
 
     match /documents/{docId} {
       allow read: if isSignedIn() && isActive();
-      allow write: if isAdmin() || hasPermission('library.manage');
+      allow write: if isAdmin() || hasPermission('library_manage');
     }
 
     match /profile_updates/{requestId} {
-      allow get: if isAdmin() || hasPermission('profileRequests.manage') || (isSignedIn() && existing().uid == request.auth.uid);
-      allow list: if isAdmin() || hasPermission('profileRequests.manage') || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow get: if isAdmin() || hasPermission('profileRequests_manage') || (isSignedIn() && existing().uid == request.auth.uid);
+      allow list: if isAdmin() || hasPermission('profileRequests_manage') || (isSignedIn() && resource.data.uid == request.auth.uid);
 
       allow create: if isSignedIn() && isActive() && incoming().uid == request.auth.uid && incoming().status == 'pending';
-      allow update, delete: if isAdmin() || hasPermission('profileRequests.manage');
+      allow update, delete: if isAdmin() || hasPermission('profileRequests_manage');
     }
 
     // ==========================================
@@ -140,7 +140,7 @@ service cloud.firestore {
                        incoming().fullName is string && incoming().fullName.size() > 0 && incoming().fullName.size() < 200 &&
                        incoming().email is string && incoming().email.matches('.+@.+\\..+') &&
                        incoming().eventTitle is string && incoming().eventTitle.size() < 300;
-      allow read, update, delete: if isAdmin() || hasPermission('members.manage');
+      allow read, update, delete: if isAdmin() || hasPermission('members_manage');
     }
 
     match /membership_applications/{appId} {
@@ -149,7 +149,7 @@ service cloud.firestore {
                        incoming().email is string && incoming().email.matches('.+@.+\\..+') &&
                        incoming().category is string && incoming().category.size() > 0 && incoming().category.size() < 100 &&
                        incoming().get('status', 'pending') == 'pending';
-      allow read, update, delete: if isAdmin() || hasPermission('members.manage');
+      allow read, update, delete: if isAdmin() || hasPermission('members_manage');
     }
 
     match /partner_applications/{appId} {
@@ -158,7 +158,7 @@ service cloud.firestore {
                        incoming().email is string && incoming().email.matches('.+@.+\\..+') &&
                        incoming().companyName is string && incoming().companyName.size() < 300 &&
                        incoming().get('status', 'pending') == 'pending';
-      allow read, update, delete: if isAdmin() || hasPermission('partners.manage');
+      allow read, update, delete: if isAdmin() || hasPermission('partners_manage');
     }
 
     match /roles/{roleId} {
@@ -173,7 +173,7 @@ service cloud.firestore {
     // config.manage permission.
     match /config/{configId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isSuperAdmin() || hasPermission('config.manage');
+      allow create, update, delete: if isSuperAdmin() || hasPermission('config_manage');
     }
 
     // Allow connection test
