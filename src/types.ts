@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Timestamp } from 'firebase/firestore';
+import type { Timestamp } from './lib/firebase';
 
 export type UserRole = 'super-admin' | 'admin' | 'member' | 'representative' | string;
 export type UserStatus = 'pending' | 'active' | 'suspended';

@@ -3,8 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from './firebase';
+import { doc, getDoc, setDoc, serverTimestamp, db } from './firebase';
 import { TUNISIAN_DELEGATIONS } from './tunisianDelegations';
 
 export interface MemberType {

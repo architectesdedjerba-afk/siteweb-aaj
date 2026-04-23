@@ -40,13 +40,13 @@ import {
   Search,
 } from 'lucide-react';
 import {
+  // auth API
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
   onAuthStateChanged,
   signOut,
-  User,
-} from 'firebase/auth';
-import {
+  type User,
+  // firestore-shaped API
   doc,
   getDoc,
   collection,
@@ -59,8 +59,10 @@ import {
   updateDoc,
   setDoc,
   where,
-} from 'firebase/firestore';
-import { auth, db } from '../lib/firebase';
+  // singletons
+  auth,
+  db,
+} from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Role } from '../types';
 import {
@@ -596,9 +598,11 @@ export const MemberSpacePage = () => {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (err: any) {
       console.error('Login Error:', err);
-      if (err.code === 'auth/operation-not-allowed') {
+      if (err.status === 401 || err.code === 'invalid_credentials') {
+        setError('Email ou mot de passe incorrect.');
+      } else if (err.status === 503 || err.code === 'server_misconfigured') {
         setError(
-          "La connexion par Email/Mot de passe n'est pas activée dans la console Firebase. Veuillez contacter l'administrateur."
+          "Le service d'authentification est momentanément indisponible. Veuillez contacter l'administrateur."
         );
       } else {
         setError('Email ou mot de passe incorrect.');

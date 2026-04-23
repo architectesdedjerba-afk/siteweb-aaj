@@ -3,25 +3,31 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, FormEvent } from "react";
-import { motion } from "motion/react";
-import { CheckCircle2, Loader2, ArrowLeft, Handshake } from "lucide-react";
-import { Link } from "react-router-dom";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { db } from "../lib/firebase";
-import { useToast } from "../lib/toast";
-import { email as vEmail, first, hasErrors, phone as vPhone, required, ValidationErrors } from "../lib/validation";
+import { useState, FormEvent } from 'react';
+import { motion } from 'motion/react';
+import { CheckCircle2, Loader2, ArrowLeft, Handshake } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { addDoc, collection, serverTimestamp, db } from '../lib/firebase';
+import { useToast } from '../lib/toast';
+import {
+  email as vEmail,
+  first,
+  hasErrors,
+  phone as vPhone,
+  required,
+  ValidationErrors,
+} from '../lib/validation';
 
 const ACTIVITIES = [
-  "Matériaux de construction",
-  "Second œuvre & Décoration",
-  "Ingénierie & Conseil",
-  "Services Financiers & Assurances",
-  "Technologie & Domotique",
-  "Autre",
+  'Matériaux de construction',
+  'Second œuvre & Décoration',
+  'Ingénierie & Conseil',
+  'Services Financiers & Assurances',
+  'Technologie & Domotique',
+  'Autre',
 ] as const;
 
-type SponsorshipType = "platine" | "or" | "argent" | "autre";
+type SponsorshipType = 'platine' | 'or' | 'argent' | 'autre';
 
 interface FormState {
   contactName: string;
@@ -38,21 +44,21 @@ export const PartnerApplicationPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [form, setForm] = useState<FormState>({
-    contactName: "",
-    email: "",
-    phone: "",
-    companyName: "",
-    activity: "",
-    sponsorshipType: "platine",
-    message: "",
+    contactName: '',
+    email: '',
+    phone: '',
+    companyName: '',
+    activity: '',
+    sponsorshipType: 'platine',
+    message: '',
   });
   const [errors, setErrors] = useState<ValidationErrors<FormState>>({});
 
   const validate = (f: FormState): ValidationErrors<FormState> => ({
-    contactName: required(f.contactName, "Nom & Prénom"),
-    email: first(required(f.email, "Email"), vEmail(f.email)),
-    phone: first(required(f.phone, "Téléphone"), vPhone(f.phone)),
-    companyName: required(f.companyName, "Dénomination sociale"),
+    contactName: required(f.contactName, 'Nom & Prénom'),
+    email: first(required(f.email, 'Email'), vEmail(f.email)),
+    phone: first(required(f.phone, 'Téléphone'), vPhone(f.phone)),
+    companyName: required(f.companyName, 'Dénomination sociale'),
     activity: required(f.activity, "Secteur d'activité"),
   });
 
@@ -61,20 +67,20 @@ export const PartnerApplicationPage = () => {
     const errs = validate(form);
     setErrors(errs);
     if (hasErrors(errs)) {
-      toast.error("Veuillez corriger les erreurs du formulaire.");
+      toast.error('Veuillez corriger les erreurs du formulaire.');
       return;
     }
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, "partner_applications"), {
+      await addDoc(collection(db, 'partner_applications'), {
         ...form,
-        status: "pending",
+        status: 'pending',
         createdAt: serverTimestamp(),
       });
       setSubmitted(true);
-      toast.success("Proposition reçue.");
+      toast.success('Proposition reçue.');
     } catch (err) {
-      console.error("Partner application error:", err);
+      console.error('Partner application error:', err);
       toast.error("Impossible d'envoyer la proposition. Réessayez plus tard.");
     } finally {
       setIsSubmitting(false);
@@ -92,9 +98,12 @@ export const PartnerApplicationPage = () => {
           <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8 shadow-sm">
             <CheckCircle2 size={40} aria-hidden="true" />
           </div>
-          <h2 className="text-2xl font-black text-aaj-dark mb-4 uppercase tracking-tighter">Proposition reçue</h2>
+          <h2 className="text-2xl font-black text-aaj-dark mb-4 uppercase tracking-tighter">
+            Proposition reçue
+          </h2>
           <p className="text-aaj-gray font-medium text-sm leading-relaxed mb-10">
-            Merci de votre intérêt pour l'AAJ. Notre bureau des partenariats examinera votre demande et vous contactera dans les plus brefs délais.
+            Merci de votre intérêt pour l'AAJ. Notre bureau des partenariats examinera votre demande
+            et vous contactera dans les plus brefs délais.
           </p>
           <Link
             to="/"
@@ -111,26 +120,42 @@ export const PartnerApplicationPage = () => {
     <div className="pt-16 min-h-screen bg-white pb-24">
       <header className="border-b border-aaj-border py-16 bg-slate-50/50">
         <div className="max-w-3xl mx-auto px-6">
-          <Link to="/partenaires" className="inline-flex items-center gap-2 text-[10px] font-black text-aaj-royal uppercase tracking-[2px] mb-8 hover:-translate-x-1 transition-transform">
+          <Link
+            to="/partenaires"
+            className="inline-flex items-center gap-2 text-[10px] font-black text-aaj-royal uppercase tracking-[2px] mb-8 hover:-translate-x-1 transition-transform"
+          >
             <ArrowLeft size={14} aria-hidden="true" /> Retour aux offres
           </Link>
-          <h1 className="text-4xl md:text-5xl font-black mb-4 uppercase tracking-tighter leading-[0.9]">Devenir <br/><span className="text-aaj-royal">Partenaire</span></h1>
-          <p className="text-aaj-gray text-xs md:text-sm font-bold uppercase tracking-[3px] opacity-70">Rejoignez l'écosystème AAJ</p>
+          <h1 className="text-4xl md:text-5xl font-black mb-4 uppercase tracking-tighter leading-[0.9]">
+            Devenir <br />
+            <span className="text-aaj-royal">Partenaire</span>
+          </h1>
+          <p className="text-aaj-gray text-xs md:text-sm font-bold uppercase tracking-[3px] opacity-70">
+            Rejoignez l'écosystème AAJ
+          </p>
         </div>
       </header>
 
       <section className="max-w-3xl mx-auto px-6 mt-16">
         <form onSubmit={handleSubmit} className="space-y-12" noValidate>
-
           <div className="space-y-8">
             <div className="flex items-center gap-4">
-              <div className="w-10 h-10 border border-aaj-border flex items-center justify-center text-aaj-royal font-black text-sm">01</div>
-              <h2 className="text-sm font-black uppercase tracking-[4px] text-aaj-dark">Contact Référent</h2>
+              <div className="w-10 h-10 border border-aaj-border flex items-center justify-center text-aaj-royal font-black text-sm">
+                01
+              </div>
+              <h2 className="text-sm font-black uppercase tracking-[4px] text-aaj-dark">
+                Contact Référent
+              </h2>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-2">
-                <label htmlFor="pa-name" className="text-[10px] font-black text-aaj-gray uppercase tracking-widest pl-1">Nom & Prénom</label>
+                <label
+                  htmlFor="pa-name"
+                  className="text-[10px] font-black text-aaj-gray uppercase tracking-widest pl-1"
+                >
+                  Nom & Prénom
+                </label>
                 <input
                   id="pa-name"
                   required
@@ -144,7 +169,12 @@ export const PartnerApplicationPage = () => {
                 {errors.contactName && <p className="text-xs text-red-600">{errors.contactName}</p>}
               </div>
               <div className="space-y-2">
-                <label htmlFor="pa-phone" className="text-[10px] font-black text-aaj-gray uppercase tracking-widest pl-1">Téléphone</label>
+                <label
+                  htmlFor="pa-phone"
+                  className="text-[10px] font-black text-aaj-gray uppercase tracking-widest pl-1"
+                >
+                  Téléphone
+                </label>
                 <input
                   id="pa-phone"
                   required
@@ -158,7 +188,12 @@ export const PartnerApplicationPage = () => {
                 {errors.phone && <p className="text-xs text-red-600">{errors.phone}</p>}
               </div>
               <div className="space-y-2 md:col-span-2">
-                <label htmlFor="pa-email" className="text-[10px] font-black text-aaj-gray uppercase tracking-widest pl-1">Email Professionnel</label>
+                <label
+                  htmlFor="pa-email"
+                  className="text-[10px] font-black text-aaj-gray uppercase tracking-widest pl-1"
+                >
+                  Email Professionnel
+                </label>
                 <input
                   id="pa-email"
                   required
@@ -176,13 +211,22 @@ export const PartnerApplicationPage = () => {
 
           <div className="space-y-8">
             <div className="flex items-center gap-4">
-              <div className="w-10 h-10 border border-aaj-border flex items-center justify-center text-aaj-royal font-black text-sm">02</div>
-              <h2 className="text-sm font-black uppercase tracking-[4px] text-aaj-dark">L'Entreprise</h2>
+              <div className="w-10 h-10 border border-aaj-border flex items-center justify-center text-aaj-royal font-black text-sm">
+                02
+              </div>
+              <h2 className="text-sm font-black uppercase tracking-[4px] text-aaj-dark">
+                L'Entreprise
+              </h2>
             </div>
 
             <div className="space-y-8">
               <div className="space-y-2">
-                <label htmlFor="pa-company" className="text-[10px] font-black text-aaj-gray uppercase tracking-widest pl-1">Dénomination Sociale</label>
+                <label
+                  htmlFor="pa-company"
+                  className="text-[10px] font-black text-aaj-gray uppercase tracking-widest pl-1"
+                >
+                  Dénomination Sociale
+                </label>
                 <input
                   id="pa-company"
                   required
@@ -197,7 +241,9 @@ export const PartnerApplicationPage = () => {
               </div>
 
               <fieldset className="space-y-4">
-                <legend className="text-[10px] font-black text-aaj-gray uppercase tracking-widest pl-1">Secteur d'activité</legend>
+                <legend className="text-[10px] font-black text-aaj-gray uppercase tracking-widest pl-1">
+                  Secteur d'activité
+                </legend>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {ACTIVITIES.map((field) => (
                     <label key={field} className="group cursor-pointer">
@@ -210,7 +256,9 @@ export const PartnerApplicationPage = () => {
                           onChange={(e) => setForm({ ...form, activity: e.target.value })}
                           className="accent-aaj-royal"
                         />
-                        <span className="text-[11px] font-bold uppercase tracking-tight text-aaj-dark">{field}</span>
+                        <span className="text-[11px] font-bold uppercase tracking-tight text-aaj-dark">
+                          {field}
+                        </span>
                       </div>
                     </label>
                   ))}
@@ -222,17 +270,28 @@ export const PartnerApplicationPage = () => {
 
           <div className="space-y-8">
             <div className="flex items-center gap-4">
-              <div className="w-10 h-10 border border-aaj-border flex items-center justify-center text-aaj-royal font-black text-sm">03</div>
-              <h2 className="text-sm font-black uppercase tracking-[4px] text-aaj-dark">Partenariat</h2>
+              <div className="w-10 h-10 border border-aaj-border flex items-center justify-center text-aaj-royal font-black text-sm">
+                03
+              </div>
+              <h2 className="text-sm font-black uppercase tracking-[4px] text-aaj-dark">
+                Partenariat
+              </h2>
             </div>
 
             <div className="space-y-8">
               <div className="space-y-2">
-                <label htmlFor="pa-type" className="text-[10px] font-black text-aaj-gray uppercase tracking-widest pl-1">Type de Sponsoring Souhaité</label>
+                <label
+                  htmlFor="pa-type"
+                  className="text-[10px] font-black text-aaj-gray uppercase tracking-widest pl-1"
+                >
+                  Type de Sponsoring Souhaité
+                </label>
                 <select
                   id="pa-type"
                   value={form.sponsorshipType}
-                  onChange={(e) => setForm({ ...form, sponsorshipType: e.target.value as SponsorshipType })}
+                  onChange={(e) =>
+                    setForm({ ...form, sponsorshipType: e.target.value as SponsorshipType })
+                  }
                   className="w-full border-b border-aaj-border py-3 px-1 focus:outline-none focus:border-aaj-royal bg-transparent text-sm font-medium transition-colors"
                 >
                   <option value="platine">PARTENARIAT PLATINE</option>
@@ -243,7 +302,12 @@ export const PartnerApplicationPage = () => {
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="pa-msg" className="text-[10px] font-black text-aaj-gray uppercase tracking-widest pl-1">Message ou Précisions</label>
+                <label
+                  htmlFor="pa-msg"
+                  className="text-[10px] font-black text-aaj-gray uppercase tracking-widest pl-1"
+                >
+                  Message ou Précisions
+                </label>
                 <textarea
                   id="pa-msg"
                   rows={4}
@@ -266,7 +330,11 @@ export const PartnerApplicationPage = () => {
             ) : (
               <>
                 Soumettre la demande
-                <Handshake size={20} className="group-hover:rotate-12 transition-transform" aria-hidden="true" />
+                <Handshake
+                  size={20}
+                  className="group-hover:rotate-12 transition-transform"
+                  aria-hidden="true"
+                />
               </>
             )}
           </button>

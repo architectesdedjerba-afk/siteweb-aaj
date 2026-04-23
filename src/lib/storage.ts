@@ -2,57 +2,40 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Firebase Storage helpers — prepared for migration from Base64 to proper storage.
- * To activate:
- *   1. npm i firebase (already installed)
- *   2. Enable Storage in Firebase Console
- *   3. Add storage rules (see storage.rules)
- *   4. Replace fileBase64 fields with url fields in Firestore documents
+ * File upload helpers — delegates to the PHP /api/files endpoint.
+ * Files are streamed to disk on the server; the frontend receives a
+ * stable public download URL via /api/files/{id}.
  */
 
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import firebaseConfig from '../../firebase-applet-config.json';
-
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-export const storage = getStorage(app);
+import { api } from './api';
 
 export interface UploadResult {
   url: string;
   path: string;
 }
 
-/**
- * Upload a File to Firebase Storage under the given folder.
- * Returns the download URL and storage path (to delete later).
- */
-export async function uploadFile(file: File, folder: string, userId?: string): Promise<UploadResult> {
+export async function uploadFile(
+  file: File,
+  folder: string,
+  _userId?: string
+): Promise<UploadResult> {
   if (!file) throw new Error('Aucun fichier fourni.');
   if (file.size > 10 * 1024 * 1024) throw new Error('Fichier trop volumineux (max 10 Mo).');
-
-  const sanitized = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-  const timestamp = Date.now();
-  const userSegment = userId ? `${userId}/` : '';
-  const path = `${folder}/${userSegment}${timestamp}_${sanitized}`;
-
-  const storageRef = ref(storage, path);
-  const snapshot = await uploadBytes(storageRef, file, {
-    contentType: file.type,
-  });
-  const url = await getDownloadURL(snapshot.ref);
-  return { url, path };
+  const res = await api.uploadFile(file, folder);
+  return { url: res.url, path: res.id };
 }
 
-export async function deleteFile(path: string): Promise<void> {
-  if (!path) return;
+export async function deleteFile(pathOrId: string): Promise<void> {
+  if (!pathOrId) return;
   try {
-    await deleteObject(ref(storage, path));
+    // `path` returned by uploadFile() is the file id.
+    await api.deleteFile(pathOrId);
   } catch (err) {
-    console.warn(`Failed to delete ${path}:`, err);
+    console.warn(`Failed to delete ${pathOrId}:`, err);
   }
 }
 
-/** Legacy helper — keep for compatibility with existing Base64 fields. */
+/** Legacy helper — kept so any lingering base64 flows still compile. */
 export const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

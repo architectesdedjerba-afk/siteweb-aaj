@@ -1,0 +1,34 @@
+# =============================================================
+# AAJ API — URL rewriting & hardening
+# =============================================================
+
+RewriteEngine On
+
+# Protect sensitive files
+<FilesMatch "^(config\.php|config\.example\.php|\.env|schema\.sql)$">
+    Require all denied
+</FilesMatch>
+
+# Block access to /uploads-storage (served only through /api/files/{id})
+RewriteRule ^uploads-storage/ - [F,L]
+
+# Block access to /lib and /endpoints (only reached via index.php)
+RewriteRule ^(lib|endpoints)/ - [F,L]
+
+# Let existing files (e.g. static error pages) be served as-is
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule . - [L]
+
+# Route everything else through index.php
+RewriteRule ^.*$ index.php [QSA,L]
+
+# CORS — same-origin by default; API mounted at /api on the site domain.
+# If you need to allow a different origin (e.g. staging), uncomment and set.
+# Header always set Access-Control-Allow-Origin "https://votre-domaine.tn"
+# Header always set Access-Control-Allow-Credentials "true"
+# Header always set Vary "Origin"
+
+# Security headers
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-Frame-Options "DENY"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"

@@ -4,8 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, query, orderBy, QueryConstraint } from 'firebase/firestore';
-import { db } from './firebase';
+import { collection, onSnapshot, query, orderBy, type QueryConstraint, db } from './firebase';
 
 export function useFirestoreCollection<T>(
   path: string,
@@ -20,7 +19,7 @@ export function useFirestoreCollection<T>(
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        setData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as T)));
+        setData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as T));
         setLoading(false);
       },
       (err) => {

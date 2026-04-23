@@ -4,9 +4,7 @@
  */
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { auth, db, doc, onAuthStateChanged, onSnapshot, type User } from './firebase';
 import type { UserProfile, Role } from '../types';
 import { DEFAULT_ROLES } from './permissions';
 
