@@ -154,6 +154,7 @@ export const MemberSpacePage = () => {
     sending: boolean;
     result: null | {
       ok: boolean;
+      tcpOk: boolean | null;
       elapsedMs: number;
       smtp: {
         host: string;
@@ -1226,6 +1227,7 @@ export const MemberSpacePage = () => {
         sending: false,
         result: {
           ok: result.ok,
+          tcpOk: result.tcpOk,
           elapsedMs: result.elapsedMs,
           smtp: result.smtp,
           log: result.log,
@@ -3851,6 +3853,13 @@ export const MemberSpacePage = () => {
                               <br />
                               password :{' '}
                               {mailTest.result.smtp.has_password ? 'configuré' : 'VIDE ⚠'}
+                              <br />
+                              tcp :{' '}
+                              {mailTest.result.tcpOk === null
+                                ? 'non testé'
+                                : mailTest.result.tcpOk
+                                  ? 'port ouvert ✓'
+                                  : 'port injoignable ✗'}
                             </div>
                             {mailTest.result.log.length > 0 && (
                               <pre className="mt-2 p-2 bg-white/60 rounded border border-slate-200 text-[10px] overflow-x-auto whitespace-pre-wrap break-all">

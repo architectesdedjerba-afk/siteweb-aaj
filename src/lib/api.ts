@@ -95,6 +95,7 @@ export const api = {
     http<{
       ok: boolean;
       to: string;
+      tcpOk: boolean | null;
       elapsedMs: number;
       smtp: {
         host: string;

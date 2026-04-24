@@ -295,26 +295,66 @@ function auth_test_mail(): void
         json_error('invalid_email', 'Email destinataire invalide.', 400);
     }
 
-    // Capture error_log output for the duration of the call so we can
-    // surface SMTP errors back to the admin without digging into cPanel.
-    $buffer = [];
-    $prevHandler = set_error_handler(null);
-    $originalErrorLog = ini_get('error_log');
-    $tmpLog = tempnam(sys_get_temp_dir(), 'aaj-mail-');
-    if ($tmpLog !== false) ini_set('error_log', $tmpLog);
+    // Give the diagnostic a hard budget so we always return JSON. send_mail's
+    // internal 15s-per-read loop can otherwise pile up past max_execution_time
+    // when the SMTP server hangs, which shows as "Failed to fetch" in the UI.
+    @set_time_limit(30);
 
-    $t0 = microtime(true);
-    $ok = send_mail(
-        $to,
-        (string)($actor['display_name'] ?? ''),
-        'Test SMTP — Architectes de Jerba',
-        '<p>Ceci est un email de test envoyé depuis l\'espace admin AAJ.</p>'
-        . '<p>Si vous recevez ce message, la configuration SMTP fonctionne.</p>'
-    );
-    $elapsedMs = (int)round((microtime(true) - $t0) * 1000);
+    $host = (string)($CONFIG['smtp']['host'] ?? '');
+    $port = (int)($CONFIG['smtp']['port'] ?? 0);
+    $encryption = strtolower((string)($CONFIG['smtp']['encryption'] ?? ''));
+
+    $buffer = [];
+    $tmpLog = @tempnam(sys_get_temp_dir(), 'aaj-mail-');
+    $originalErrorLog = (string)ini_get('error_log');
+    if ($tmpLog !== false) @ini_set('error_log', $tmpLog);
+
+    $tcpOk = null;
+    $tcpErrno = 0;
+    $tcpErrstr = '';
+    $elapsedMs = 0;
+    $ok = false;
+
+    // Swallow any stray output from mail.php warnings so the JSON stays clean.
+    if (ob_get_level() === 0) ob_start();
+
+    try {
+        // 1. Fast TCP pre-check (3s) — skipped if host/port look wrong.
+        if ($host !== '' && $port > 0) {
+            $remote = $encryption === 'ssl' ? "ssl://$host:$port" : "$host:$port";
+            $ctx = stream_context_create();
+            $t0 = microtime(true);
+            $probe = @stream_socket_client($remote, $tcpErrno, $tcpErrstr, 3, STREAM_CLIENT_CONNECT, $ctx);
+            $tcpOk = (bool)$probe;
+            if ($probe) fclose($probe);
+            if (!$tcpOk) {
+                $buffer[] = "TCP probe failed: $tcpErrstr (errno=$tcpErrno)";
+            }
+        } else {
+            $buffer[] = 'SMTP host/port not configured.';
+        }
+
+        // 2. Full SMTP send — only attempted if the probe succeeded.
+        if ($tcpOk) {
+            $t0 = microtime(true);
+            $ok = @send_mail(
+                $to,
+                (string)($actor['display_name'] ?? ''),
+                'Test SMTP — Architectes de Jerba',
+                '<p>Ceci est un email de test envoyé depuis l\'espace admin AAJ.</p>'
+                . '<p>Si vous recevez ce message, la configuration SMTP fonctionne.</p>'
+            );
+            $elapsedMs = (int)round((microtime(true) - $t0) * 1000);
+        }
+    } catch (Throwable $e) {
+        $buffer[] = 'Exception: ' . $e->getMessage();
+    }
+
+    // Drop any captured output (SSL warnings, etc.) so the response is pure JSON.
+    if (ob_get_level() > 0) { $stray = ob_get_clean(); if ($stray !== false && $stray !== '') $buffer[] = 'stdout: ' . trim($stray); }
 
     if ($tmpLog !== false) {
-        ini_set('error_log', $originalErrorLog);
+        @ini_set('error_log', $originalErrorLog);
         $raw = @file_get_contents($tmpLog);
         if ($raw !== false) {
             foreach (explode("\n", $raw) as $line) {
@@ -324,16 +364,16 @@ function auth_test_mail(): void
         }
         @unlink($tmpLog);
     }
-    if ($prevHandler) set_error_handler($prevHandler);
 
     json_response([
         'ok'        => $ok,
         'to'        => $to,
+        'tcpOk'     => $tcpOk,
         'elapsedMs' => $elapsedMs,
         'smtp'      => [
-            'host'       => (string)($CONFIG['smtp']['host'] ?? ''),
-            'port'       => (int)($CONFIG['smtp']['port'] ?? 0),
-            'encryption' => (string)($CONFIG['smtp']['encryption'] ?? ''),
+            'host'       => $host,
+            'port'       => $port,
+            'encryption' => $encryption,
             'from_email' => (string)($CONFIG['smtp']['from_email'] ?? ''),
             'from_name'  => (string)($CONFIG['smtp']['from_name'] ?? ''),
             'has_password' => !empty($CONFIG['smtp']['password']),
