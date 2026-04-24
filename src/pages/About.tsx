@@ -4,14 +4,34 @@
  */
 
 import { motion } from "motion/react";
+import { Users, Award, Landmark, Calendar } from "lucide-react";
 import bureauImg from "../img/bureau2527.jpg";
 import localImg from "../img/AAJ Local.jpg";
 
+interface HistoryEntry {
+  period: string;
+  president: string;
+}
+
+interface AboutSection {
+  title: string;
+  content?: string;
+  items?: string[];
+  history?: HistoryEntry[];
+}
+
+const STATS = [
+  { value: "120+", label: "Architectes adhérents", Icon: Users },
+  { value: "15", label: "Années d'engagement", Icon: Award },
+  { value: "30+", label: "Projets patrimoniaux", Icon: Landmark },
+  { value: "50+", label: "Évènements organisés", Icon: Calendar },
+];
+
 export const AboutPage = () => {
-  const sections = [
+  const sections: AboutSection[] = [
     {
       title: "Notre Mission",
-      content: "L’Association des Architectes de Jerba (AAJ) œuvre pour la promotion de l’excellence architecturale et la préservation de l’identité unique de l’île. Nous croyons en une architecture durable qui dialogue avec l’histoire tout en répondant aux défis de demain."
+      content: "L'Association des Architectes de Jerba (AAJ) œuvre pour la promotion de l'excellence architecturale et la préservation de l'identité unique de l'île. Nous croyons en une architecture durable qui dialogue avec l'histoire tout en répondant aux défis de demain."
     },
     {
       title: "Nos Objectifs",
@@ -46,6 +66,25 @@ export const AboutPage = () => {
           <p className="text-aaj-gray text-sm md:text-base max-w-2xl mx-auto font-medium uppercase tracking-widest leading-relaxed">Engagement, Patrimoine et Innovation.</p>
         </div>
       </header>
+
+      <section className="border-b border-aaj-border max-w-7xl mx-auto px-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 border-l border-aaj-border">
+          {STATS.map(({ value, label, Icon }, i) => (
+            <div
+              key={i}
+              className="p-8 lg:p-10 border-r border-aaj-border flex flex-col items-center text-center"
+            >
+              <Icon size={20} className="text-aaj-royal mb-4" aria-hidden="true" />
+              <div className="text-3xl lg:text-4xl font-black text-aaj-dark tracking-tighter mb-2">
+                {value}
+              </div>
+              <span className="text-[9px] uppercase tracking-[2px] text-aaj-gray font-bold">
+                {label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="py-24 max-w-7xl mx-auto px-6 border-b border-aaj-border">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-20">
@@ -139,7 +178,7 @@ export const AboutPage = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-0 border-t border-l border-aaj-border">
-            {sections.find(s => s.title === "Historique des Bureaux")?.history?.map((item: any, idx: number) => (
+            {sections.find(s => s.title === "Historique des Bureaux")?.history?.map((item, idx) => (
               <motion.div 
                 key={idx}
                 initial={{ opacity: 0 }}
