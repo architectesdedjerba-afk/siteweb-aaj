@@ -140,11 +140,16 @@ export function ChatFloatingWidget() {
               'fixed z-[1100] bg-white shadow-2xl border border-aaj-border overflow-hidden flex flex-col',
               // Mobile: full-screen sheet
               'inset-0 rounded-none',
-              // Desktop: maximized = near-fullscreen, default = compact card
+              // Desktop: maximized = near-fullscreen, default = compact card.
+              // `sm:max-h-[calc(100dvh-7rem)]` clamps the popup to the
+              // viewport: on shorter laptop screens (≈700px tall) the
+              // configured `h-[680px]` would otherwise push past the top
+              // edge and clip the title bar / message input.
               maximized
                 ? 'sm:inset-6 sm:rounded-lg sm:w-auto sm:h-auto'
                 : [
                     'sm:inset-auto sm:bottom-24 sm:right-6 sm:rounded-lg',
+                    'sm:max-h-[calc(100dvh-7rem)]',
                     'sm:w-[420px] sm:h-[640px]',
                     'md:w-[560px] md:h-[680px]',
                     'lg:w-[760px] lg:h-[680px]',

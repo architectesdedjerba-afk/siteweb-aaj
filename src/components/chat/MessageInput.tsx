@@ -217,7 +217,8 @@ export function MessageInput({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKey}
           rows={1}
-          placeholder="Écrire un message... (Entrée pour envoyer, Maj+Entrée pour aller à la ligne)"
+          placeholder="Écrire un message…"
+          title="Entrée pour envoyer · Maj+Entrée pour aller à la ligne"
           className="flex-1 resize-none px-4 py-2.5 border border-aaj-border rounded-2xl text-sm focus:border-aaj-royal focus:outline-none focus:ring-2 focus:ring-aaj-royal/10 max-h-32"
           style={{ minHeight: '40px' }}
         />

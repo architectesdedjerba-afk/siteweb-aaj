@@ -350,11 +350,16 @@ function ToolbarButton({
 
 function toDate(value: ChatMessage['createdAt']): Date | null {
   if (!value) return null;
-  if (typeof value === 'string') return new Date(value);
-  const v = value as any;
-  if (typeof v?.toDate === 'function') return v.toDate();
-  if (typeof v?.seconds === 'number') return new Date(v.seconds * 1000);
-  return null;
+  let d: Date | null = null;
+  if (typeof value === 'string') d = new Date(value);
+  else {
+    const v = value as any;
+    if (typeof v?.toDate === 'function') d = v.toDate();
+    else if (typeof v?.seconds === 'number') d = new Date(v.seconds * 1000);
+  }
+  // Reject Invalid Date so callers don't render "Invalid Date" in the UI.
+  if (!d || isNaN(d.getTime())) return null;
+  return d;
 }
 
 function formatTime(value: ChatMessage['createdAt']): string {
