@@ -207,9 +207,13 @@ export async function adminCreateAccount(payload: {
   mobile?: string;
   address?: string;
   cotisations?: Record<string, any>;
-}): Promise<{ user: User; emailSent: boolean }> {
+}): Promise<{ user: User; emailSent: boolean; tempPassword?: string }> {
   const res = await api.createAccount(payload);
-  return { user: toUser(res.user), emailSent: res.emailSent };
+  return {
+    user: toUser(res.user),
+    emailSent: res.emailSent,
+    tempPassword: (res as any).tempPassword,
+  };
 }
 
 export function onAuthStateChanged(_auth: AuthState, cb: AuthListener): () => void {

@@ -263,9 +263,14 @@ function auth_create_account(): void
     $row = $pdo->prepare('SELECT * FROM users WHERE uid = ? LIMIT 1');
     $row->execute([$uid]);
     json_response([
-        'ok'        => true,
-        'user'      => user_profile_view($row->fetch()),
-        'emailSent' => $emailSent,
+        'ok'           => true,
+        'user'         => user_profile_view($row->fetch()),
+        'emailSent'    => $emailSent,
+        // The admin that just created the account is allowed to see the
+        // one-shot password — they need it to pass on if the welcome email
+        // fails (spam, SPF/DKIM issues, typo, etc.). The account is
+        // `must_reset=1` anyway so this value is only usable for first login.
+        'tempPassword' => $tempPassword,
     ]);
 }
 

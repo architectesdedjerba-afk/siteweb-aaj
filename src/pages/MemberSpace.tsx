@@ -1173,7 +1173,7 @@ export const MemberSpacePage = () => {
       const typeEntry = memberTypesList.find((t) => t.letter === newMember.memberTypeLetter);
       const memberTypeLabel = typeEntry?.label || newMember.category;
 
-      const { emailSent } = await adminCreateAccount({
+      const { emailSent, tempPassword } = await adminCreateAccount({
         email: newMember.email,
         displayName: `${newMember.firstName} ${newMember.lastName}`.trim(),
         firstName: newMember.firstName,
@@ -1188,10 +1188,11 @@ export const MemberSpacePage = () => {
         role: 'member',
         status: 'active',
       });
+      const pwdLine = tempPassword ? `\nMot de passe temporaire : ${tempPassword}` : '';
       alert(
         emailSent
-          ? `Membre ajouté avec succès ! Matricule : ${matricule}.\nUn email contenant le mot de passe temporaire a été envoyé à ${newMember.email}.`
-          : `Membre ajouté avec succès ! Matricule : ${matricule}.\nATTENTION : l'email de bienvenue n'a pas pu être envoyé. Demandez une réinitialisation de mot de passe.`
+          ? `Membre ajouté avec succès !\nMatricule : ${matricule}\nEmail : ${newMember.email}${pwdLine}\n\nUn email avec ces identifiants a été envoyé (pensez à vérifier les spams).`
+          : `Membre ajouté avec succès !\nMatricule : ${matricule}\nEmail : ${newMember.email}${pwdLine}\n\nATTENTION : l'email de bienvenue n'a pas pu être envoyé — transmettez manuellement les identifiants ci-dessus au nouvel adhérent.`
       );
       setIsAddMemberModalOpen(false);
       setNewMember({
@@ -1242,7 +1243,7 @@ export const MemberSpacePage = () => {
       const firstName = app.firstName || (app.fullName || '').split(/\s+/)[0] || '';
       const lastName = app.lastName || (app.fullName || '').split(/\s+/).slice(1).join(' ') || '';
 
-      const { emailSent } = await adminCreateAccount({
+      const { emailSent, tempPassword } = await adminCreateAccount({
         email: app.email,
         displayName: `${firstName} ${lastName}`.trim() || app.fullName || app.email,
         firstName,
@@ -1263,10 +1264,11 @@ export const MemberSpacePage = () => {
         licenseNumber: matricule,
       });
 
+      const pwdLine = tempPassword ? `\nMot de passe temporaire : ${tempPassword}` : '';
       alert(
         emailSent
-          ? `Demande validée. Matricule : ${matricule}.\nUn email avec le mot de passe temporaire a été envoyé à ${app.email}.`
-          : `Demande validée. Matricule : ${matricule}.\nATTENTION : l'email de bienvenue n'a pas pu être envoyé — demandez une réinitialisation de mot de passe.`
+          ? `Demande validée !\nMatricule : ${matricule}\nEmail : ${app.email}${pwdLine}\n\nUn email avec ces identifiants a été envoyé (pensez à vérifier les spams).`
+          : `Demande validée !\nMatricule : ${matricule}\nEmail : ${app.email}${pwdLine}\n\nATTENTION : l'email de bienvenue n'a pas pu être envoyé — transmettez manuellement les identifiants ci-dessus à l'adhérent.`
       );
     } catch (err) {
       console.error('Error approving application:', err);
