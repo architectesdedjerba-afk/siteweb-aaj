@@ -115,7 +115,7 @@ export function NewChannelModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-aaj-dark/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 z-[1200] bg-aaj-dark/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
       onClick={handleClose}
     >
       <div
