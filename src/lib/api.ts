@@ -140,4 +140,229 @@ export const api = {
   },
   deleteFile: (id: string) =>
     http<{ ok: true }>(`/files/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  // ---- UNESCO ----
+  unesco: {
+    geojson: () =>
+      http<{
+        type: 'FeatureCollection';
+        features: Array<{
+          type: 'Feature';
+          properties: Record<string, any>;
+          geometry: { type: string; coordinates: any };
+        }>;
+        bbox: [number, number, number, number] | null;
+      }>('/unesco/geojson'),
+
+    listKmzSources: () => http<{ items: UnescoKmzSource[] }>('/unesco/kmz-sources'),
+    uploadKmz: async (file: File, title?: string, description?: string) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      if (title) fd.append('title', title);
+      if (description) fd.append('description', description);
+      return http<{ item: UnescoKmzSource }>('/unesco/kmz-sources', { method: 'POST', body: fd });
+    },
+    updateKmzSource: (
+      id: string,
+      patch: Partial<Pick<UnescoKmzSource, 'title' | 'description' | 'isActive' | 'sortOrder'>>
+    ) =>
+      http<{ item: UnescoKmzSource }>(`/unesco/kmz-sources/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(patch),
+      }),
+    deleteKmzSource: (id: string) =>
+      http<{ ok: true }>(`/unesco/kmz-sources/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+    listZones: () => http<{ items: UnescoZone[] }>('/unesco/zones'),
+    updateZone: (id: string, patch: Partial<UnescoZone>) =>
+      http<{ item: UnescoZone }>(`/unesco/zones/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(patch),
+      }),
+
+    listDocuments: () => http<{ items: UnescoDocument[] }>('/unesco/documents'),
+    createDocument: (payload: Partial<UnescoDocument>) =>
+      http<{ item: UnescoDocument }>('/unesco/documents', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    updateDocument: (id: string, patch: Partial<UnescoDocument>) =>
+      http<{ item: UnescoDocument }>(`/unesco/documents/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(patch),
+      }),
+    deleteDocument: (id: string) =>
+      http<{ ok: true }>(`/unesco/documents/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+    listPermits: (params?: { scope?: 'mine' | 'all'; status?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.scope) qs.set('scope', params.scope);
+      if (params?.status) qs.set('status', params.status);
+      const s = qs.toString();
+      return http<{ items: UnescoPermit[] }>(`/unesco/permits${s ? `?${s}` : ''}`);
+    },
+    getPermit: (id: string) =>
+      http<{ item: UnescoPermit }>(`/unesco/permits/${encodeURIComponent(id)}`),
+    createPermit: (payload: Partial<UnescoPermit>) =>
+      http<{ item: UnescoPermit }>('/unesco/permits', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    updatePermit: (id: string, patch: Partial<UnescoPermit>) =>
+      http<{ item: UnescoPermit }>(`/unesco/permits/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(patch),
+      }),
+    deletePermit: (id: string) =>
+      http<{ ok: true }>(`/unesco/permits/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    submitPermit: (id: string) =>
+      http<{ item: UnescoPermit }>(`/unesco/permits/${encodeURIComponent(id)}/submit`, {
+        method: 'POST',
+      }),
+    addPermitEvent: (
+      id: string,
+      payload: { toStatus?: string | null; message?: string; isInternal?: boolean }
+    ) =>
+      http<{ item: UnescoPermit }>(`/unesco/permits/${encodeURIComponent(id)}/events`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    attachPermitFile: (id: string, payload: { fileId: string; title?: string; kind?: string }) =>
+      http<{ item: UnescoPermit }>(`/unesco/permits/${encodeURIComponent(id)}/files`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    detachPermitFile: (id: string, permitFileId: string) =>
+      http<{ item: UnescoPermit }>(
+        `/unesco/permits/${encodeURIComponent(id)}/files/${encodeURIComponent(permitFileId)}`,
+        { method: 'DELETE' }
+      ),
+
+    statusCounts: () =>
+      http<{ counts: Record<string, number>; pendingReview: number }>('/unesco/status-counts'),
+  },
 };
+
+// ---- UNESCO types ----
+export interface UnescoKmzSource {
+  id: string;
+  title: string;
+  description: string | null;
+  kmzFileId: string | null;
+  geojsonPath: string | null;
+  bbox: [number, number, number, number] | null;
+  featureCount: number;
+  isActive: boolean;
+  sortOrder: number;
+  createdBy: string | null;
+  createdAt: string | null;
+}
+
+export interface UnescoZone {
+  id: string;
+  kmzSourceId: string;
+  featureKey: string;
+  name: string;
+  zoneType: string;
+  color: string;
+  regulationShort: string | null;
+  regulationDocId: string | null;
+  externalUrl: string | null;
+  bbox: [number, number, number, number] | null;
+  sortOrder: number;
+  isVisible: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface UnescoDocument {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string;
+  fileId: string | null;
+  downloadUrl: string | null;
+  externalUrl: string | null;
+  year: string | null;
+  language: string | null;
+  sortOrder: number;
+  isVisible: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export type UnescoPermitStatus =
+  | 'draft'
+  | 'submitted'
+  | 'under_review'
+  | 'info_requested'
+  | 'decision_pending'
+  | 'approved'
+  | 'rejected'
+  | 'withdrawn';
+
+export interface UnescoPermitEvent {
+  id: string;
+  permitId: string;
+  authorUid: string | null;
+  authorName: string;
+  kind: string;
+  fromStatus: string | null;
+  toStatus: string | null;
+  message: string | null;
+  isInternal: boolean;
+  createdAt: string | null;
+}
+
+export interface UnescoPermitFile {
+  id: string;
+  permitId: string;
+  fileId: string;
+  downloadUrl: string;
+  kind: string;
+  title: string | null;
+  originalName: string | null;
+  sizeBytes: number | null;
+  mimeType: string | null;
+  uploadedBy: string | null;
+  createdAt: string | null;
+}
+
+export interface UnescoApplicantSummary {
+  uid: string;
+  email: string | null;
+  displayName: string;
+  firstName: string | null;
+  lastName: string | null;
+  mobile: string | null;
+}
+
+export interface UnescoPermit {
+  id: string;
+  applicantUid: string;
+  applicant: UnescoApplicantSummary | null;
+  projectRef: string | null;
+  title: string;
+  description: string | null;
+  address: string | null;
+  city: string | null;
+  parcelNumber: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  autoZoneId: string | null;
+  autoZone: UnescoZone | null;
+  finalZoneId: string | null;
+  finalZone: UnescoZone | null;
+  projectType: string | null;
+  surfaceSqm: number | null;
+  floorsCount: number | null;
+  status: UnescoPermitStatus;
+  submittedAt: string | null;
+  decisionAt: string | null;
+  decisionNote: string | null;
+  reviewerUid: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  events: UnescoPermitEvent[];
+  files: UnescoPermitFile[];
+}
