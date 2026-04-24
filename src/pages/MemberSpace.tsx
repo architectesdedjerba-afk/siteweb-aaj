@@ -38,6 +38,7 @@ import {
   X,
   KeyRound,
   Search,
+  MessagesSquare,
 } from 'lucide-react';
 import {
   // auth API
@@ -83,6 +84,9 @@ import {
   type MemberType,
 } from '../lib/memberConfig';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { ChatPage } from '../components/chat/ChatPage';
+import { ChannelApprovals } from '../components/chat/ChannelApprovals';
+import { useChatBadge } from '../lib/useChat';
 
 export const MemberSpacePage = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -160,6 +164,12 @@ export const MemberSpacePage = () => {
     if (isSuperAdmin) return true;
     return userRole?.permissions?.[key] === true;
   };
+
+  const chatModerator = isAdmin || userRole?.permissions?.chat_manage === true;
+  const { totalUnread: chatUnread, pendingApproval: chatPendingApprovals } = useChatBadge(
+    user?.uid ?? null,
+    chatModerator
+  );
 
   const profileFileInputRef = useRef<HTMLInputElement>(null);
   const libraryFileInputRef = useRef<HTMLInputElement>(null);
@@ -1469,27 +1479,70 @@ export const MemberSpacePage = () => {
             <aside className="lg:col-span-3">
               <nav className="space-y-1">
                 {[
-                  { id: 'dashboard', icon: <LayoutDashboard size={18} />, label: "Vue d'ensemble" },
-                  { id: 'commissions', icon: <Building2 size={18} />, label: 'Avis Commissions' },
-                  { id: 'bibliotheque', icon: <BookOpen size={18} />, label: 'Bibliothèque' },
-                  { id: 'documents', icon: <MessageSquare size={18} />, label: 'Messagerie' },
-                  { id: 'member-partners', icon: <Shield size={18} />, label: 'Nos Partenaires' },
-                  { id: 'annuaire', icon: <Users size={18} />, label: 'Annuaire des Membres' },
-                  { id: 'settings', icon: <Settings size={18} />, label: 'Mon Profil' },
+                  {
+                    id: 'dashboard',
+                    icon: <LayoutDashboard size={18} />,
+                    label: "Vue d'ensemble",
+                    badge: 0,
+                  },
+                  {
+                    id: 'commissions',
+                    icon: <Building2 size={18} />,
+                    label: 'Avis Commissions',
+                    badge: 0,
+                  },
+                  {
+                    id: 'bibliotheque',
+                    icon: <BookOpen size={18} />,
+                    label: 'Bibliothèque',
+                    badge: 0,
+                  },
+                  {
+                    id: 'documents',
+                    icon: <MessageSquare size={18} />,
+                    label: 'Messages Admins',
+                    badge: 0,
+                  },
+                  {
+                    id: 'chat',
+                    icon: <MessagesSquare size={18} />,
+                    label: 'Discussions',
+                    badge: chatUnread,
+                  },
+                  {
+                    id: 'member-partners',
+                    icon: <Shield size={18} />,
+                    label: 'Nos Partenaires',
+                    badge: 0,
+                  },
+                  {
+                    id: 'annuaire',
+                    icon: <Users size={18} />,
+                    label: 'Annuaire des Membres',
+                    badge: 0,
+                  },
+                  { id: 'settings', icon: <Settings size={18} />, label: 'Mon Profil', badge: 0 },
                 ].map((item) => (
                   <button
                     key={item.id}
                     onClick={() => setActiveTab(item.id)}
-                    className={`w-full flex items-center gap-4 px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
+                    className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
                       activeTab === item.id
                         ? 'bg-aaj-dark text-white shadow-lg'
                         : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
                     }`}
                   >
-                    <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>
-                      {item.icon}
-                    </span>
-                    {item.label}
+                    <div className="flex items-center gap-4">
+                      <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>
+                        {item.icon}
+                      </span>
+                      {item.label}
+                    </div>
+                    {item.badge > 0 && (
+                      <span className="min-w-5 h-5 px-1.5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
+                        {item.badge}
+                      </span>
+                    )}
                   </button>
                 ))}
               </nav>
@@ -1551,6 +1604,13 @@ export const MemberSpacePage = () => {
                     label: 'Messages Entrants',
                     perm: 'messages_inbox',
                     badge: adminMessages.filter((m) => m.status === 'unread').length,
+                  },
+                  {
+                    id: 'admin-chat',
+                    icon: <MessagesSquare size={18} />,
+                    label: 'Modération Discussions',
+                    perm: 'chat_manage',
+                    badge: chatPendingApprovals,
                   },
                 ].filter((item) => can(item.perm));
 
@@ -2408,6 +2468,47 @@ export const MemberSpacePage = () => {
                         ))}
                       </div>
                     </div>
+                  </motion.div>
+                )}
+
+                {activeTab === 'chat' && (
+                  <motion.div
+                    key="chat"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="space-y-6"
+                  >
+                    <div>
+                      <h2 className="text-2xl font-black uppercase tracking-tighter mb-2">
+                        Discussions Internes
+                      </h2>
+                      <p className="text-[11px] text-aaj-gray font-bold uppercase tracking-[2px]">
+                        Échangez en temps réel avec les autres adhérents — canal général & canaux
+                        thématiques.
+                      </p>
+                    </div>
+                    <ChatPage />
+                  </motion.div>
+                )}
+
+                {activeTab === 'admin-chat' && can('chat_manage') && (
+                  <motion.div
+                    key="admin-chat"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="space-y-8"
+                  >
+                    <div>
+                      <h2 className="text-2xl font-black uppercase tracking-tighter mb-2">
+                        Modération des Discussions
+                      </h2>
+                      <p className="text-[11px] text-aaj-gray font-bold uppercase tracking-[2px]">
+                        Approuvez ou rejetez les demandes de canaux soumises par les adhérents.
+                      </p>
+                    </div>
+                    {user?.uid && <ChannelApprovals currentUid={user.uid} />}
                   </motion.div>
                 )}
 
