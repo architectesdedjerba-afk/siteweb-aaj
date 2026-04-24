@@ -69,6 +69,7 @@ function user_profile_view(array $row): array
         'lastName'          => $row['last_name'] ?? null,
         'role'              => $row['role'] ?? 'member',
         'status'            => $row['status'] ?? 'pending',
+        'mustReset'         => (bool)($row['must_reset'] ?? 0),
         'category'          => $row['category'] ?? null,
         'memberType'        => $row['member_type'] ?? null,
         'memberTypeLetter'  => $row['member_type_letter'] ?? null,

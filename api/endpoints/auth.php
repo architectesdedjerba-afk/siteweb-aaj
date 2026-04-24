@@ -23,6 +23,9 @@ function handle_auth(string $method, array $rest): void
     if ($sub === 'accounts' && $method === 'POST') {
         auth_create_account(); return;
     }
+    if ($sub === 'password' && $method === 'POST') {
+        auth_password_change(); return;
+    }
 
     json_error('not_found', 'Endpoint auth inconnu.', 404);
 }
@@ -156,8 +159,51 @@ function auth_reset_confirm(): void
 }
 
 /**
+ * Generate a readable temporary password (no ambiguous characters like 0/O, 1/l/I).
+ * Used for admin-created accounts; the user is forced to replace it on first login.
+ */
+function generate_temp_password(int $length = 12): string
+{
+    $alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    $max = strlen($alphabet) - 1;
+    $out = '';
+    for ($i = 0; $i < $length; $i++) {
+        $out .= $alphabet[random_int(0, $max)];
+    }
+    return $out;
+}
+
+function send_welcome_email(string $toEmail, string $toName, string $tempPassword): bool
+{
+    global $CONFIG;
+    $loginUrl = rtrim((string)$CONFIG['site']['url'], '/') . '/espace-adherents';
+    $safePwd   = htmlspecialchars($tempPassword, ENT_QUOTES, 'UTF-8');
+    $safeEmail = htmlspecialchars($toEmail, ENT_QUOTES, 'UTF-8');
+    $safeName  = htmlspecialchars($toName !== '' ? $toName : $toEmail, ENT_QUOTES, 'UTF-8');
+    $safeUrl   = htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8');
+
+    $html = "<p>Bonjour $safeName,</p>"
+          . "<p>Un compte vient d'être créé pour vous sur l'espace adhérents "
+          . "des Architectes de Jerba.</p>"
+          . "<p><strong>Vos identifiants de connexion :</strong></p>"
+          . "<ul>"
+          . "<li>Email : <code>$safeEmail</code></li>"
+          . "<li>Mot de passe temporaire : <code>$safePwd</code></li>"
+          . "</ul>"
+          . "<p><a href=\"$safeUrl\">Accéder à l'espace adhérents</a></p>"
+          . "<p>Pour des raisons de sécurité, vous serez invité à choisir un "
+          . "nouveau mot de passe lors de votre première connexion.</p>";
+
+    return send_mail($toEmail, $toName, "Votre compte sur l'espace adhérents AAJ", $html);
+}
+
+/**
  * Create a new account — used by admins from the espace-adhérent.
  * Requires `accounts.create` permission.
+ *
+ * The password is always generated server-side and emailed to the new user;
+ * the account is flagged `must_reset = 1` so the frontend forces a password
+ * change on the first successful login.
  */
 function auth_create_account(): void
 {
@@ -166,13 +212,9 @@ function auth_create_account(): void
 
     $body = read_json_body();
     $email = strtolower(trim((string)($body['email'] ?? '')));
-    $password = (string)($body['password'] ?? '');
     $displayName = trim((string)($body['displayName'] ?? ''));
     if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         json_error('invalid_email', 'Email invalide.', 400);
-    }
-    if (strlen($password) < 6) {
-        json_error('weak_password', 'Mot de passe trop court (6 caractères min).', 400);
     }
     if ($displayName === '') $displayName = $email;
 
@@ -183,22 +225,24 @@ function auth_create_account(): void
         json_error('email_taken', 'Un compte existe déjà avec cet email.', 409);
     }
 
+    $tempPassword = generate_temp_password(12);
+
     $uid = new_id(24);
     $letter = $body['memberTypeLetter'] ?? null;
     if ($letter !== null) $letter = strtoupper(substr((string)$letter, 0, 1));
     $pdo->prepare(
         'INSERT INTO users
-            (uid, email, password_hash, display_name, first_name, last_name,
+            (uid, email, password_hash, must_reset, display_name, first_name, last_name,
              role, status, category, member_type, member_type_letter, birth_date,
              license_number, mobile, address, cotisations, created_at)
          VALUES
-            (:uid, :email, :password_hash, :display_name, :first_name, :last_name,
+            (:uid, :email, :password_hash, 1, :display_name, :first_name, :last_name,
              :role, :status, :category, :member_type, :member_type_letter, :birth_date,
              :license_number, :mobile, :address, :cotisations, NOW())'
     )->execute([
         ':uid' => $uid,
         ':email' => $email,
-        ':password_hash' => password_hash($password, PASSWORD_BCRYPT),
+        ':password_hash' => password_hash($tempPassword, PASSWORD_BCRYPT),
         ':display_name' => $displayName,
         ':first_name' => $body['firstName'] ?? null,
         ':last_name' => $body['lastName'] ?? null,
@@ -214,7 +258,47 @@ function auth_create_account(): void
         ':cotisations' => isset($body['cotisations']) ? json_encode($body['cotisations'], JSON_UNESCAPED_UNICODE) : null,
     ]);
 
+    $emailSent = send_welcome_email($email, $displayName, $tempPassword);
+
     $row = $pdo->prepare('SELECT * FROM users WHERE uid = ? LIMIT 1');
     $row->execute([$uid]);
-    json_response(['ok' => true, 'user' => user_profile_view($row->fetch())]);
+    json_response([
+        'ok'        => true,
+        'user'      => user_profile_view($row->fetch()),
+        'emailSent' => $emailSent,
+    ]);
+}
+
+/**
+ * Change the current user's password. Used both for the forced first-login
+ * change (must_reset = 1, no current password required — the temp password
+ * was just used to log in) and for voluntary password changes (which require
+ * the current password to be supplied).
+ */
+function auth_password_change(): void
+{
+    $user = require_auth();
+    $body = read_json_body();
+    $newPassword = (string)($body['password'] ?? $body['newPassword'] ?? '');
+    $currentPassword = (string)($body['currentPassword'] ?? '');
+
+    if (strlen($newPassword) < 6) {
+        json_error('weak_password', 'Mot de passe trop court (6 caractères min).', 400);
+    }
+
+    $mustReset = (int)($user['must_reset'] ?? 0) === 1;
+    if (!$mustReset) {
+        if ($currentPassword === '' ||
+            !password_verify($currentPassword, (string)($user['password_hash'] ?? ''))) {
+            json_error('invalid_current_password', 'Mot de passe actuel incorrect.', 401);
+        }
+    }
+
+    $hash = password_hash($newPassword, PASSWORD_BCRYPT);
+    db()->prepare('UPDATE users SET password_hash = ?, must_reset = 0 WHERE uid = ?')
+        ->execute([$hash, $user['uid']]);
+
+    $get = db()->prepare('SELECT * FROM users WHERE uid = ? LIMIT 1');
+    $get->execute([$user['uid']]);
+    json_response(['ok' => true, 'user' => user_profile_view($get->fetch())]);
 }
