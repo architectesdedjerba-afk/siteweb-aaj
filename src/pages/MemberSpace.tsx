@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, FormEvent, useRef, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import {
   UserCircle,
@@ -1740,6 +1741,155 @@ export const MemberSpacePage = () => {
   }
 
   if (user) {
+    // Sidebar inner content — defined once so it can be rendered either
+    // inline (pinned) or inside a body-portal overlay (auto-hidden). We
+    // portal in the unpinned case because the `fixed` positioning gets
+    // anchored to the nearest transformed ancestor when rendered inside
+    // the normal page flow, which produced a broken half-screen overlay.
+    const sidebarContent = (
+      <>
+        <div className="flex items-center justify-between gap-2 mb-5 px-2">
+          <span className="text-[9px] uppercase tracking-[3px] text-aaj-gray font-black">
+            Navigation
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={toggleSidebarPinned}
+              title={
+                sidebarPinned ? 'Désépingler (masquer automatiquement)' : 'Épingler le menu'
+              }
+              aria-pressed={sidebarPinned}
+              className="p-1.5 text-aaj-gray hover:text-aaj-royal rounded hover:bg-slate-50"
+            >
+              {sidebarPinned ? <PinOff size={14} /> : <Pin size={14} />}
+            </button>
+            {!sidebarPinned && (
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(false)}
+                title="Fermer"
+                className="p-1.5 text-aaj-gray hover:text-aaj-royal rounded hover:bg-slate-50"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+        <nav className="space-y-1">
+          {[
+            { id: 'dashboard', icon: <LayoutDashboard size={18} />, label: "Vue d'ensemble", badge: 0 },
+            { id: 'commissions', icon: <Building2 size={18} />, label: 'Avis Commissions', badge: 0 },
+            { id: 'bibliotheque', icon: <BookOpen size={18} />, label: 'Bibliothèque', badge: 0 },
+            { id: 'documents', icon: <MessageSquare size={18} />, label: 'Messages Admins', badge: 0 },
+            { id: 'member-partners', icon: <Shield size={18} />, label: 'Nos Partenaires', badge: 0 },
+            { id: 'annuaire', icon: <Users size={18} />, label: 'Annuaire des Membres', badge: 0 },
+            ...(can('unesco_view')
+              ? [{ id: 'unesco', icon: <Landmark size={18} />, label: 'Djerba UNESCO', badge: 0 }]
+              : []),
+            { id: 'settings', icon: <Settings size={18} />, label: 'Mon Profil', badge: 0 },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => selectTab(item.id)}
+              className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
+                activeTab === item.id
+                  ? 'bg-aaj-dark text-white shadow-lg'
+                  : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
+              }`}
+            >
+              <div className="flex items-center gap-4">
+                <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>{item.icon}</span>
+                {item.label}
+              </div>
+              {item.badge > 0 && (
+                <span className="min-w-5 h-5 px-1.5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
+        {(() => {
+          const adminItems = [
+            { id: 'admin-roles', icon: <KeyRound size={18} />, label: 'Rôles & Permissions', perm: 'roles_manage' },
+            { id: 'admin-config', icon: <Settings size={18} />, label: 'Paramètres', perm: 'config_manage' },
+            {
+              id: 'admin-members',
+              icon: <Users size={18} />,
+              label: 'Gérer Adhésions',
+              perm: 'members_manage',
+              badge: membershipApplications.filter((a: any) => (a.status || 'pending') === 'pending').length,
+            },
+            { id: 'admin-partners', icon: <Shield size={18} />, label: 'Gérer Partenaires', perm: 'partners_manage' },
+            {
+              id: 'admin-profile-requests',
+              icon: <CheckCircle2 size={18} />,
+              label: 'Validations Profils',
+              perm: 'profileRequests_manage',
+              badge: profileRequests.filter((r) => r.status === 'pending').length,
+            },
+            { id: 'admin-documents', icon: <BookOpen size={18} />, label: 'Gérer Bibliothèque', perm: 'library_manage' },
+            { id: 'admin-commissions', icon: <Building2 size={18} />, label: 'Dépôts des Avis', perm: 'commissions_create' },
+            { id: 'admin-news', icon: <FileText size={18} />, label: 'Actions & Infos', perm: 'news_manage' },
+            {
+              id: 'admin-messages',
+              icon: <Mail size={18} />,
+              label: 'Messages Entrants',
+              perm: 'messages_inbox',
+              badge: adminMessages.filter((m) => m.status === 'unread').length,
+            },
+            {
+              id: 'admin-chat',
+              icon: <MessagesSquare size={18} />,
+              label: 'Modération Discussions',
+              perm: 'chat_manage',
+              badge: chatPendingApprovals,
+            },
+            { id: 'admin-unesco', icon: <MapPinned size={18} />, label: 'Paramètres UNESCO', perm: 'unesco_manage' },
+            {
+              id: 'admin-unesco-permits',
+              icon: <FileCheck size={18} />,
+              label: 'Instruction UNESCO',
+              perm: 'unesco_permits_review',
+              badge: unescoPendingReview,
+            },
+          ].filter((item) => can(item.perm));
+
+          if (adminItems.length === 0) return null;
+
+          return (
+            <div className="mt-12 space-y-1">
+              <h3 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-gray px-6 mb-4 mt-8 flex items-center gap-2">
+                <Shield size={12} className="text-aaj-royal" /> Administration
+              </h3>
+              {adminItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => selectTab(item.id)}
+                  className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
+                    activeTab === item.id
+                      ? 'bg-aaj-dark text-white shadow-lg'
+                      : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>{item.icon}</span>
+                    {item.label}
+                  </div>
+                  {item.badge > 0 && (
+                    <span className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+      </>
+    );
+
     return (
       <div className="pt-16 min-h-screen bg-white">
         {mustChangePassword && (
@@ -1871,14 +2021,6 @@ export const MemberSpacePage = () => {
               <PanelLeftOpen size={14} /> Menu
             </button>
           )}
-          {/* Backdrop behind the sliding sidebar when overlaying content. */}
-          {!sidebarPinned && sidebarOpen && (
-            <div
-              onClick={() => setSidebarOpen(false)}
-              className="fixed inset-0 z-40 bg-black/40"
-              aria-hidden="true"
-            />
-          )}
 
           <div
             className={
@@ -1887,237 +2029,12 @@ export const MemberSpacePage = () => {
                 : 'block'
             }
           >
-            {/* Sidebar Navigation */}
-            <aside
-              className={
-                sidebarPinned
-                  ? 'w-full lg:w-72 lg:shrink-0'
-                  : `fixed top-0 left-0 z-50 h-full w-80 max-w-[85vw] bg-white shadow-2xl overflow-y-auto p-6 transition-transform duration-200 ${
-                      sidebarOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
-                    }`
-              }
-            >
-              <div className="flex items-center justify-between gap-2 mb-5 px-2">
-                <span className="text-[9px] uppercase tracking-[3px] text-aaj-gray font-black">
-                  Navigation
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={toggleSidebarPinned}
-                    title={
-                      sidebarPinned
-                        ? 'Désépingler (masquer automatiquement)'
-                        : 'Épingler le menu'
-                    }
-                    aria-pressed={sidebarPinned}
-                    className="p-1.5 text-aaj-gray hover:text-aaj-royal rounded hover:bg-slate-50"
-                  >
-                    {sidebarPinned ? <PinOff size={14} /> : <Pin size={14} />}
-                  </button>
-                  {!sidebarPinned && (
-                    <button
-                      type="button"
-                      onClick={() => setSidebarOpen(false)}
-                      title="Fermer"
-                      className="p-1.5 text-aaj-gray hover:text-aaj-royal rounded hover:bg-slate-50"
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <nav className="space-y-1">
-                {[
-                  {
-                    id: 'dashboard',
-                    icon: <LayoutDashboard size={18} />,
-                    label: "Vue d'ensemble",
-                    badge: 0,
-                  },
-                  {
-                    id: 'commissions',
-                    icon: <Building2 size={18} />,
-                    label: 'Avis Commissions',
-                    badge: 0,
-                  },
-                  {
-                    id: 'bibliotheque',
-                    icon: <BookOpen size={18} />,
-                    label: 'Bibliothèque',
-                    badge: 0,
-                  },
-                  {
-                    id: 'documents',
-                    icon: <MessageSquare size={18} />,
-                    label: 'Messages Admins',
-                    badge: 0,
-                  },
-                  {
-                    id: 'member-partners',
-                    icon: <Shield size={18} />,
-                    label: 'Nos Partenaires',
-                    badge: 0,
-                  },
-                  {
-                    id: 'annuaire',
-                    icon: <Users size={18} />,
-                    label: 'Annuaire des Membres',
-                    badge: 0,
-                  },
-                  ...(can('unesco_view')
-                    ? [
-                        {
-                          id: 'unesco',
-                          icon: <Landmark size={18} />,
-                          label: 'Djerba UNESCO',
-                          badge: 0,
-                        },
-                      ]
-                    : []),
-                  { id: 'settings', icon: <Settings size={18} />, label: 'Mon Profil', badge: 0 },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => selectTab(item.id)}
-                    className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
-                      activeTab === item.id
-                        ? 'bg-aaj-dark text-white shadow-lg'
-                        : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>
-                        {item.icon}
-                      </span>
-                      {item.label}
-                    </div>
-                    {item.badge > 0 && (
-                      <span className="min-w-5 h-5 px-1.5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </nav>
-
-              {(() => {
-                const adminItems = [
-                  {
-                    id: 'admin-roles',
-                    icon: <KeyRound size={18} />,
-                    label: 'Rôles & Permissions',
-                    perm: 'roles_manage',
-                  },
-                  {
-                    id: 'admin-config',
-                    icon: <Settings size={18} />,
-                    label: 'Paramètres',
-                    perm: 'config_manage',
-                  },
-                  {
-                    id: 'admin-members',
-                    icon: <Users size={18} />,
-                    label: 'Gérer Adhésions',
-                    perm: 'members_manage',
-                    badge: membershipApplications.filter(
-                      (a: any) => (a.status || 'pending') === 'pending'
-                    ).length,
-                  },
-                  {
-                    id: 'admin-partners',
-                    icon: <Shield size={18} />,
-                    label: 'Gérer Partenaires',
-                    perm: 'partners_manage',
-                  },
-                  {
-                    id: 'admin-profile-requests',
-                    icon: <CheckCircle2 size={18} />,
-                    label: 'Validations Profils',
-                    perm: 'profileRequests_manage',
-                    badge: profileRequests.filter((r) => r.status === 'pending').length,
-                  },
-                  {
-                    id: 'admin-documents',
-                    icon: <BookOpen size={18} />,
-                    label: 'Gérer Bibliothèque',
-                    perm: 'library_manage',
-                  },
-                  {
-                    id: 'admin-commissions',
-                    icon: <Building2 size={18} />,
-                    label: 'Dépôts des Avis',
-                    perm: 'commissions_create',
-                  },
-                  {
-                    id: 'admin-news',
-                    icon: <FileText size={18} />,
-                    label: 'Actions & Infos',
-                    perm: 'news_manage',
-                  },
-                  {
-                    id: 'admin-messages',
-                    icon: <Mail size={18} />,
-                    label: 'Messages Entrants',
-                    perm: 'messages_inbox',
-                    badge: adminMessages.filter((m) => m.status === 'unread').length,
-                  },
-                  {
-                    id: 'admin-chat',
-                    icon: <MessagesSquare size={18} />,
-                    label: 'Modération Discussions',
-                    perm: 'chat_manage',
-                    badge: chatPendingApprovals,
-                  },
-                  {
-                    id: 'admin-unesco',
-                    icon: <MapPinned size={18} />,
-                    label: 'Paramètres UNESCO',
-                    perm: 'unesco_manage',
-                  },
-                  {
-                    id: 'admin-unesco-permits',
-                    icon: <FileCheck size={18} />,
-                    label: 'Instruction UNESCO',
-                    perm: 'unesco_permits_review',
-                    badge: unescoPendingReview,
-                  },
-                ].filter((item) => can(item.perm));
-
-                if (adminItems.length === 0) return null;
-
-                return (
-                  <div className="mt-12 space-y-1">
-                    <h3 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-gray px-6 mb-4 mt-8 flex items-center gap-2">
-                      <Shield size={12} className="text-aaj-royal" /> Administration
-                    </h3>
-                    {adminItems.map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() => setActiveTab(item.id)}
-                        className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
-                          activeTab === item.id
-                            ? 'bg-aaj-dark text-white shadow-lg'
-                            : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
-                        }`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>
-                            {item.icon}
-                          </span>
-                          {item.label}
-                        </div>
-                        {item.badge > 0 && (
-                          <span className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
-                            {item.badge}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
-            </aside>
+            {/* Sidebar Navigation — rendered inline only when pinned. When
+                auto-hidden we move it into a body-portal below to escape
+                any transformed ancestor that would break position: fixed. */}
+            {sidebarPinned && (
+              <aside className="w-full lg:w-72 lg:shrink-0">{sidebarContent}</aside>
+            )}
 
             {/* Main Dashboard Grid */}
             <main
@@ -5759,6 +5676,32 @@ export const MemberSpacePage = () => {
 
         {/* Floating chat widget — bottom-right, below the contact-admin FAB */}
         <ChatFloatingWidget />
+
+        {/* Overlay sidebar — portaled to <body> so `position: fixed`
+            anchors to the viewport regardless of any transform / filter /
+            backdrop-filter on an ancestor inside the normal page flow. */}
+        {!sidebarPinned &&
+          typeof document !== 'undefined' &&
+          createPortal(
+            <>
+              <div
+                onClick={() => setSidebarOpen(false)}
+                aria-hidden="true"
+                className={`fixed inset-0 z-[9998] bg-black/50 transition-opacity duration-200 ${
+                  sidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}
+              />
+              <aside
+                className={`fixed top-0 left-0 z-[9999] h-screen w-80 max-w-[85vw] bg-white shadow-2xl overflow-y-auto p-6 transition-transform duration-200 ${
+                  sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                }`}
+                aria-hidden={!sidebarOpen}
+              >
+                {sidebarContent}
+              </aside>
+            </>,
+            document.body
+          )}
       </div>
     );
   }
