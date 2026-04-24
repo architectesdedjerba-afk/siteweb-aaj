@@ -14,6 +14,8 @@ const ALL_PERMISSION_KEYS = [
     'partners_view',
     'messages_send',
     'profile_edit',
+    'chat_use',
+    'chat_create_channel',
     'commissions_create',
     'members_manage',
     'partners_manage',
@@ -21,6 +23,7 @@ const ALL_PERMISSION_KEYS = [
     'news_manage',
     'profileRequests_manage',
     'messages_inbox',
+    'chat_manage',
     'accounts_create',
     'roles_manage',
     'config_manage',
@@ -64,6 +67,7 @@ function default_roles(): array
                 'partners_view', 'messages_send', 'profile_edit', 'commissions_create',
                 'members_manage', 'partners_manage', 'library_manage', 'news_manage',
                 'profileRequests_manage', 'messages_inbox',
+                'chat_use', 'chat_create_channel', 'chat_manage',
             ]),
         ],
         [
@@ -75,6 +79,7 @@ function default_roles(): array
             'permissions' => permissions_keys_for([
                 'dashboard_view', 'commissions_view', 'library_view', 'annuaire_view',
                 'partners_view', 'messages_send', 'profile_edit', 'commissions_create',
+                'chat_use', 'chat_create_channel',
             ]),
         ],
         [
@@ -86,6 +91,7 @@ function default_roles(): array
             'permissions' => permissions_keys_for([
                 'dashboard_view', 'commissions_view', 'library_view', 'annuaire_view',
                 'partners_view', 'messages_send', 'profile_edit',
+                'chat_use', 'chat_create_channel',
             ]),
         ],
     ];

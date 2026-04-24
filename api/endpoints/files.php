@@ -31,7 +31,7 @@ function files_upload(): void
         json_error('no_file', 'Aucun fichier envoyé.', 400);
     }
     $folder = preg_replace('/[^a-z0-9_\-]/', '', strtolower((string)($_POST['folder'] ?? 'misc'))) ?: 'misc';
-    if (!in_array($folder, ['news', 'partners', 'users', 'documents', 'commission_pvs', 'contact_messages', 'misc'], true)) {
+    if (!in_array($folder, ['news', 'partners', 'users', 'documents', 'commission_pvs', 'contact_messages', 'chat', 'misc'], true)) {
         json_error('invalid_folder', 'Dossier inconnu.', 400);
     }
 
@@ -50,6 +50,10 @@ function files_upload(): void
             if (!(is_admin($user) || user_has_permission($user, 'commissions_create') || (is_representative($user) && $user['status'] === 'active'))) {
                 json_error('forbidden', 'Upload non autorisé.', 403);
             }
+            break;
+        case 'chat':
+            if (!(is_admin($user) || user_has_permission($user, 'chat_use'))) json_error('forbidden', 'Upload réservé aux membres autorisés.', 403);
+            if ($user['status'] !== 'active' && !is_admin($user)) json_error('forbidden', 'Compte inactif.', 403);
             break;
         case 'users':
         case 'contact_messages':

@@ -38,6 +38,7 @@ import {
   X,
   KeyRound,
   Search,
+  MessagesSquare,
 } from 'lucide-react';
 import {
   // auth API
@@ -66,7 +67,7 @@ import {
   db,
 } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import type { Role } from '../types';
+import type { Role, MemberCategory } from '../types';
 import {
   PERMISSION_GROUPS,
   ALL_PERMISSION_KEYS,
@@ -78,13 +79,14 @@ import {
   DEFAULT_VILLES,
   MEMBER_TYPES_DOC_PATH,
   VILLES_DOC_PATH,
-  buildMatricule,
-  computeNextIndex,
   saveMemberTypes,
   saveVilles,
   type MemberType,
 } from '../lib/memberConfig';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { ChatPage } from '../components/chat/ChatPage';
+import { ChannelApprovals } from '../components/chat/ChannelApprovals';
+import { useChatBadge } from '../lib/useChat';
 
 export const MemberSpacePage = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -131,16 +133,22 @@ export const MemberSpacePage = () => {
   const [userMessages, setUserMessages] = useState<any[]>([]);
   const [newContactFile, setNewContactFile] = useState({ base64: '', name: '' });
   const contactFileInputRef = useRef<HTMLInputElement>(null);
-  const [newMember, setNewMember] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
+  const [newMember, setNewMember] = useState<{
+    fullName: string;
+    phone: string;
+    email: string;
+    category: MemberCategory;
+    matricule: string;
+    city: string;
+    cvFileName: string;
+  }>({
+    fullName: '',
     phone: '',
+    email: '',
     category: 'Architecte',
-    memberTypeLetter: 'A',
-    birthDate: '',
     matricule: '',
     city: 'Houmt Souk',
+    cvFileName: '',
   });
   const [villesList, setVillesList] = useState<string[]>(DEFAULT_VILLES);
   const [memberTypesList, setMemberTypesList] = useState<MemberType[]>(DEFAULT_MEMBER_TYPES);
@@ -168,6 +176,12 @@ export const MemberSpacePage = () => {
     if (isSuperAdmin) return true;
     return userRole?.permissions?.[key] === true;
   };
+
+  const chatModerator = isAdmin || userRole?.permissions?.chat_manage === true;
+  const { totalUnread: chatUnread, pendingApproval: chatPendingApprovals } = useChatBadge(
+    user?.uid ?? null,
+    chatModerator
+  );
 
   const profileFileInputRef = useRef<HTMLInputElement>(null);
   const libraryFileInputRef = useRef<HTMLInputElement>(null);
@@ -438,19 +452,6 @@ export const MemberSpacePage = () => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-
-  // Auto-generate Matricule AAJ when birthDate + type letter are set
-  useEffect(() => {
-    if (!newMember.birthDate || !newMember.memberTypeLetter) return;
-    const existing = allUsers
-      .map((u: any) => (u?.licenseNumber ? String(u.licenseNumber) : ''))
-      .filter(Boolean);
-    const idx = computeNextIndex(existing, newMember.birthDate, newMember.memberTypeLetter);
-    const generated = buildMatricule(newMember.birthDate, newMember.memberTypeLetter, idx);
-    if (generated && generated !== newMember.matricule) {
-      setNewMember((prev) => ({ ...prev, matricule: generated }));
-    }
-  }, [newMember.birthDate, newMember.memberTypeLetter, allUsers]);
 
   // Profile Edit State
   const [profileForm, setProfileForm] = useState({
@@ -1128,58 +1129,55 @@ export const MemberSpacePage = () => {
   const handleAddMember = async (e: FormEvent) => {
     e.preventDefault();
     if (!can('members_manage')) return;
-    if (!newMember.birthDate) {
-      alert('La date de naissance est requise pour générer le matricule AAJ.');
+    const fullName = newMember.fullName.trim();
+    if (!fullName) {
+      alert('Le nom complet est requis.');
       return;
     }
-    if (!newMember.memberTypeLetter) {
-      alert('Le type de membre est requis pour générer le matricule AAJ.');
+    if (
+      !newMember.email.trim() ||
+      !newMember.phone.trim() ||
+      !newMember.matricule.trim() ||
+      !newMember.city.trim()
+    ) {
+      alert('Veuillez remplir tous les champs requis.');
       return;
     }
     setIsSaving(true);
     try {
-      // Recompute matricule at submit to guard against concurrent additions
-      const existing = allUsers
-        .map((u: any) => (u?.licenseNumber ? String(u.licenseNumber) : ''))
-        .filter(Boolean);
-      const idx = computeNextIndex(existing, newMember.birthDate, newMember.memberTypeLetter);
-      const matricule =
-        buildMatricule(newMember.birthDate, newMember.memberTypeLetter, idx) || newMember.matricule;
-
-      const typeEntry = memberTypesList.find((t) => t.letter === newMember.memberTypeLetter);
-      const memberTypeLabel = typeEntry?.label || newMember.category;
+      const nameTokens = fullName.split(/\s+/);
+      const firstName = nameTokens[0] || '';
+      const lastName = nameTokens.slice(1).join(' ') || '';
+      const typeLetter = newMember.category === 'Architecte Stagiaire' ? 'S' : 'A';
 
       const { emailSent } = await adminCreateAccount({
         email: newMember.email,
-        displayName: `${newMember.firstName} ${newMember.lastName}`.trim(),
-        firstName: newMember.firstName,
-        lastName: newMember.lastName,
+        displayName: fullName,
+        firstName,
+        lastName,
         mobile: newMember.phone,
-        category: memberTypeLabel,
-        memberType: memberTypeLabel,
-        memberTypeLetter: newMember.memberTypeLetter,
-        birthDate: newMember.birthDate,
-        licenseNumber: matricule,
+        category: newMember.category,
+        memberType: newMember.category,
+        memberTypeLetter: typeLetter,
+        licenseNumber: newMember.matricule,
         address: newMember.city,
         role: 'member',
         status: 'active',
       });
       alert(
         emailSent
-          ? `Membre ajouté avec succès ! Matricule : ${matricule}.\nUn email contenant le mot de passe temporaire a été envoyé à ${newMember.email}.`
-          : `Membre ajouté avec succès ! Matricule : ${matricule}.\nATTENTION : l'email de bienvenue n'a pas pu être envoyé. Demandez une réinitialisation de mot de passe.`
+          ? `Membre ajouté avec succès ! Matricule : ${newMember.matricule}.\nUn email contenant le mot de passe temporaire a été envoyé à ${newMember.email}.`
+          : `Membre ajouté avec succès ! Matricule : ${newMember.matricule}.\nATTENTION : l'email de bienvenue n'a pas pu être envoyé. Demandez une réinitialisation de mot de passe.`
       );
       setIsAddMemberModalOpen(false);
       setNewMember({
-        firstName: '',
-        lastName: '',
-        email: '',
+        fullName: '',
         phone: '',
+        email: '',
         category: 'Architecte',
-        memberTypeLetter: 'A',
-        birthDate: '',
         matricule: '',
         city: 'Houmt Souk',
+        cvFileName: '',
       });
     } catch (err) {
       console.error('Error adding member:', err);
@@ -1597,27 +1595,70 @@ export const MemberSpacePage = () => {
             <aside className="lg:col-span-3">
               <nav className="space-y-1">
                 {[
-                  { id: 'dashboard', icon: <LayoutDashboard size={18} />, label: "Vue d'ensemble" },
-                  { id: 'commissions', icon: <Building2 size={18} />, label: 'Avis Commissions' },
-                  { id: 'bibliotheque', icon: <BookOpen size={18} />, label: 'Bibliothèque' },
-                  { id: 'documents', icon: <MessageSquare size={18} />, label: 'Messagerie' },
-                  { id: 'member-partners', icon: <Shield size={18} />, label: 'Nos Partenaires' },
-                  { id: 'annuaire', icon: <Users size={18} />, label: 'Annuaire des Membres' },
-                  { id: 'settings', icon: <Settings size={18} />, label: 'Mon Profil' },
+                  {
+                    id: 'dashboard',
+                    icon: <LayoutDashboard size={18} />,
+                    label: "Vue d'ensemble",
+                    badge: 0,
+                  },
+                  {
+                    id: 'commissions',
+                    icon: <Building2 size={18} />,
+                    label: 'Avis Commissions',
+                    badge: 0,
+                  },
+                  {
+                    id: 'bibliotheque',
+                    icon: <BookOpen size={18} />,
+                    label: 'Bibliothèque',
+                    badge: 0,
+                  },
+                  {
+                    id: 'documents',
+                    icon: <MessageSquare size={18} />,
+                    label: 'Messages Admins',
+                    badge: 0,
+                  },
+                  {
+                    id: 'chat',
+                    icon: <MessagesSquare size={18} />,
+                    label: 'Discussions',
+                    badge: chatUnread,
+                  },
+                  {
+                    id: 'member-partners',
+                    icon: <Shield size={18} />,
+                    label: 'Nos Partenaires',
+                    badge: 0,
+                  },
+                  {
+                    id: 'annuaire',
+                    icon: <Users size={18} />,
+                    label: 'Annuaire des Membres',
+                    badge: 0,
+                  },
+                  { id: 'settings', icon: <Settings size={18} />, label: 'Mon Profil', badge: 0 },
                 ].map((item) => (
                   <button
                     key={item.id}
                     onClick={() => setActiveTab(item.id)}
-                    className={`w-full flex items-center gap-4 px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
+                    className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
                       activeTab === item.id
                         ? 'bg-aaj-dark text-white shadow-lg'
                         : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
                     }`}
                   >
-                    <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>
-                      {item.icon}
-                    </span>
-                    {item.label}
+                    <div className="flex items-center gap-4">
+                      <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>
+                        {item.icon}
+                      </span>
+                      {item.label}
+                    </div>
+                    {item.badge > 0 && (
+                      <span className="min-w-5 h-5 px-1.5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
+                        {item.badge}
+                      </span>
+                    )}
                   </button>
                 ))}
               </nav>
@@ -1679,6 +1720,13 @@ export const MemberSpacePage = () => {
                     label: 'Messages Entrants',
                     perm: 'messages_inbox',
                     badge: adminMessages.filter((m) => m.status === 'unread').length,
+                  },
+                  {
+                    id: 'admin-chat',
+                    icon: <MessagesSquare size={18} />,
+                    label: 'Modération Discussions',
+                    perm: 'chat_manage',
+                    badge: chatPendingApprovals,
                   },
                 ].filter((item) => can(item.perm));
 
@@ -2536,6 +2584,47 @@ export const MemberSpacePage = () => {
                         ))}
                       </div>
                     </div>
+                  </motion.div>
+                )}
+
+                {activeTab === 'chat' && (
+                  <motion.div
+                    key="chat"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="space-y-6"
+                  >
+                    <div>
+                      <h2 className="text-2xl font-black uppercase tracking-tighter mb-2">
+                        Discussions Internes
+                      </h2>
+                      <p className="text-[11px] text-aaj-gray font-bold uppercase tracking-[2px]">
+                        Échangez en temps réel avec les autres adhérents — canal général & canaux
+                        thématiques.
+                      </p>
+                    </div>
+                    <ChatPage />
+                  </motion.div>
+                )}
+
+                {activeTab === 'admin-chat' && can('chat_manage') && (
+                  <motion.div
+                    key="admin-chat"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="space-y-8"
+                  >
+                    <div>
+                      <h2 className="text-2xl font-black uppercase tracking-tighter mb-2">
+                        Modération des Discussions
+                      </h2>
+                      <p className="text-[11px] text-aaj-gray font-bold uppercase tracking-[2px]">
+                        Approuvez ou rejetez les demandes de canaux soumises par les adhérents.
+                      </p>
+                    </div>
+                    {user?.uid && <ChannelApprovals currentUid={user.uid} />}
                   </motion.div>
                 )}
 
@@ -4846,127 +4935,139 @@ export const MemberSpacePage = () => {
                   onSubmit={handleAddMember}
                   className="flex-1 overflow-y-auto p-10 space-y-10 custom-scrollbar"
                 >
-                  <div className="grid grid-cols-2 gap-8">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                        Prénom
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={newMember.firstName}
-                        onChange={(e) => setNewMember({ ...newMember, firstName: e.target.value })}
-                        className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
-                      />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                    <div className="space-y-6">
+                      <h2 className="text-[10px] uppercase font-black tracking-[4px] text-aaj-royal mb-4 border-b border-aaj-border pb-2">
+                        Informations Personnelles
+                      </h2>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Nom Complet
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={newMember.fullName}
+                          onChange={(e) => setNewMember({ ...newMember, fullName: e.target.value })}
+                          placeholder="Prénom Nom"
+                          className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Numéro de Téléphone
+                        </label>
+                        <input
+                          type="tel"
+                          required
+                          value={newMember.phone}
+                          onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
+                          placeholder="+216 ..."
+                          className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Email
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          value={newMember.email}
+                          onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
+                          placeholder="email@exemple.com"
+                          className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                        Nom
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={newMember.lastName}
-                        onChange={(e) => setNewMember({ ...newMember, lastName: e.target.value })}
-                        className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
-                      />
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-8">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                        Email
-                      </label>
-                      <input
-                        type="email"
-                        required
-                        value={newMember.email}
-                        onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
-                        className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                        Téléphone
-                      </label>
-                      <input
-                        type="tel"
-                        required
-                        value={newMember.phone}
-                        onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
-                        className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-8">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                        Date de naissance
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={newMember.birthDate}
-                        onChange={(e) => setNewMember({ ...newMember, birthDate: e.target.value })}
-                        className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                        Type de membre
-                      </label>
-                      <select
-                        value={newMember.memberTypeLetter}
-                        onChange={(e) => {
-                          const letter = e.target.value;
-                          const t = memberTypesList.find((x) => x.letter === letter);
-                          setNewMember({
-                            ...newMember,
-                            memberTypeLetter: letter,
-                            category: t?.label || newMember.category,
-                          });
-                        }}
-                        required
-                        className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold uppercase tracking-widest"
-                      >
-                        {memberTypesList.map((t) => (
-                          <option key={t.letter} value={t.letter}>
-                            {t.label} ({t.letter})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-8">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                        Matricule AAJ
-                      </label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={newMember.matricule}
-                        placeholder="Généré automatiquement"
-                        className="w-full bg-slate-100 border border-aaj-border rounded px-4 py-3 text-xs font-bold text-aaj-royal tracking-widest cursor-not-allowed"
-                      />
-                      <p className="text-[9px] text-aaj-gray font-bold uppercase tracking-wider ml-1">
-                        AAJ + mois + année (2 chiffres) + indice + lettre
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                        Ville
-                      </label>
-                      <SearchableSelect
-                        value={newMember.city}
-                        onChange={(v) => setNewMember({ ...newMember, city: v })}
-                        options={villesList}
-                        placeholder="Sélectionner une délégation"
-                        required
-                      />
+                    <div className="space-y-6">
+                      <h2 className="text-[10px] uppercase font-black tracking-[4px] text-aaj-royal mb-4 border-b border-aaj-border pb-2">
+                        Profil Professionnel
+                      </h2>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Catégorie
+                        </label>
+                        <select
+                          value={newMember.category}
+                          onChange={(e) =>
+                            setNewMember({
+                              ...newMember,
+                              category: e.target.value as MemberCategory,
+                            })
+                          }
+                          required
+                          className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold uppercase tracking-widest cursor-pointer"
+                        >
+                          <option value="Architecte">Architecte</option>
+                          <option value="Architecte Stagiaire">Architecte Stagiaire</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          {newMember.category === 'Architecte'
+                            ? "Numéro de matricule de l'ordre"
+                            : 'Numéro de matricule étudiant'}
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={newMember.matricule}
+                          onChange={(e) =>
+                            setNewMember({ ...newMember, matricule: e.target.value })
+                          }
+                          placeholder={
+                            newMember.category === 'Architecte' ? 'Ex: 1234/TN' : 'Ex: ETU-7890'
+                          }
+                          className="w-full bg-slate-50/50 border border-aaj-border rounded px-4 py-3 text-xs font-bold"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Ville de Résidence
+                        </label>
+                        <SearchableSelect
+                          value={newMember.city}
+                          onChange={(v) => setNewMember({ ...newMember, city: v })}
+                          options={villesList}
+                          placeholder="Sélectionner une délégation"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2 pt-2">
+                        <label
+                          htmlFor="admin-add-cv"
+                          className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1 mb-2 block"
+                        >
+                          Dossier / CV (PDF)
+                        </label>
+                        <label
+                          htmlFor="admin-add-cv"
+                          className="w-full border-2 border-dashed border-aaj-border p-4 text-center hover:border-aaj-royal transition-colors bg-white group cursor-pointer block rounded"
+                        >
+                          <Upload
+                            size={20}
+                            className="mx-auto text-aaj-gray group-hover:text-aaj-royal mb-2"
+                            aria-hidden="true"
+                          />
+                          <span className="text-[10px] font-black uppercase text-aaj-gray tracking-widest">
+                            {newMember.cvFileName || 'Choisir un fichier'}
+                          </span>
+                          <input
+                            id="admin-add-cv"
+                            type="file"
+                            accept="application/pdf"
+                            className="sr-only"
+                            onChange={(e) =>
+                              setNewMember({
+                                ...newMember,
+                                cvFileName: e.target.files?.[0]?.name ?? '',
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
                     </div>
                   </div>
 
@@ -4975,7 +5076,7 @@ export const MemberSpacePage = () => {
                     <p className="text-[10px] text-amber-800 font-bold uppercase tracking-tight leading-relaxed">
                       En ajoutant un membre manuellement, vous certifiez que ses documents ont été
                       vérifiés par le bureau national. Il recevra un accès immédiat avec le rôle
-                      Adhérent.
+                      Adhérent, sans validation supplémentaire.
                     </p>
                   </div>
                 </form>

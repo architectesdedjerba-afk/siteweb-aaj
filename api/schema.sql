@@ -250,6 +250,81 @@ ALTER TABLE users
   ADD COLUMN IF NOT EXISTS birth_date         VARCHAR(10)  NULL AFTER member_type_letter;
 
 -- -------------------------------------------------------------
+-- chat_channels — internal messaging channels (general + custom)
+-- member_uids/last_message stored as JSON for simplicity
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS chat_channels (
+  id                VARCHAR(64)  NOT NULL,
+  name              VARCHAR(200) NOT NULL,
+  description       TEXT NULL,
+  type              VARCHAR(32)  NOT NULL DEFAULT 'custom',
+  status            VARCHAR(32)  NOT NULL DEFAULT 'pending',
+  is_all_members    TINYINT(1)   NOT NULL DEFAULT 0,
+  member_uids       JSON NULL,
+  created_by        VARCHAR(64)  NOT NULL,
+  created_by_name   VARCHAR(200) NOT NULL DEFAULT '',
+  approved_by       VARCHAR(64)  NULL,
+  approved_at       DATETIME NULL,
+  rejected_reason   TEXT NULL,
+  icon_color        VARCHAR(16)  NULL,
+  last_message      JSON NULL,
+  last_activity_at  DATETIME NULL,
+  created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_chat_channels_status (status),
+  KEY idx_chat_channels_activity (last_activity_at),
+  KEY idx_chat_channels_creator (created_by)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -------------------------------------------------------------
+-- chat_messages — one row per message (subcollection-flattened
+-- with channel_id column)
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id               VARCHAR(64)  NOT NULL,
+  channel_id       VARCHAR(64)  NOT NULL,
+  text             TEXT NULL,
+  sender_id        VARCHAR(64)  NOT NULL,
+  sender_name      VARCHAR(200) NOT NULL DEFAULT '',
+  sender_photo     TEXT NULL,
+  reply_to         JSON NULL,
+  attachment_url   TEXT NULL,
+  attachment_id    VARCHAR(64)  NULL,
+  attachment_name  VARCHAR(255) NULL,
+  attachment_type  VARCHAR(120) NULL,
+  attachment_size  BIGINT NULL,
+  reactions        JSON NULL,
+  edited_at        DATETIME NULL,
+  deleted_at       DATETIME NULL,
+  created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_chat_msgs_channel (channel_id, created_at),
+  KEY idx_chat_msgs_sender (sender_id),
+  CONSTRAINT fk_chat_msgs_channel
+    FOREIGN KEY (channel_id) REFERENCES chat_channels(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -------------------------------------------------------------
+-- chat_channel_reads — per-user read marker per channel
+-- id is the composite "{channel_id}_{uid}" so the existing
+-- single-key collection router can address rows directly.
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS chat_channel_reads (
+  id            VARCHAR(160) NOT NULL,
+  channel_id    VARCHAR(64)  NOT NULL,
+  uid           VARCHAR(64)  NOT NULL,
+  last_read_at  DATETIME NOT NULL,
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_chat_reads_uid (uid),
+  KEY idx_chat_reads_channel (channel_id),
+  CONSTRAINT fk_chat_reads_channel
+    FOREIGN KEY (channel_id) REFERENCES chat_channels(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -------------------------------------------------------------
 -- files — metadata for uploaded files stored on disk
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS files (

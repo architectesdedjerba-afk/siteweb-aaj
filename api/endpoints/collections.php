@@ -462,7 +462,263 @@ function build_specs(): array
         'canDelete' => fn(array $u, array $r) => is_super_admin($u) || user_has_permission($u, 'config_manage'),
     ];
 
+
+    // ---------------- chat_channels ----------------
+    $specs['chat_channels'] = [
+        'table' => 'chat_channels',
+        'idColumn' => 'id',
+        'orderBy' => ['last_activity_at', 'DESC'],
+        'toView' => fn(array $r) => chat_channel_view($r),
+        'toRow'  => function (array $p) {
+            $row = [];
+            if (array_key_exists('name', $p))            $row['name'] = (string)$p['name'];
+            if (array_key_exists('description', $p))     $row['description'] = $p['description'];
+            if (array_key_exists('type', $p))            $row['type'] = (string)$p['type'];
+            if (array_key_exists('status', $p))          $row['status'] = (string)$p['status'];
+            if (array_key_exists('isAllMembers', $p))    $row['is_all_members'] = $p['isAllMembers'] ? 1 : 0;
+            if (array_key_exists('memberUids', $p))      $row['member_uids'] = json_encode((array)$p['memberUids'], JSON_UNESCAPED_UNICODE);
+            if (array_key_exists('createdBy', $p))       $row['created_by'] = (string)$p['createdBy'];
+            if (array_key_exists('createdByName', $p))   $row['created_by_name'] = (string)$p['createdByName'];
+            if (array_key_exists('approvedBy', $p))      $row['approved_by'] = $p['approvedBy'];
+            if (array_key_exists('approvedAt', $p))      $row['approved_at'] = chat_to_datetime($p['approvedAt']);
+            if (array_key_exists('rejectedReason', $p))  $row['rejected_reason'] = $p['rejectedReason'];
+            if (array_key_exists('iconColor', $p))       $row['icon_color'] = $p['iconColor'];
+            if (array_key_exists('lastMessage', $p))     $row['last_message'] = $p['lastMessage'] === null ? null : json_encode($p['lastMessage'], JSON_UNESCAPED_UNICODE);
+            if (array_key_exists('lastActivityAt', $p))  $row['last_activity_at'] = chat_to_datetime($p['lastActivityAt']);
+            return $row;
+        },
+        'validateCreate' => function (array $p): void {
+            if (empty($p['name']) || !is_string($p['name'])) json_error('invalid_input', 'Nom de canal requis.', 400);
+            if (mb_strlen($p['name']) > 80) json_error('invalid_input', 'Nom de canal trop long.', 400);
+        },
+        'beforeInsert' => function (array $p): array {
+            $p['type']   = $p['type']   ?? 'custom';
+            $p['status'] = $p['status'] ?? 'pending';
+            $p['memberUids'] = $p['memberUids'] ?? [];
+            $p['lastActivityAt'] = $p['lastActivityAt'] ?? gmdate('c');
+            return $p;
+        },
+        'canList' => fn(?array $u) => $u && (is_admin($u) || user_has_permission($u, 'chat_use') || user_has_permission($u, 'chat_manage')),
+        'canGet'  => fn(?array $u, array $r) => $u && chat_user_can_access_channel_row($u, $r),
+        'canCreate' => function (?array $u, array $p): bool {
+            if (!$u) return false;
+            if (is_admin($u) || user_has_permission($u, 'chat_manage')) return true;
+            if (!user_has_permission($u, 'chat_create_channel')) return false;
+            // Members proposing channels: status forced to 'pending' here
+            return ($p['status'] ?? 'pending') === 'pending';
+        },
+        'canUpdate' => function (array $u, array $r, array $patch): bool {
+            if (is_admin($u) || user_has_permission($u, 'chat_manage')) return true;
+            // Creator may edit their own channel (members, description, lastMessage/Activity)
+            if ($r['created_by'] !== $u['uid']) {
+                // Any channel member may bump lastMessage / lastActivityAt by sending
+                $allowedKeys = ['lastMessage', 'lastActivityAt'];
+                foreach (array_keys($patch) as $k) {
+                    if (!in_array($k, $allowedKeys, true)) return false;
+                }
+                return chat_user_can_access_channel_row($u, $r);
+            }
+            // Creator may not change status (admin only)
+            if (isset($patch['status']) && $patch['status'] !== $r['status']) return false;
+            return true;
+        },
+        'canDelete' => fn(array $u, array $r) => is_admin($u) || user_has_permission($u, 'chat_manage') || $r['created_by'] === $u['uid'],
+    ];
+
+    // ---------------- chat_messages ----------------
+    $specs['chat_messages'] = [
+        'table' => 'chat_messages',
+        'idColumn' => 'id',
+        'orderBy' => ['created_at', 'ASC'],
+        'toView' => fn(array $r) => chat_message_view($r),
+        'toRow'  => function (array $p) {
+            $row = [];
+            if (array_key_exists('channelId', $p))        $row['channel_id'] = (string)$p['channelId'];
+            if (array_key_exists('text', $p))             $row['text'] = (string)$p['text'];
+            if (array_key_exists('senderId', $p))         $row['sender_id'] = (string)$p['senderId'];
+            if (array_key_exists('senderName', $p))       $row['sender_name'] = (string)$p['senderName'];
+            if (array_key_exists('senderPhoto', $p))      $row['sender_photo'] = $p['senderPhoto'];
+            if (array_key_exists('replyTo', $p))          $row['reply_to'] = $p['replyTo'] === null ? null : json_encode($p['replyTo'], JSON_UNESCAPED_UNICODE);
+            if (array_key_exists('attachmentUrl', $p))    $row['attachment_url'] = $p['attachmentUrl'];
+            if (array_key_exists('attachmentId', $p))     $row['attachment_id'] = $p['attachmentId'];
+            if (array_key_exists('attachmentName', $p))   $row['attachment_name'] = $p['attachmentName'];
+            if (array_key_exists('attachmentType', $p))   $row['attachment_type'] = $p['attachmentType'];
+            if (array_key_exists('attachmentSize', $p))   $row['attachment_size'] = $p['attachmentSize'] === null ? null : (int)$p['attachmentSize'];
+            if (array_key_exists('reactions', $p))        $row['reactions'] = $p['reactions'] === null ? null : json_encode((object)$p['reactions'], JSON_UNESCAPED_UNICODE);
+            if (array_key_exists('editedAt', $p))         $row['edited_at'] = chat_to_datetime($p['editedAt']);
+            if (array_key_exists('deletedAt', $p))        $row['deleted_at'] = chat_to_datetime($p['deletedAt']);
+            return $row;
+        },
+        'validateCreate' => function (array $p): void {
+            if (empty($p['channelId']) || !is_string($p['channelId'])) json_error('invalid_input', 'channelId requis.', 400);
+            $hasText = !empty($p['text']) && is_string($p['text']);
+            $hasFile = !empty($p['attachmentUrl']);
+            if (!$hasText && !$hasFile) json_error('invalid_input', 'Message vide.', 400);
+        },
+        'listFilter' => function (array $u, array $qs): array {
+            $cid = null;
+            $where = (array)($qs['where'] ?? []);
+            foreach ($where as $w) {
+                $parts = explode(':', (string)$w, 3);
+                if (count($parts) === 3 && $parts[0] === 'channel_id' && $parts[1] === '=') $cid = $parts[2];
+            }
+            if ($cid === null) json_error('bad_request', 'channel_id requis pour lister les messages.', 400);
+            if (!chat_user_can_access_channel_id($u, $cid)) json_error('forbidden', 'Canal non autorisé.', 403);
+            return [];
+        },
+        'canList' => fn(?array $u) => $u && (is_admin($u) || user_has_permission($u, 'chat_use') || user_has_permission($u, 'chat_manage')),
+        'canGet'  => function (?array $u, array $r) {
+            if (!$u) return false;
+            return chat_user_can_access_channel_id($u, (string)$r['channel_id']);
+        },
+        'canCreate' => function (?array $u, array $p): bool {
+            if (!$u) return false;
+            if (!user_has_permission($u, 'chat_use') && !is_admin($u)) return false;
+            if (($p['senderId'] ?? null) !== $u['uid']) return false;
+            return chat_user_can_access_channel_id($u, (string)($p['channelId'] ?? ''));
+        },
+        'canUpdate' => function (array $u, array $r, array $patch): bool {
+            if (is_admin($u) || user_has_permission($u, 'chat_manage')) return true;
+            if (!chat_user_can_access_channel_id($u, (string)$r['channel_id'])) return false;
+            // Sender may edit text / soft-delete; any member may toggle reactions
+            $patchKeys = array_keys($patch);
+            $forSenderOnly = ['text', 'editedAt', 'deletedAt', 'attachmentUrl', 'attachmentId', 'attachmentName', 'attachmentType', 'attachmentSize'];
+            foreach ($patchKeys as $k) {
+                if ($k === 'reactions') continue;
+                if (in_array($k, $forSenderOnly, true)) {
+                    if ($r['sender_id'] !== $u['uid']) return false;
+                    continue;
+                }
+                return false; // other fields are not editable
+            }
+            return true;
+        },
+        'canDelete' => fn(array $u, array $r) => is_admin($u) || user_has_permission($u, 'chat_manage') || $r['sender_id'] === $u['uid'],
+    ];
+
+    // ---------------- chat_channel_reads ----------------
+    $specs['chat_channel_reads'] = [
+        'table' => 'chat_channel_reads',
+        'idColumn' => 'id',
+        'orderBy' => ['last_read_at', 'DESC'],
+        'toView' => fn(array $r) => [
+            'id' => $r['id'],
+            'channelId' => $r['channel_id'],
+            'uid' => $r['uid'],
+            'lastReadAt' => iso_datetime($r['last_read_at']),
+        ],
+        'toRow' => function (array $p) {
+            $row = [];
+            if (array_key_exists('channelId', $p))  $row['channel_id'] = (string)$p['channelId'];
+            if (array_key_exists('uid', $p))        $row['uid'] = (string)$p['uid'];
+            if (array_key_exists('lastReadAt', $p)) $row['last_read_at'] = chat_to_datetime($p['lastReadAt']);
+            return $row;
+        },
+        'beforeInsert' => function (array $p): array {
+            $p['lastReadAt'] = $p['lastReadAt'] ?? gmdate('c');
+            return $p;
+        },
+        'listFilter' => function (array $u, array $qs): array {
+            // Users may only list their own read markers.
+            return [['uid', '=', $u['uid']]];
+        },
+        'canList' => fn(?array $u) => (bool)$u,
+        'canGet'  => fn(?array $u, array $r) => $u && $r['uid'] === $u['uid'],
+        'canCreate' => fn(?array $u, array $p) => $u && (($p['uid'] ?? null) === $u['uid']),
+        'canUpdate' => fn(array $u, array $r, array $patch) => $u && $r['uid'] === $u['uid'],
+        'canDelete' => fn(array $u, array $r) => $u && ($r['uid'] === $u['uid'] || is_admin($u)),
+    ];
+
     return $specs;
+}
+
+/**
+ * Helpers shared by chat collection specs.
+ */
+function chat_channel_view(array $r): array
+{
+    $members = $r['member_uids'];
+    if (is_string($members)) $members = json_decode($members, true) ?: [];
+    $lastMessage = $r['last_message'];
+    if (is_string($lastMessage)) $lastMessage = json_decode($lastMessage, true) ?: null;
+    if (is_array($lastMessage) && isset($lastMessage['createdAt'])) {
+        $lastMessage['createdAt'] = iso_datetime($lastMessage['createdAt']);
+    }
+    return [
+        'id' => $r['id'],
+        'name' => $r['name'],
+        'description' => $r['description'],
+        'type' => $r['type'],
+        'status' => $r['status'],
+        'isAllMembers' => (bool)$r['is_all_members'],
+        'memberUids' => is_array($members) ? array_values($members) : [],
+        'createdBy' => $r['created_by'],
+        'createdByName' => $r['created_by_name'],
+        'approvedBy' => $r['approved_by'],
+        'approvedAt' => iso_datetime($r['approved_at']),
+        'rejectedReason' => $r['rejected_reason'],
+        'iconColor' => $r['icon_color'],
+        'lastMessage' => $lastMessage,
+        'lastActivityAt' => iso_datetime($r['last_activity_at']),
+        'createdAt' => iso_datetime($r['created_at']),
+    ];
+}
+
+function chat_message_view(array $r): array
+{
+    $reactions = $r['reactions'];
+    if (is_string($reactions)) $reactions = json_decode($reactions, true) ?: new stdClass();
+    $replyTo = $r['reply_to'];
+    if (is_string($replyTo)) $replyTo = json_decode($replyTo, true) ?: null;
+    return [
+        'id' => $r['id'],
+        'channelId' => $r['channel_id'],
+        'text' => $r['text'],
+        'senderId' => $r['sender_id'],
+        'senderName' => $r['sender_name'],
+        'senderPhoto' => $r['sender_photo'],
+        'replyTo' => $replyTo,
+        'attachmentUrl' => $r['attachment_url'],
+        'attachmentId' => $r['attachment_id'],
+        'attachmentName' => $r['attachment_name'],
+        'attachmentType' => $r['attachment_type'],
+        'attachmentSize' => $r['attachment_size'] === null ? null : (int)$r['attachment_size'],
+        'reactions' => $reactions,
+        'editedAt' => iso_datetime($r['edited_at']),
+        'deletedAt' => iso_datetime($r['deleted_at']),
+        'createdAt' => iso_datetime($r['created_at']),
+    ];
+}
+
+function chat_user_can_access_channel_row(array $u, array $r): bool
+{
+    if (is_admin($u) || user_has_permission($u, 'chat_manage')) return true;
+    if (($r['status'] ?? 'pending') !== 'approved') return $r['created_by'] === $u['uid'];
+    if ((int)($r['is_all_members'] ?? 0)) return true;
+    $members = $r['member_uids'];
+    if (is_string($members)) $members = json_decode($members, true) ?: [];
+    return is_array($members) && in_array($u['uid'], $members, true);
+}
+
+function chat_user_can_access_channel_id(array $u, string $channelId): bool
+{
+    if ($channelId === '') return false;
+    static $cache = [];
+    $key = $u['uid'] . '|' . $channelId;
+    if (array_key_exists($key, $cache)) return $cache[$key];
+    $stmt = db()->prepare('SELECT * FROM chat_channels WHERE id = ? LIMIT 1');
+    $stmt->execute([$channelId]);
+    $row = $stmt->fetch();
+    return $cache[$key] = ($row ? chat_user_can_access_channel_row($u, $row) : false);
+}
+
+function chat_to_datetime($value): ?string
+{
+    if ($value === null || $value === '') return null;
+    if (!is_string($value)) return null;
+    $ts = strtotime($value);
+    if ($ts === false) return null;
+    return gmdate('Y-m-d H:i:s', $ts);
 }
 
 // ==============================================================

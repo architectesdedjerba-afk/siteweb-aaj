@@ -24,6 +24,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'partners_view', label: 'Consulter les partenaires' },
       { key: 'messages_send', label: 'Envoyer un message' },
       { key: 'profile_edit', label: 'Modifier son profil' },
+      { key: 'chat_use', label: 'Utiliser la messagerie interne' },
+      { key: 'chat_create_channel', label: 'Proposer un canal de discussion' },
     ],
   },
   {
@@ -39,6 +41,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'news_manage', label: 'Gérer Actions & Infos' },
       { key: 'profileRequests_manage', label: 'Valider les demandes de profil' },
       { key: 'messages_inbox', label: 'Lire les messages entrants' },
+      { key: 'chat_manage', label: 'Modérer la messagerie interne (canaux & messages)' },
     ],
   },
   {
@@ -102,6 +105,9 @@ export const DEFAULT_ROLES: DefaultRole[] = [
       'news_manage',
       'profileRequests_manage',
       'messages_inbox',
+      'chat_use',
+      'chat_create_channel',
+      'chat_manage',
     ]),
   },
   {
@@ -119,6 +125,8 @@ export const DEFAULT_ROLES: DefaultRole[] = [
       'messages_send',
       'profile_edit',
       'commissions_create',
+      'chat_use',
+      'chat_create_channel',
     ]),
   },
   {
@@ -135,6 +143,8 @@ export const DEFAULT_ROLES: DefaultRole[] = [
       'partners_view',
       'messages_send',
       'profile_edit',
+      'chat_use',
+      'chat_create_channel',
     ]),
   },
 ];
