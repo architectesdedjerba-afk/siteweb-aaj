@@ -5992,6 +5992,19 @@ export const MemberSpacePage = () => {
           typeof document !== 'undefined' &&
           createPortal(
             <>
+              {/* Invisible hover strip on the viewport's left edge. Opens
+                  the sidebar as soon as the pointer brushes it, giving
+                  auto-hide mode a "push to show" feel without having to
+                  aim for the Menu button. Rendered only while the sidebar
+                  is closed so it can't swallow clicks meant for the
+                  backdrop. */}
+              {!sidebarOpen && (
+                <div
+                  onMouseEnter={() => setSidebarOpen(true)}
+                  aria-hidden="true"
+                  className="fixed top-0 left-0 bottom-0 w-3 z-[9997]"
+                />
+              )}
               <div
                 onClick={() => setSidebarOpen(false)}
                 aria-hidden="true"
