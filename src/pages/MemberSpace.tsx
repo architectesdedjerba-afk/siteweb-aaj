@@ -116,6 +116,7 @@ export const MemberSpacePage = () => {
   const [isResetMode, setIsResetMode] = useState(false);
   const [libraryDocs, setLibraryDocs] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [showArchivedMembers, setShowArchivedMembers] = useState(false);
   const [profileRequests, setProfileRequests] = useState<any[]>([]);
   const [membershipApplications, setMembershipApplications] = useState<any[]>([]);
   const [approvingApplicationId, setApprovingApplicationId] = useState<string | null>(null);
@@ -440,6 +441,9 @@ export const MemberSpacePage = () => {
     if (userProfile?.status === 'suspended') {
       handleLogout();
       setError("Votre accès a été suspendu par l'administration.");
+    } else if (userProfile?.status === 'archived') {
+      handleLogout();
+      setError("Votre compte a été archivé. Contactez l'administration pour plus d'informations.");
     }
   }, [userProfile]);
 
@@ -1303,6 +1307,91 @@ export const MemberSpacePage = () => {
     }
   };
 
+  const getMemberLabel = (m: any) =>
+    m?.displayName ||
+    `${m?.firstName || ''} ${m?.lastName || ''}`.trim() ||
+    m?.email ||
+    'ce membre';
+
+  const handleArchiveMember = async (targetMember: any) => {
+    if (!can('members_manage')) return;
+    if (targetMember.uid === user?.uid) {
+      alert('Vous ne pouvez pas archiver votre propre compte.');
+      return;
+    }
+    if (targetMember.role === 'super-admin') {
+      alert('Les super-administrateurs ne peuvent pas être archivés.');
+      return;
+    }
+    const memberLabel = getMemberLabel(targetMember);
+    const confirmMessage =
+      `Archiver ${memberLabel} ?\n\n` +
+      `Le membre perdra l'accès à son compte mais toutes ses données (cotisations, historique) seront conservées. ` +
+      `Vous pourrez le restaurer à tout moment depuis la vue « Archivés ».`;
+    if (!window.confirm(confirmMessage)) return;
+    try {
+      await updateDoc(doc(db, 'users', targetMember.uid), {
+        status: 'archived',
+        archivedAt: new Date().toISOString(),
+      });
+      if (editingMember?.uid === targetMember.uid) {
+        setEditingMember(null);
+      }
+    } catch (err) {
+      console.error('Error archiving member:', err);
+      alert("Erreur lors de l'archivage du membre.");
+    }
+  };
+
+  const handleRestoreMember = async (targetMember: any) => {
+    if (!can('members_manage')) return;
+    const memberLabel = getMemberLabel(targetMember);
+    if (!window.confirm(`Restaurer ${memberLabel} ?\n\nLe membre retrouvera l'accès à son compte.`))
+      return;
+    try {
+      await updateDoc(doc(db, 'users', targetMember.uid), {
+        status: 'active',
+        archivedAt: null,
+      });
+      if (editingMember?.uid === targetMember.uid) {
+        setEditingMember(null);
+      }
+    } catch (err) {
+      console.error('Error restoring member:', err);
+      alert('Erreur lors de la restauration du membre.');
+    }
+  };
+
+  const handleDeleteMember = async (targetMember: any) => {
+    if (!can('members_manage')) return;
+    if (targetMember.uid === user?.uid) {
+      alert('Vous ne pouvez pas supprimer votre propre compte.');
+      return;
+    }
+    if (targetMember.role === 'super-admin') {
+      alert('Les super-administrateurs ne peuvent pas être supprimés.');
+      return;
+    }
+    const memberLabel = getMemberLabel(targetMember);
+    const confirmMessage =
+      `⚠️ SUPPRESSION DÉFINITIVE\n\n` +
+      `Supprimer définitivement ${memberLabel} ?\n\n` +
+      `Cette action est IRRÉVERSIBLE et effacera toutes les données (cotisations, historique, accès). ` +
+      `Pour conserver l'historique, utilisez plutôt l'archivage.`;
+    if (!window.confirm(confirmMessage)) return;
+    if (!window.confirm(`Confirmer la suppression définitive de ${memberLabel} ?`)) return;
+    try {
+      await deleteDoc(doc(db, 'users', targetMember.uid));
+      if (editingMember?.uid === targetMember.uid) {
+        setEditingMember(null);
+      }
+      alert('Membre supprimé définitivement.');
+    } catch (err) {
+      console.error('Error deleting member:', err);
+      alert('Erreur lors de la suppression du membre.');
+    }
+  };
+
   const handleContactAdmin = async (e: FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -2038,7 +2127,7 @@ export const MemberSpacePage = () => {
                           </button>
                         </div>
                         <div className="text-[10px] font-black uppercase tracking-widest text-aaj-gray">
-                          {allUsers.length} Architectes
+                          {allUsers.filter((m) => m.status !== 'archived').length} Architectes
                         </div>
                       </div>
                     </div>
@@ -2046,7 +2135,7 @@ export const MemberSpacePage = () => {
                     {annuaireViewMode === 'grid' ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {allUsers
-                          .filter((m) => m.status !== 'suspended')
+                          .filter((m) => m.status !== 'suspended' && m.status !== 'archived')
                           .map((member) => (
                             <div
                               key={member.uid}
@@ -2101,7 +2190,7 @@ export const MemberSpacePage = () => {
                           </thead>
                           <tbody className="divide-y divide-aaj-border">
                             {allUsers
-                              .filter((m) => m.status !== 'suspended')
+                              .filter((m) => m.status !== 'suspended' && m.status !== 'archived')
                               .map((member) => (
                                 <tr
                                   key={member.uid}
@@ -3032,12 +3121,31 @@ export const MemberSpacePage = () => {
                       <h2 className="text-2xl font-black uppercase tracking-tighter">
                         Gestion des Adhésions
                       </h2>
-                      <button
-                        onClick={() => setIsAddMemberModalOpen(true)}
-                        className="bg-aaj-dark text-white px-6 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center gap-2"
-                      >
-                        <Plus size={14} /> Ajouter un Membre
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setShowArchivedMembers((v) => !v)}
+                          className={`px-4 py-3 rounded text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border ${
+                            showArchivedMembers
+                              ? 'bg-slate-200 text-aaj-dark border-slate-300'
+                              : 'bg-white text-aaj-gray border-aaj-border hover:text-aaj-dark'
+                          }`}
+                          title={
+                            showArchivedMembers
+                              ? 'Revenir aux membres actifs'
+                              : 'Afficher les membres archivés'
+                          }
+                        >
+                          {showArchivedMembers
+                            ? `Membres actifs (${allUsers.filter((m) => m.status !== 'archived').length})`
+                            : `Archivés (${allUsers.filter((m) => m.status === 'archived').length})`}
+                        </button>
+                        <button
+                          onClick={() => setIsAddMemberModalOpen(true)}
+                          className="bg-aaj-dark text-white px-6 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center gap-2"
+                        >
+                          <Plus size={14} /> Ajouter un Membre
+                        </button>
+                      </div>
                     </div>
 
                     {/* Demandes d'adhésion en attente (/demander-adhesion) */}
@@ -3148,66 +3256,114 @@ export const MemberSpacePage = () => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-aaj-border">
-                          {allUsers.map((member) => {
-                            const currentYearPaid = !!member.cotisations?.[currentYearLabel]?.paid;
-                            return (
-                              <tr
-                                key={member.uid}
-                                onClick={() => openMemberEditor(member)}
-                                className="hover:bg-slate-50/50 transition-colors cursor-pointer"
-                              >
-                                <td className="p-4">
-                                  <p className="text-sm font-black uppercase tracking-tight">
-                                    {member.displayName}
-                                  </p>
-                                  <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest">
-                                    {member.email}
-                                  </p>
-                                </td>
-                                <td className="p-4">
-                                  {member.status === 'suspended' ? (
-                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-700 text-[9px] font-black uppercase tracking-widest border border-red-100">
-                                      <XCircle size={10} /> Suspendu
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-[9px] font-black uppercase tracking-widest border border-green-100">
-                                      <CheckCircle2 size={10} /> Actif
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="p-4">
-                                  <div className="flex items-center gap-2">
-                                    <p className="text-xs font-bold text-aaj-dark">
-                                      {currentYearLabel}
+                          {allUsers
+                            .filter((m) =>
+                              showArchivedMembers
+                                ? m.status === 'archived'
+                                : m.status !== 'archived'
+                            )
+                            .map((member) => {
+                              const currentYearPaid =
+                                !!member.cotisations?.[currentYearLabel]?.paid;
+                              const isArchived = member.status === 'archived';
+                              return (
+                                <tr
+                                  key={member.uid}
+                                  onClick={() => openMemberEditor(member)}
+                                  className={`transition-colors cursor-pointer ${
+                                    isArchived
+                                      ? 'bg-slate-50/30 opacity-70 hover:opacity-100 hover:bg-slate-100/50'
+                                      : 'hover:bg-slate-50/50'
+                                  }`}
+                                >
+                                  <td className="p-4">
+                                    <p className="text-sm font-black uppercase tracking-tight">
+                                      {member.displayName}
                                     </p>
-                                    {currentYearPaid ? (
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[9px] font-black uppercase tracking-widest border border-green-100">
-                                        <CheckCircle2 size={9} /> Payée
+                                    <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest">
+                                      {member.email}
+                                    </p>
+                                  </td>
+                                  <td className="p-4">
+                                    {isArchived ? (
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-widest border border-slate-200">
+                                        <Trash2 size={10} /> Archivé
+                                      </span>
+                                    ) : member.status === 'suspended' ? (
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-700 text-[9px] font-black uppercase tracking-widest border border-red-100">
+                                        <XCircle size={10} /> Suspendu
                                       </span>
                                     ) : (
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[9px] font-black uppercase tracking-widest border border-amber-100">
-                                        <XCircle size={9} /> Non payée
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-[9px] font-black uppercase tracking-widest border border-green-100">
+                                        <CheckCircle2 size={10} /> Actif
                                       </span>
                                     )}
-                                  </div>
-                                </td>
-                                <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
-                                  <button
-                                    onClick={() => openMemberEditor(member)}
-                                    className="text-[10px] font-black text-aaj-royal uppercase tracking-widest hover:underline px-3"
+                                  </td>
+                                  <td className="p-4">
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-xs font-bold text-aaj-dark">
+                                        {currentYearLabel}
+                                      </p>
+                                      {currentYearPaid ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[9px] font-black uppercase tracking-widest border border-green-100">
+                                          <CheckCircle2 size={9} /> Payée
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[9px] font-black uppercase tracking-widest border border-amber-100">
+                                          <XCircle size={9} /> Non payée
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td
+                                    className="p-4 text-right"
+                                    onClick={(e) => e.stopPropagation()}
                                   >
-                                    Éditer
-                                  </button>
-                                  <button
-                                    onClick={() => handleToggleSuspense(member)}
-                                    className={`text-[10px] font-black uppercase tracking-widest hover:underline px-3 ${member.status === 'suspended' ? 'text-green-600' : 'text-red-500'}`}
-                                  >
-                                    {member.status === 'suspended' ? 'Reprendre' : 'Suspendre'}
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
+                                    <button
+                                      onClick={() => openMemberEditor(member)}
+                                      className="text-[10px] font-black text-aaj-royal uppercase tracking-widest hover:underline px-3"
+                                    >
+                                      Éditer
+                                    </button>
+                                    {isArchived ? (
+                                      <>
+                                        <button
+                                          onClick={() => handleRestoreMember(member)}
+                                          className="text-[10px] font-black text-green-600 uppercase tracking-widest hover:underline px-3"
+                                        >
+                                          Restaurer
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteMember(member)}
+                                          className="text-[10px] font-black text-red-600 uppercase tracking-widest hover:underline px-3 inline-flex items-center gap-1"
+                                          title="Supprimer définitivement — irréversible"
+                                        >
+                                          <Trash2 size={11} /> Supprimer
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <button
+                                          onClick={() => handleToggleSuspense(member)}
+                                          className={`text-[10px] font-black uppercase tracking-widest hover:underline px-3 ${member.status === 'suspended' ? 'text-green-600' : 'text-red-500'}`}
+                                        >
+                                          {member.status === 'suspended'
+                                            ? 'Reprendre'
+                                            : 'Suspendre'}
+                                        </button>
+                                        <button
+                                          onClick={() => handleArchiveMember(member)}
+                                          className="text-[10px] font-black text-slate-600 uppercase tracking-widest hover:underline px-3 inline-flex items-center gap-1"
+                                          title="Archiver — conserve toutes les données"
+                                        >
+                                          Archiver
+                                        </button>
+                                      </>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                         </tbody>
                       </table>
                     </div>
@@ -3396,6 +3552,7 @@ export const MemberSpacePage = () => {
                         </thead>
                         <tbody className="divide-y divide-aaj-border">
                           {allUsers
+                            .filter((m) => m.status !== 'archived')
                             .filter(
                               (m) =>
                                 rolesRoleFilter === 'all' ||
@@ -4590,7 +4747,16 @@ export const MemberSpacePage = () => {
               >
                 <div className="p-8 border-b border-aaj-border flex justify-between items-center bg-slate-50">
                   <div>
-                    <h3 className="text-xl font-black uppercase tracking-tight">Fiche Adhérent</h3>
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-xl font-black uppercase tracking-tight">
+                        Fiche Adhérent
+                      </h3>
+                      {editingMember.status === 'archived' && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-200 text-slate-700 text-[9px] font-black uppercase tracking-widest border border-slate-300">
+                          <Trash2 size={10} /> Archivé
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest mt-1">
                       Édition de : {editingMember.firstName} {editingMember.lastName}
                     </p>
@@ -4904,6 +5070,34 @@ export const MemberSpacePage = () => {
                     {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}{' '}
                     Enregistrer la fiche
                   </button>
+                  {editingMember?.status === 'archived' ? (
+                    <>
+                      <button
+                        onClick={() => handleRestoreMember(editingMember)}
+                        disabled={isSaving}
+                        className="px-6 border border-green-200 text-green-700 rounded font-black uppercase tracking-widest text-[11px] hover:bg-green-50 transition-all flex items-center gap-2 disabled:opacity-60"
+                      >
+                        <CheckCircle2 size={14} /> Restaurer
+                      </button>
+                      <button
+                        onClick={() => handleDeleteMember(editingMember)}
+                        disabled={isSaving}
+                        className="px-6 border border-red-200 text-red-600 rounded font-black uppercase tracking-widest text-[11px] hover:bg-red-50 transition-all flex items-center gap-2 disabled:opacity-60"
+                        title="Supprimer définitivement — irréversible"
+                      >
+                        <Trash2 size={14} /> Supprimer
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => handleArchiveMember(editingMember)}
+                      disabled={isSaving}
+                      className="px-6 border border-slate-200 text-slate-700 rounded font-black uppercase tracking-widest text-[11px] hover:bg-slate-100 transition-all flex items-center gap-2 disabled:opacity-60"
+                      title="Archiver — conserve toutes les données"
+                    >
+                      <Trash2 size={14} /> Archiver
+                    </button>
+                  )}
                   <button
                     onClick={() => setEditingMember(null)}
                     className="px-8 border border-aaj-border rounded font-black uppercase tracking-widest text-[11px] text-aaj-gray hover:bg-white transition-all"

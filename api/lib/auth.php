@@ -80,5 +80,6 @@ function user_profile_view(array $row): array
         'photoBase64'       => $row['photo_url'] ?? null, // kept as field name for compat; value may be a URL
         'cotisations'       => $cotisations,
         'createdAt'         => iso_datetime($row['created_at'] ?? null),
+        'archivedAt'        => iso_datetime($row['archived_at'] ?? null),
     ];
 }
