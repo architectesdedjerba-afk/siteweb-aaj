@@ -9,6 +9,7 @@ dist/
 out/
 .next/
 .vite/
+deploy/
 
 # Testing
 coverage/
