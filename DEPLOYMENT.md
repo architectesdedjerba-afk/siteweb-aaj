@@ -1,7 +1,7 @@
 # Déploiement cPanel — Architectes de Jerba
 
-Ce document décrit la nouvelle architecture (PHP + MySQL sur cPanel) qui
-remplace Firebase, et les étapes de déploiement / migration.
+Ce document décrit l'architecture (PHP + MySQL sur cPanel) et les étapes
+de déploiement.
 
 ## 1. Architecture
 
@@ -62,68 +62,27 @@ remplace Firebase, et les étapes de déploiement / migration.
    ```
 
 4. **Permissions disque**
-   ```bash
-   chmod 750 api/uploads-storage
-   ```
+   - Dans cPanel → File Manager, naviguer vers `api/uploads-storage/`,
+     clic droit → Permissions → `750`.
 
 5. **Création du super-admin**
-   ```bash
-   cd ~/public_html/api
-   php scripts/bootstrap-admin.php architectes.de.djerba@gmail.com "_Aaj2026*" "Super Admin"
-   ```
+   - **Avec SSH** (si dispo) : `php api/scripts/bootstrap-admin.php email "mot_de_passe" "Display Name"`.
+   - **Sans SSH** (cas cPanel Oxahost) : créer manuellement via phpMyAdmin
+     une ligne dans `users` avec `role='super-admin'`, `status='active'`,
+     `must_reset=1`, `password_hash = '$2y$10$...'` (générer le hash via
+     un outil externe tel que `htpasswd -bnBC 10 "" mot_de_passe`), puis
+     se connecter — le flux first-login impose un changement de mot de
+     passe immédiatement.
+   - Alternative plus simple : importer `schema.sql` sans super-admin,
+     puis utiliser l'endpoint `POST /api/auth/accounts` depuis une
+     session déjà authentifiée comme super-admin (circulaire : nécessite
+     un premier super-admin).
 
 6. **Test**
    - `GET https://<domaine>/api/health` → `{"ok":true,"time":"..."}`
    - Se connecter sur `/espace-adherents` avec le super-admin.
 
-## 4. Migration des données depuis Firebase (une seule fois)
-
-Exécuté **sur votre poste** (pas sur cPanel), avec le `serviceAccount.json`
-de Firebase à la racine du dépôt.
-
-```bash
-# 1. Exporter Firestore + Firebase Auth
-npm i firebase-admin              # déjà en devDependency
-node scripts/export-firebase.mjs
-# → écrit firebase-export.json à la racine
-
-# 2. Importer dans MySQL (connexion distante cPanel)
-#    Activer l'accès distant : cPanel → Remote MySQL → ajouter votre IP
-npm i mysql2
-CONFIRM=yes \
-  DB_HOST=<hôte cPanel> DB_PORT=3306 \
-  DB_USER=cpaneluser_aaj DB_PASS=<secret> DB_NAME=cpaneluser_aaj \
-  node scripts/import-to-cpanel.mjs
-```
-
-### Notes importantes sur la migration
-
-- **Utilisateurs Firebase Auth** : les hash bcrypt/scrypt de Firebase ne
-  sont pas exportables. Chaque utilisateur sera importé avec
-  `password_hash = NULL` et `must_reset = 1`. **Ils devront utiliser « Mot
-  de passe oublié »** lors de leur première connexion pour définir un
-  nouveau mot de passe.
-- **UIDs Firebase préservés** : la colonne `users.uid` reprend l'uid
-  Firebase d'origine, ce qui garde toutes les références croisées
-  (messages, demandes de profil…) valides.
-- **Fichiers base64 existants** : les anciens champs `fileBase64` /
-  `photoBase64` sont importés tels quels dans les colonnes texte
-  correspondantes. Les **nouveaux** uploads passent par `/api/files` et
-  stockent le binaire sur disque. Vous pouvez progressivement migrer les
-  anciens blobs base64 vers du disque en ré-uploadant les fichiers
-  depuis l'interface admin (rien d'urgent, ça fonctionne en l'état).
-
-## 5. Après migration
-
-- Prévenir les membres par email : « Votre compte a été migré. Cliquez
-  sur "Mot de passe oublié" pour définir votre nouveau mot de passe. »
-- Désactiver le projet Firebase (optionnel : on peut garder l'export
-  quelques semaines en sauvegarde).
-- Supprimer `firebase-applet-config.json`, `serviceAccount.json`,
-  `firebase-export.json` et la devDep `firebase-admin` une fois l'import
-  validé.
-
-## 6. Référence API
+## 4. Référence API
 
 | Méthode | Chemin | Description |
 |---------|--------|-------------|
@@ -145,26 +104,34 @@ CONFIRM=yes \
 
 Collections disponibles : `users`, `roles`, `news`, `partners`,
 `commission_pvs`, `contact_messages`, `documents`, `profile_updates`,
-`event_registrations`, `membership_applications`, `partner_applications`.
+`event_registrations`, `membership_applications`, `partner_applications`,
+`chat_channels`, `chat_messages`.
 
-## 7. Fonctionnement temps-réel
+## 5. Fonctionnement temps-réel
 
-Firestore fournissait des souscriptions temps-réel (`onSnapshot`). Sur
-cPanel, le shim `src/lib/firebase.ts` implémente `onSnapshot` via un
-**polling toutes les 8 secondes** de l'endpoint `GET` correspondant. Pour
-l'espace adhérent (petit volume, quelques admins connectés
-simultanément) c'est largement suffisant. Pour ajuster : modifier
-`DEFAULT_POLL_MS` dans `src/lib/firebase.ts`.
+Le shim `src/lib/firebase.ts` implémente `onSnapshot` via un **polling
+toutes les 8 secondes** de l'endpoint `GET` correspondant. Pour l'espace
+adhérent (petit volume, quelques admins connectés simultanément) c'est
+largement suffisant. Pour ajuster : modifier `DEFAULT_POLL_MS` dans
+`src/lib/firebase.ts`.
 
-## 8. Dépannage
+## 6. Migrations de schéma
+
+Les ALTER incrémentaux vivent dans `api/migrations/*.sql` et sont
+appliqués automatiquement au premier appel API après déploiement
+(runner idempotent dans `api/lib/migrations.php`, basé sur
+`information_schema`). Pas d'action manuelle requise en prod.
+
+## 7. Dépannage
 
 - **500 au premier appel** : `api/config.php` manquant ou droits MySQL.
-  Vérifier `tail -f ~/logs/error_log`.
+  Vérifier via cPanel → Errors, ou `api/error_log` via File Manager.
 - **`storage_error` à l'upload** : le dossier `api/uploads-storage/`
   n'est pas writable. `chmod 750` + vérifier l'utilisateur PHP.
-- **SMTP muet** : tester avec `swaks --to you@gmail.com --from
-  no-reply@domaine.tn --server mail.domaine.tn:587 --auth LOGIN ...`
-  depuis SSH.
-- **Mot de passe oublié sans mail reçu** : cPanel filtre parfois les
-  destinations `gmail.com` depuis son propre relais. Configurer un SPF +
-  DKIM sur `no-reply@domaine.tn`.
+- **SMTP muet** : vérifier cPanel → **Track Delivery** pour voir si le
+  message est parti (Exim). Si oui mais mail jamais reçu côté Gmail,
+  check cPanel → **Email Deliverability** : il faut que SPF + DKIM +
+  DMARC soient `VALID`. Sans ça Gmail drop silencieusement.
+- **DB "Access denied"** : le compte MySQL référencé dans
+  `api/config.php` n'a pas les droits — cPanel → MySQL Databases →
+  « Add User To Database ».
