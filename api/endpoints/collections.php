@@ -72,6 +72,17 @@ function build_specs(): array
             if (array_key_exists('address', $p))           $row['address'] = $p['address'];
             if (array_key_exists('photoBase64', $p))       $row['photo_url'] = $p['photoBase64'];
             if (array_key_exists('cotisations', $p))       $row['cotisations'] = $p['cotisations'] === null ? null : json_encode($p['cotisations'], JSON_UNESCAPED_UNICODE);
+            if (array_key_exists('archivedAt', $p)) {
+                // Self-healing : crée la colonne `users.archived_at` si elle
+                // manque encore (migration automatique au premier archivage).
+                ensure_column('users', 'archived_at', 'DATETIME NULL');
+                if ($p['archivedAt'] === null || $p['archivedAt'] === '') {
+                    $row['archived_at'] = null;
+                } else {
+                    $ts = strtotime((string)$p['archivedAt']);
+                    $row['archived_at'] = $ts ? gmdate('Y-m-d H:i:s', $ts) : null;
+                }
+            }
             return $row;
         },
         'canList' => fn(?array $u) => $u && (is_admin($u) || user_has_permission($u, 'members_manage') || user_has_permission($u, 'roles_manage') || user_has_permission($u, 'users_editRole') || user_has_permission($u, 'users_editStatus')),

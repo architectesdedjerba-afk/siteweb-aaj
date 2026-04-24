@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS users (
   photo_url           TEXT NULL,
   cotisations         JSON NULL,
   created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  archived_at         DATETIME NULL,
   PRIMARY KEY (uid),
   UNIQUE KEY uq_users_email (email),
   KEY idx_users_role (role),
@@ -345,3 +346,19 @@ CREATE TABLE IF NOT EXISTS files (
   KEY idx_files_folder (folder),
   KEY idx_files_owner (owner_uid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================================
+-- Upgrades from older databases
+-- =============================================================
+-- Deux options pour les bases déjà déployées avant l'ajout d'un
+-- nouveau champ :
+--
+-- 1. Scripts PHP CLI idempotents dans api/scripts/ (pre-emptif) :
+--      php scripts/migrate-archived-at.php    (ajoute users.archived_at)
+--
+-- 2. Auto-migration (self-healing) intégrée au backend : la fonction
+--    ensure_column() dans lib/db.php crée les colonnes whitelistées
+--    automatiquement au premier besoin. Actuellement couvre :
+--      users.archived_at  — crée lors du premier archivage.
+--
+-- Les deux approches sont idempotentes — safe à relancer.
