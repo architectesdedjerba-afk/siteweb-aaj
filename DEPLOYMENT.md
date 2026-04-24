@@ -128,6 +128,13 @@ appliqués automatiquement au premier appel API après déploiement
   Vérifier via cPanel → Errors, ou `api/error_log` via File Manager.
 - **`storage_error` à l'upload** : le dossier `api/uploads-storage/`
   n'est pas writable. `chmod 750` + vérifier l'utilisateur PHP.
+- **Upload volumineux qui échoue en 413/500** : `api/.user.ini` fixe
+  `upload_max_filesize` / `post_max_size` à 512 Mo, mais les hôtes en
+  PHP-FPM rechargent ce fichier toutes les ~5 min. Si les limites ne
+  bougent pas, les forcer via cPanel → **Select PHP Version → Options**
+  (`upload_max_filesize`, `post_max_size`, `memory_limit`,
+  `max_execution_time`). Le cap applicatif est dans
+  `api/config.php → uploads.max_bytes` (0 pour désactiver).
 - **SMTP muet** : vérifier cPanel → **Track Delivery** pour voir si le
   message est parti (Exim). Si oui mais mail jamais reçu côté Gmail,
   check cPanel → **Email Deliverability** : il faut que SPF + DKIM +
