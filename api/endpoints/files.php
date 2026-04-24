@@ -31,7 +31,7 @@ function files_upload(): void
         json_error('no_file', 'Aucun fichier envoyé.', 400);
     }
     $folder = preg_replace('/[^a-z0-9_\-]/', '', strtolower((string)($_POST['folder'] ?? 'misc'))) ?: 'misc';
-    if (!in_array($folder, ['news', 'partners', 'users', 'documents', 'commission_pvs', 'contact_messages', 'chat', 'misc'], true)) {
+    if (!in_array($folder, ['news', 'partners', 'users', 'documents', 'commission_pvs', 'contact_messages', 'chat', 'unesco', 'unesco_permits', 'misc'], true)) {
         json_error('invalid_folder', 'Dossier inconnu.', 400);
     }
 
@@ -53,6 +53,18 @@ function files_upload(): void
             break;
         case 'chat':
             if (!(is_admin($user) || user_has_permission($user, 'chat_use'))) json_error('forbidden', 'Upload réservé aux membres autorisés.', 403);
+            if ($user['status'] !== 'active' && !is_admin($user)) json_error('forbidden', 'Compte inactif.', 403);
+            break;
+        case 'unesco':
+            if (!(is_admin($user) || user_has_permission($user, 'unesco_manage'))) json_error('forbidden', 'Upload UNESCO réservé aux gestionnaires.', 403);
+            break;
+        case 'unesco_permits':
+            if (!(is_admin($user)
+                || user_has_permission($user, 'unesco_permits_submit')
+                || user_has_permission($user, 'unesco_permits_review')
+                || user_has_permission($user, 'unesco_manage'))) {
+                json_error('forbidden', 'Upload réservé aux utilisateurs autorisés.', 403);
+            }
             if ($user['status'] !== 'active' && !is_admin($user)) json_error('forbidden', 'Compte inactif.', 403);
             break;
         case 'users':

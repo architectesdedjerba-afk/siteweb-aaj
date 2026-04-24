@@ -16,6 +16,8 @@ const ALL_PERMISSION_KEYS = [
     'profile_edit',
     'chat_use',
     'chat_create_channel',
+    'unesco_view',
+    'unesco_permits_submit',
     'commissions_create',
     'members_manage',
     'partners_manage',
@@ -24,6 +26,8 @@ const ALL_PERMISSION_KEYS = [
     'profileRequests_manage',
     'messages_inbox',
     'chat_manage',
+    'unesco_manage',
+    'unesco_permits_review',
     'accounts_create',
     'roles_manage',
     'config_manage',
@@ -68,6 +72,8 @@ function default_roles(): array
                 'members_manage', 'partners_manage', 'library_manage', 'news_manage',
                 'profileRequests_manage', 'messages_inbox',
                 'chat_use', 'chat_create_channel', 'chat_manage',
+                'unesco_view', 'unesco_permits_submit',
+                'unesco_manage', 'unesco_permits_review',
             ]),
         ],
         [
@@ -80,6 +86,7 @@ function default_roles(): array
                 'dashboard_view', 'commissions_view', 'library_view', 'annuaire_view',
                 'partners_view', 'messages_send', 'profile_edit', 'commissions_create',
                 'chat_use', 'chat_create_channel',
+                'unesco_view', 'unesco_permits_submit',
             ]),
         ],
         [
@@ -92,6 +99,7 @@ function default_roles(): array
                 'dashboard_view', 'commissions_view', 'library_view', 'annuaire_view',
                 'partners_view', 'messages_send', 'profile_edit',
                 'chat_use', 'chat_create_channel',
+                'unesco_view', 'unesco_permits_submit',
             ]),
         ],
     ];

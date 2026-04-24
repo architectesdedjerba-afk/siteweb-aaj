@@ -26,6 +26,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'profile_edit', label: 'Modifier son profil' },
       { key: 'chat_use', label: 'Utiliser la messagerie interne' },
       { key: 'chat_create_channel', label: 'Proposer un canal de discussion' },
+      { key: 'unesco_view', label: 'Consulter Djerba UNESCO' },
+      { key: 'unesco_permits_submit', label: 'Déposer une demande de permis UNESCO' },
     ],
   },
   {
@@ -42,6 +44,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'profileRequests_manage', label: 'Valider les demandes de profil' },
       { key: 'messages_inbox', label: 'Lire les messages entrants' },
       { key: 'chat_manage', label: 'Modérer la messagerie interne (canaux & messages)' },
+      { key: 'unesco_manage', label: 'Gérer Djerba UNESCO (KMZ, zones, documents)' },
+      { key: 'unesco_permits_review', label: 'Instruire les demandes de permis UNESCO' },
     ],
   },
   {
@@ -108,6 +112,10 @@ export const DEFAULT_ROLES: DefaultRole[] = [
       'chat_use',
       'chat_create_channel',
       'chat_manage',
+      'unesco_view',
+      'unesco_permits_submit',
+      'unesco_manage',
+      'unesco_permits_review',
     ]),
   },
   {
@@ -127,6 +135,8 @@ export const DEFAULT_ROLES: DefaultRole[] = [
       'commissions_create',
       'chat_use',
       'chat_create_channel',
+      'unesco_view',
+      'unesco_permits_submit',
     ]),
   },
   {
