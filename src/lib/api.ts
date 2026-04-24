@@ -82,7 +82,7 @@ export const api = {
     address?: string;
     cotisations?: Record<string, any>;
   }) =>
-    http<{ ok: true; user: any; emailSent: boolean }>('/auth/accounts', {
+    http<{ ok: true; user: any; emailSent: boolean; tempPassword?: string }>('/auth/accounts', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),

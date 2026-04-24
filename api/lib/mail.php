@@ -63,9 +63,24 @@ function send_mail(string $toEmail, string $toName, string $subject, string $htm
         $cmd(base64_encode($password));
     }
 
-    $cmd("MAIL FROM:<$fromEmail>");
-    $cmd("RCPT TO:<$toEmail>");
-    $cmd('DATA');
+    $mailFrom = $cmd("MAIL FROM:<$fromEmail>");
+    if (strpos($mailFrom, '250') !== 0) {
+        error_log("SMTP MAIL FROM rejected: $mailFrom");
+        fclose($socket);
+        return false;
+    }
+    $rcpt = $cmd("RCPT TO:<$toEmail>");
+    if (strpos($rcpt, '250') !== 0) {
+        error_log("SMTP RCPT TO rejected: $rcpt");
+        fclose($socket);
+        return false;
+    }
+    $data = $cmd('DATA');
+    if (strpos($data, '354') !== 0) {
+        error_log("SMTP DATA rejected: $data");
+        fclose($socket);
+        return false;
+    }
 
     $boundary = 'aaj_' . bin2hex(random_bytes(8));
     $headers  = [];
@@ -95,5 +110,9 @@ function send_mail(string $toEmail, string $toName, string $subject, string $htm
     $cmd('QUIT');
     fclose($socket);
 
-    return strpos($resp, '250') === 0;
+    $ok = strpos($resp, '250') === 0;
+    if (!$ok) {
+        error_log("SMTP message rejected for $toEmail: $resp");
+    }
+    return $ok;
 }
