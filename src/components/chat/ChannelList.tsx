@@ -4,7 +4,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Hash, Plus, Search, Users, Clock } from 'lucide-react';
+import { Hash, Plus, Search, Users, Clock, MessageSquarePlus } from 'lucide-react';
 import type { ChatChannel } from '../../types';
 
 interface ChannelListProps {
@@ -37,17 +37,28 @@ export function ChannelList({
   const approved = filtered.filter((c) => c.status === 'approved');
   const pending = filtered.filter((c) => c.status === 'pending' && c.createdBy === currentUid);
 
+  const unreadCount = approved.filter((c) => unread[c.id || '']).length;
+  const isSearching = search.trim().length > 0;
+
   return (
     <div className="flex flex-col h-full bg-white border-r border-aaj-border">
       <div className="p-4 border-b border-aaj-border">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-[11px] font-black uppercase tracking-[2px] text-aaj-dark">
+          <h3 className="text-[11px] font-black uppercase tracking-[2px] text-aaj-dark flex items-center gap-2">
             Discussions
+            {approved.length > 0 && (
+              <span className="text-[10px] text-aaj-gray font-bold">({approved.length})</span>
+            )}
+            {unreadCount > 0 && (
+              <span className="text-[9px] bg-aaj-royal text-white px-2 py-0.5 rounded-full">
+                {unreadCount} non lu{unreadCount > 1 ? 's' : ''}
+              </span>
+            )}
           </h3>
           {canCreate && (
             <button
               onClick={onNewChannel}
-              className="w-8 h-8 bg-aaj-royal text-white rounded-full flex items-center justify-center hover:bg-aaj-dark transition-colors"
+              className="w-8 h-8 bg-aaj-royal text-white rounded-full flex items-center justify-center hover:bg-aaj-dark transition-colors active:scale-95"
               title="Nouveau canal"
               aria-label="Nouveau canal"
             >
@@ -62,16 +73,18 @@ export function ChannelList({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher un canal..."
-            className="w-full pl-9 pr-3 py-2 border border-aaj-border rounded text-sm focus:border-aaj-royal focus:outline-none"
+            className="w-full pl-9 pr-3 py-2 border border-aaj-border rounded text-sm focus:border-aaj-royal focus:outline-none focus:ring-2 focus:ring-aaj-royal/10"
           />
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {approved.length === 0 && pending.length === 0 && (
-          <div className="p-6 text-center text-[11px] text-aaj-gray">
-            Aucune discussion pour le moment.
-          </div>
+          <EmptyState
+            isSearching={isSearching}
+            canCreate={canCreate}
+            onNewChannel={onNewChannel}
+          />
         )}
 
         {approved.map((c) => (
@@ -107,6 +120,47 @@ export function ChannelList({
   );
 }
 
+function EmptyState({
+  isSearching,
+  canCreate,
+  onNewChannel,
+}: {
+  isSearching: boolean;
+  canCreate: boolean;
+  onNewChannel: () => void;
+}) {
+  if (isSearching) {
+    return (
+      <div className="p-8 text-center text-[12px] text-aaj-gray">
+        <Search size={28} className="mx-auto mb-3 text-aaj-border" />
+        Aucun canal ne correspond à votre recherche.
+      </div>
+    );
+  }
+  return (
+    <div className="p-6 text-center">
+      <div className="w-14 h-14 rounded-full bg-aaj-soft mx-auto mb-3 flex items-center justify-center">
+        <MessageSquarePlus size={24} className="text-aaj-royal" />
+      </div>
+      <p className="text-[13px] font-bold text-aaj-dark mb-1">Aucune discussion</p>
+      <p className="text-[11px] text-aaj-gray mb-4 leading-relaxed">
+        {canCreate
+          ? 'Créez la première discussion thématique pour les adhérents.'
+          : 'Aucun canal n\u2019est encore ouvert. Revenez bientôt !'}
+      </p>
+      {canCreate && (
+        <button
+          onClick={onNewChannel}
+          className="px-4 py-2.5 bg-aaj-royal text-white text-[10px] font-black uppercase tracking-[2px] rounded hover:bg-aaj-dark transition-colors inline-flex items-center gap-2"
+        >
+          <Plus size={14} />
+          Nouveau canal
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ChannelItem({
   channel,
   selected,
@@ -128,12 +182,17 @@ function ChannelItem({
     <button
       onClick={onClick}
       disabled={pending}
-      className={`w-full flex items-start gap-3 p-3 text-left transition-colors border-b border-aaj-border ${
-        selected ? 'bg-aaj-soft' : pending ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-50'
+      className={`w-full flex items-start gap-3 p-3 text-left transition-colors border-b border-aaj-border relative ${
+        selected
+          ? 'bg-aaj-soft'
+          : pending
+            ? 'opacity-60 cursor-not-allowed'
+            : 'hover:bg-slate-50'
       }`}
     >
+      {selected && <span className="absolute left-0 top-0 bottom-0 w-1 bg-aaj-royal" aria-hidden />}
       <div
-        className="w-11 h-11 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
+        className="w-11 h-11 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0 shadow-sm"
         style={{ backgroundColor: channel.iconColor || '#0047AB' }}
       >
         {channel.isAllMembers ? <Users size={18} /> : <Hash size={18} />}

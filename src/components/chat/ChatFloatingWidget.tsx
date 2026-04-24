@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { MessagesSquare, X } from 'lucide-react';
+import { MessagesSquare, X, Maximize2, Minimize2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../../lib/AuthContext';
 import { useChatBadge } from '../../lib/useChat';
@@ -21,20 +21,23 @@ const DEFAULT_BOTTOM = 24;
 
 export function ChatFloatingWidget() {
   const [open, setOpen] = useState(false);
+  const [maximized, setMaximized] = useState(false);
   const [bottom, setBottom] = useState(DEFAULT_BOTTOM);
   const { user, isAdmin, can } = useAuth();
   const isModerator = isAdmin || can('chat_manage');
   const { totalUnread } = useChatBadge(user?.uid ?? null, isModerator);
 
-  // Close on Esc
+  // Close on Esc — but if maximized, first un-maximize before closing
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key !== 'Escape') return;
+      if (maximized) setMaximized(false);
+      else setOpen(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
+  }, [open, maximized]);
 
   // Lift the FAB when the page footer scrolls into view (same logic as the
   // contact-admin FAB) so the button never sits on top of footer content.
@@ -104,6 +107,23 @@ export function ChatFloatingWidget() {
         )}
       </button>
 
+      {/* Light backdrop on desktop — click closes the popup. Mobile uses the
+          full-screen sheet so no backdrop is needed there. */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="chat-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={() => setOpen(false)}
+            className="hidden sm:block fixed inset-0 z-[1050] bg-aaj-dark/10"
+            aria-hidden
+          />
+        )}
+      </AnimatePresence>
+
       {/* Popup window */}
       <AnimatePresence>
         {open && (
@@ -120,11 +140,15 @@ export function ChatFloatingWidget() {
               'fixed z-[1100] bg-white shadow-2xl border border-aaj-border overflow-hidden flex flex-col',
               // Mobile: full-screen sheet
               'inset-0 rounded-none',
-              // Desktop: anchored just above the FAB (bottom-6 + 56px FAB + 16px gap = 96px)
-              'sm:inset-auto sm:bottom-24 sm:right-6 sm:rounded-lg',
-              'sm:w-[420px] sm:h-[640px]',
-              'md:w-[560px] md:h-[680px]',
-              'lg:w-[920px] lg:h-[680px]',
+              // Desktop: maximized = near-fullscreen, default = compact card
+              maximized
+                ? 'sm:inset-6 sm:rounded-lg sm:w-auto sm:h-auto'
+                : [
+                    'sm:inset-auto sm:bottom-24 sm:right-6 sm:rounded-lg',
+                    'sm:w-[420px] sm:h-[640px]',
+                    'md:w-[560px] md:h-[680px]',
+                    'lg:w-[760px] lg:h-[680px]',
+                  ].join(' '),
             ].join(' ')}
             role="dialog"
             aria-modal="false"
@@ -132,27 +156,45 @@ export function ChatFloatingWidget() {
           >
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-aaj-border bg-aaj-soft flex-shrink-0">
-              <div className="min-w-0">
-                <span className="text-[10px] uppercase tracking-[3px] text-aaj-royal font-black block">
-                  Discussions
-                </span>
-                <h3 className="text-sm font-black uppercase tracking-tight truncate">
-                  Messagerie interne
-                </h3>
+              <div className="min-w-0 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-aaj-royal text-white flex items-center justify-center flex-shrink-0">
+                  <MessagesSquare size={18} />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[10px] uppercase tracking-[3px] text-aaj-royal font-black block leading-tight">
+                    Discussions
+                  </span>
+                  <h3 className="text-sm font-black uppercase tracking-tight truncate leading-tight">
+                    Messagerie interne
+                  </h3>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="text-aaj-gray hover:text-red-500 transition-colors w-8 h-8 flex items-center justify-center rounded hover:bg-white"
-                aria-label="Fermer la messagerie"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-1">
+                {/* Maximize toggle — desktop only */}
+                <button
+                  type="button"
+                  onClick={() => setMaximized((v) => !v)}
+                  className="hidden sm:flex text-aaj-gray hover:text-aaj-royal transition-colors w-8 h-8 items-center justify-center rounded hover:bg-white"
+                  aria-label={maximized ? 'Réduire la fenêtre' : 'Agrandir la fenêtre'}
+                  title={maximized ? 'Réduire' : 'Agrandir'}
+                >
+                  {maximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="text-aaj-gray hover:text-red-500 transition-colors w-8 h-8 flex items-center justify-center rounded hover:bg-white"
+                  aria-label="Fermer la messagerie"
+                  title="Fermer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             {/* Body — ChatPage fills remaining space */}
             <div className="flex-1 min-h-0 overflow-hidden">
-              <ChatPage embedded />
+              <ChatPage embedded autoFocusInput={open} />
             </div>
           </motion.div>
         )}

@@ -17,9 +17,12 @@ interface ChatPageProps {
   /** When true, fill parent height instead of using viewport-based sizing.
    *  Used when ChatPage is rendered inside the floating popup window. */
   embedded?: boolean;
+  /** When true, focus the message input as soon as a channel is shown.
+   *  Forwarded by ChatFloatingWidget when it opens the popup. */
+  autoFocusInput?: boolean;
 }
 
-export function ChatPage({ embedded = false }: ChatPageProps = {}) {
+export function ChatPage({ embedded = false, autoFocusInput = false }: ChatPageProps = {}) {
   const { user, profile, isAdmin, can } = useAuth();
   const [members, setMembers] = useState<UserProfile[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
@@ -124,6 +127,7 @@ export function ChatPage({ embedded = false }: ChatPageProps = {}) {
             isModerator={isModerator}
             members={members}
             onBack={() => setShowListMobile(true)}
+            autoFocusInput={autoFocusInput}
           />
         </div>
       </div>
