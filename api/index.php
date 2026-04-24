@@ -55,8 +55,10 @@ if ($method === 'OPTIONS') {
 $segments = $path === '/' ? [''] : explode('/', ltrim($path, '/'));
 
 try {
-    // Seed default roles on every cold start; cheap and idempotent.
+    // Seed default roles + apply schema migrations on every cold start;
+    // both are idempotent and cheap.
     seed_default_roles_if_missing();
+    run_auto_migrations();
 
     $root = $segments[0] ?? '';
 
