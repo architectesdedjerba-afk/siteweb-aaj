@@ -201,8 +201,13 @@ export function UnescoMap({
         }`;
         lyr.bindTooltip(tooltip, { direction: 'top', sticky: true });
         lyr.on('click', (e) => {
-          // Don't let the map-level click fire too.
-          L.DomEvent.stopPropagation(e);
+          // Halt both Leaflet's own event and the underlying DOM event so
+          // document-level listeners (e.g. the ZonePopup click-outside
+          // handler) don't fire when the user switches from one zone to
+          // another.
+          L.DomEvent.stopPropagation(e as unknown as Event);
+          const oe = (e as unknown as { originalEvent?: MouseEvent }).originalEvent;
+          if (oe && typeof oe.stopPropagation === 'function') oe.stopPropagation();
           zoneHandlerRef.current?.(props);
         });
       },

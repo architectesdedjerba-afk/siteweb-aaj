@@ -428,8 +428,32 @@ function ZonePopup({
   const external = typeof props.externalUrl === 'string' ? props.externalUrl : null;
   const doc = docId ? docsById[docId] : null;
 
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // Close the popup on any click outside its frame, or on Escape. The
+  // listener is registered AFTER the mount, so the very click that opened
+  // the popup can't reach here. Zone polygons call stopPropagation on the
+  // original DOM event so picking a different zone swaps the content
+  // instead of closing → reopening.
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!panelRef.current) return;
+      if (!panelRef.current.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
   return (
     <div
+      ref={panelRef}
       role="dialog"
       aria-modal="false"
       className="absolute top-4 right-4 z-[500] max-w-sm w-[calc(100%-2rem)] border border-aaj-border bg-white shadow-2xl rounded overflow-hidden"
