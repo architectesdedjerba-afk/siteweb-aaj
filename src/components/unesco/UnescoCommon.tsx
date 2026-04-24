@@ -57,6 +57,41 @@ export const ZONE_TYPE_LABELS: Record<string, string> = {
   restricted: 'Zone restreinte',
 };
 
+// Fixed list for permit "Municipalité" dropdown (Djerba).
+export const DJERBA_MUNICIPALITIES: string[] = ['Ajim', 'Midoun', 'Houmt Souk'];
+
+// Land type is an exclusive choice: the parcel is either urban or agricultural.
+// Stored in the existing `parcel_number` column as one of these values so we
+// avoid a schema migration.
+export const LAND_TYPES: Array<{ key: string; label: string }> = [
+  { key: 'Zone urbaine', label: 'Zone urbaine' },
+  { key: 'Zone agricole', label: 'Zone agricole' },
+];
+
+// Labels + metadata for the three mandatory upload slots on the permit
+// form. `kind` maps to the `unesco_permit_files.kind` column.
+export const PERMIT_MAIN_UPLOAD_SLOTS: Array<{
+  kind: string;
+  label: string;
+  hint: string;
+}> = [
+  {
+    kind: 'architecture',
+    label: 'Dossier architecture',
+    hint: 'Plans, façades, coupes (PDF ou image).',
+  },
+  {
+    kind: 'topography',
+    label: 'Relevé topographique',
+    hint: 'Levé de géomètre (PDF ou image).',
+  },
+  {
+    kind: 'property_deed',
+    label: 'Acte de propriété',
+    hint: "Justificatif légal du titre de propriété.",
+  },
+];
+
 export function StatusBadge({ status }: { status: UnescoPermitStatus }) {
   return (
     <span
