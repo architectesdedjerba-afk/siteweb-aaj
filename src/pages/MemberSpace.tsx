@@ -117,6 +117,8 @@ export const MemberSpacePage = () => {
   const [libraryDocs, setLibraryDocs] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [profileRequests, setProfileRequests] = useState<any[]>([]);
+  const [membershipApplications, setMembershipApplications] = useState<any[]>([]);
+  const [approvingApplicationId, setApprovingApplicationId] = useState<string | null>(null);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [pendingUserRequests, setPendingUserRequests] = useState<any[]>([]);
   const [newsItems, setNewsItems] = useState<any[]>([]);
@@ -378,6 +380,17 @@ export const MemberSpacePage = () => {
       }
     );
 
+    const qApps = query(collection(db, 'membership_applications'), orderBy('createdAt', 'desc'));
+    const unsubscribeApps = onSnapshot(
+      qApps,
+      (snapshot) => {
+        setMembershipApplications(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      (err) => {
+        console.warn('Permission restricted for membership applications list.', err);
+      }
+    );
+
     // The 4 system roles are seeded server-side on every API boot
     // (see api/lib/permissions.php → seed_default_roles_if_missing).
     // The client only needs to subscribe and render.
@@ -395,6 +408,7 @@ export const MemberSpacePage = () => {
     return () => {
       unsubscribeUsers();
       unsubscribeRequests();
+      unsubscribeApps();
       unsubscribeRoles();
     };
   }, [user, needsAdminData, isSuperAdmin]);
@@ -1199,6 +1213,94 @@ export const MemberSpacePage = () => {
     }
   };
 
+  const handleApproveApplication = async (app: any) => {
+    if (!can('members_manage')) return;
+    if (!app.birthDate || !app.memberTypeLetter) {
+      alert(
+        'Cette demande ne contient pas la date de naissance ou le type de membre — impossible de générer le matricule AAJ. Demandez au candidat de soumettre une nouvelle demande.'
+      );
+      return;
+    }
+    if (
+      !window.confirm(
+        `Valider la demande de ${app.firstName || app.fullName} ${app.lastName || ''} ?\nUn compte adhérent sera créé et un email contenant le mot de passe temporaire lui sera envoyé.`
+      )
+    ) {
+      return;
+    }
+    setApprovingApplicationId(app.id);
+    try {
+      const existing = allUsers
+        .map((u: any) => (u?.licenseNumber ? String(u.licenseNumber) : ''))
+        .filter(Boolean);
+      const idx = computeNextIndex(existing, app.birthDate, app.memberTypeLetter);
+      const matricule = buildMatricule(app.birthDate, app.memberTypeLetter, idx);
+
+      const typeEntry = memberTypesList.find((t) => t.letter === app.memberTypeLetter);
+      const memberTypeLabel = typeEntry?.label || app.category || 'Architecte';
+
+      const firstName = app.firstName || (app.fullName || '').split(/\s+/)[0] || '';
+      const lastName = app.lastName || (app.fullName || '').split(/\s+/).slice(1).join(' ') || '';
+
+      const { emailSent } = await adminCreateAccount({
+        email: app.email,
+        displayName: `${firstName} ${lastName}`.trim() || app.fullName || app.email,
+        firstName,
+        lastName,
+        mobile: app.phone,
+        category: memberTypeLabel,
+        memberType: memberTypeLabel,
+        memberTypeLetter: app.memberTypeLetter,
+        birthDate: app.birthDate,
+        licenseNumber: matricule,
+        address: app.city,
+        role: 'member',
+        status: 'active',
+      });
+
+      await updateDoc(doc(db, 'membership_applications', app.id), {
+        status: 'approved',
+        licenseNumber: matricule,
+      });
+
+      alert(
+        emailSent
+          ? `Demande validée. Matricule : ${matricule}.\nUn email avec le mot de passe temporaire a été envoyé à ${app.email}.`
+          : `Demande validée. Matricule : ${matricule}.\nATTENTION : l'email de bienvenue n'a pas pu être envoyé — demandez une réinitialisation de mot de passe.`
+      );
+    } catch (err) {
+      console.error('Error approving application:', err);
+      alert('Erreur lors de la validation de la demande.');
+    } finally {
+      setApprovingApplicationId(null);
+    }
+  };
+
+  const handleRejectApplication = async (app: any) => {
+    if (!can('members_manage')) return;
+    if (!window.confirm(`Rejeter la demande de ${app.firstName || app.fullName} ?`)) return;
+    setApprovingApplicationId(app.id);
+    try {
+      await updateDoc(doc(db, 'membership_applications', app.id), { status: 'rejected' });
+    } catch (err) {
+      console.error('Error rejecting application:', err);
+      alert('Erreur lors du rejet de la demande.');
+    } finally {
+      setApprovingApplicationId(null);
+    }
+  };
+
+  const handleDeleteApplication = async (app: any) => {
+    if (!can('members_manage')) return;
+    if (!window.confirm('Supprimer définitivement cette demande ?')) return;
+    try {
+      await deleteDoc(doc(db, 'membership_applications', app.id));
+    } catch (err) {
+      console.error('Error deleting application:', err);
+      alert('Erreur lors de la suppression de la demande.');
+    }
+  };
+
   const handleContactAdmin = async (e: FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -1689,6 +1791,9 @@ export const MemberSpacePage = () => {
                     icon: <Users size={18} />,
                     label: 'Gérer Adhésions',
                     perm: 'members_manage',
+                    badge: membershipApplications.filter(
+                      (a: any) => (a.status || 'pending') === 'pending'
+                    ).length,
                   },
                   {
                     id: 'admin-partners',
@@ -2932,6 +3037,95 @@ export const MemberSpacePage = () => {
                         <Plus size={14} /> Ajouter un Membre
                       </button>
                     </div>
+
+                    {/* Demandes d'adhésion en attente (/demander-adhesion) */}
+                    {(() => {
+                      const pendingApps = membershipApplications.filter(
+                        (a: any) => (a.status || 'pending') === 'pending'
+                      );
+                      if (pendingApps.length === 0) return null;
+                      return (
+                        <div className="border border-amber-200 rounded overflow-hidden bg-amber-50/50">
+                          <div className="bg-amber-100/60 px-5 py-3 border-b border-amber-200 flex items-center gap-3">
+                            <Shield size={16} className="text-amber-700" />
+                            <h3 className="text-[11px] font-black uppercase tracking-widest text-amber-800">
+                              Demandes d&apos;adhésion en attente ({pendingApps.length})
+                            </h3>
+                          </div>
+                          <ul className="divide-y divide-amber-100">
+                            {pendingApps.map((app: any) => {
+                              const displayName =
+                                app.fullName ||
+                                `${app.firstName ?? ''} ${app.lastName ?? ''}`.trim() ||
+                                app.email;
+                              const createdAtIso =
+                                typeof app.createdAt?.toDate === 'function'
+                                  ? app.createdAt.toDate().toISOString()
+                                  : app.createdAt;
+                              return (
+                                <li
+                                  key={app.id}
+                                  className="p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-black uppercase tracking-tight text-aaj-dark truncate">
+                                      {displayName}
+                                    </p>
+                                    <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-[10px] font-bold uppercase tracking-widest text-aaj-gray">
+                                      <span>{app.email}</span>
+                                      {app.phone && <span>{app.phone}</span>}
+                                      {app.category && (
+                                        <span>
+                                          {app.category}
+                                          {app.memberTypeLetter ? ` (${app.memberTypeLetter})` : ''}
+                                        </span>
+                                      )}
+                                      {app.city && <span>{app.city}</span>}
+                                      {app.birthDate && <span>Né(e) {app.birthDate}</span>}
+                                      {app.cvFileName && <span>CV : {app.cvFileName}</span>}
+                                      {createdAtIso && (
+                                        <span className="text-aaj-gray/60">
+                                          {new Date(createdAtIso).toLocaleDateString('fr-FR')}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2 flex-shrink-0">
+                                    <button
+                                      onClick={() => handleApproveApplication(app)}
+                                      disabled={approvingApplicationId === app.id}
+                                      className="px-4 py-2 bg-green-600 text-white rounded text-[10px] font-black uppercase tracking-widest hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    >
+                                      {approvingApplicationId === app.id ? (
+                                        <Loader2 size={12} className="animate-spin" />
+                                      ) : (
+                                        <CheckCircle2 size={12} />
+                                      )}
+                                      Valider
+                                    </button>
+                                    <button
+                                      onClick={() => handleRejectApplication(app)}
+                                      disabled={approvingApplicationId === app.id}
+                                      className="px-4 py-2 border border-aaj-border rounded text-[10px] font-black uppercase tracking-widest text-aaj-gray hover:bg-white transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    >
+                                      <XCircle size={12} /> Rejeter
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteApplication(app)}
+                                      disabled={approvingApplicationId === app.id}
+                                      className="px-3 py-2 text-aaj-gray hover:text-red-600 transition-colors"
+                                      title="Supprimer"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      );
+                    })()}
 
                     <div className="border border-aaj-border rounded overflow-hidden">
                       <table className="w-full text-left border-collapse">
