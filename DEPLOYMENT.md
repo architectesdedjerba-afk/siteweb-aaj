@@ -122,7 +122,49 @@ appliqués automatiquement au premier appel API après déploiement
 (runner idempotent dans `api/lib/migrations.php`, basé sur
 `information_schema`). Pas d'action manuelle requise en prod.
 
-## 7. Dépannage
+## 7. Déploiement frontend atomique (recommandé)
+
+Le build Vite utilise des hashes dans les noms de fichiers (`index-<hash>.css`,
+`index-<hash>.js`). Si l'upload FTP est partiel (un fichier manque, un autre
+est obsolète), `index.html` référence des hashes qui n'existent pas sur le
+serveur → page cassée (ex. CSS manquant = page sans style).
+
+Pour éviter ça, on déploie en **un seul zip**, extrait atomiquement côté
+serveur via File Manager.
+
+### Procédure
+
+```bash
+# Local — génère deploy/aaj-frontend-<timestamp>.zip
+npm run deploy:zip
+```
+
+Le zip contient le contenu de `dist/` à la racine (index.html, assets/,
+.htaccess). Sourcemaps `.map` exclus par défaut — utilise
+`npm run package -- --with-maps` pour les inclure.
+
+### Upload cPanel (sans SSH sur Oxahost)
+
+1. cPanel → **File Manager** → `/public_html/`
+2. Renommer le dossier `assets/` existant en `assets.old/` (rollback safety)
+3. Uploader `aaj-frontend-<timestamp>.zip` à la racine de `/public_html/`
+4. Clic droit sur le zip → **Extract** → target `/public_html/`
+5. Tester le site avec Ctrl+Shift+R (bypass cache navigateur)
+6. **Si OK** : supprimer `assets.old/` et le zip
+   **Si KO** : supprimer le nouveau `assets/`, renommer `assets.old/` → `assets/`
+
+### Pourquoi atomique
+
+- Avant extraction, le site tourne encore sur l'ancien build (intact dans `assets.old/`).
+- Pendant l'extraction, `assets/` est recréé d'un coup avec tous les hashes cohérents.
+- `index.html` est écrasé en dernier (ordre alphabétique des entrées zip).
+- Pas de fenêtre où index.html pointe vers des assets qui n'existent pas.
+
+### Ne pas committer
+
+`deploy/` est dans `.gitignore` — les zips restent locaux.
+
+## 8. Dépannage
 
 - **500 au premier appel** : `api/config.php` manquant ou droits MySQL.
   Vérifier via cPanel → Errors, ou `api/error_log` via File Manager.
