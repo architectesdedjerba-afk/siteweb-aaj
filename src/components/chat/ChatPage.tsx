@@ -13,7 +13,13 @@ import { ChannelView } from './ChannelView';
 import { NewChannelModal } from './NewChannelModal';
 import type { UserProfile } from '../../types';
 
-export function ChatPage() {
+interface ChatPageProps {
+  /** When true, fill parent height instead of using viewport-based sizing.
+   *  Used when ChatPage is rendered inside the floating popup window. */
+  embedded?: boolean;
+}
+
+export function ChatPage({ embedded = false }: ChatPageProps = {}) {
   const { user, profile, isAdmin, can } = useAuth();
   const [members, setMembers] = useState<UserProfile[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
@@ -78,8 +84,18 @@ export function ChatPage() {
   }
 
   return (
-    <div className="border border-aaj-border rounded overflow-hidden bg-white">
-      <div className="flex h-[calc(100vh-220px)] min-h-[500px]">
+    <div
+      className={
+        embedded
+          ? 'h-full bg-white overflow-hidden'
+          : 'border border-aaj-border rounded overflow-hidden bg-white'
+      }
+    >
+      <div
+        className={
+          embedded ? 'flex h-full min-h-0' : 'flex h-[calc(100vh-220px)] min-h-[500px]'
+        }
+      >
         {/* Left: channel list */}
         <div
           className={`${showListMobile ? 'flex' : 'hidden'} lg:flex w-full lg:w-80 flex-shrink-0`}

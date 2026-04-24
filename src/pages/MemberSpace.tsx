@@ -89,8 +89,8 @@ import {
   type MemberType,
 } from '../lib/memberConfig';
 import { SearchableSelect } from '../components/SearchableSelect';
-import { ChatPage } from '../components/chat/ChatPage';
 import { ChannelApprovals } from '../components/chat/ChannelApprovals';
+import { ChatFloatingWidget } from '../components/chat/ChatFloatingWidget';
 import { useChatBadge } from '../lib/useChat';
 import { UnescoMemberView } from '../components/unesco/UnescoMemberView';
 import { UnescoAdminParams } from '../components/unesco/UnescoAdminParams';
@@ -184,7 +184,9 @@ export const MemberSpacePage = () => {
   };
 
   const chatModerator = isAdmin || userRole?.permissions?.chat_manage === true;
-  const { totalUnread: chatUnread, pendingApproval: chatPendingApprovals } = useChatBadge(
+  // Only the admin "Modération Discussions" tab badge is needed here; the
+  // floating widget computes its own unread count for members.
+  const { pendingApproval: chatPendingApprovals } = useChatBadge(
     user?.uid ?? null,
     chatModerator
   );
@@ -1854,12 +1856,6 @@ export const MemberSpacePage = () => {
                     badge: 0,
                   },
                   {
-                    id: 'chat',
-                    icon: <MessagesSquare size={18} />,
-                    label: 'Discussions',
-                    badge: chatUnread,
-                  },
-                  {
                     id: 'member-partners',
                     icon: <Shield size={18} />,
                     label: 'Nos Partenaires',
@@ -2844,27 +2840,6 @@ export const MemberSpacePage = () => {
                         ))}
                       </div>
                     </div>
-                  </motion.div>
-                )}
-
-                {activeTab === 'chat' && (
-                  <motion.div
-                    key="chat"
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
-                    className="space-y-6"
-                  >
-                    <div>
-                      <h2 className="text-2xl font-black uppercase tracking-tighter mb-2">
-                        Discussions Internes
-                      </h2>
-                      <p className="text-[11px] text-aaj-gray font-bold uppercase tracking-[2px]">
-                        Échangez en temps réel avec les autres adhérents — canal général & canaux
-                        thématiques.
-                      </p>
-                    </div>
-                    <ChatPage />
                   </motion.div>
                 )}
 
@@ -5666,7 +5641,7 @@ export const MemberSpacePage = () => {
           )}
         </AnimatePresence>
 
-        {/* Floating Action Button: Contact Admin */}
+        {/* Floating Action Button: Contact Admin — stacks above the chat FAB */}
         <button
           onClick={() => setIsContactModalOpen(true)}
           style={{ bottom: `${fabBottom}px` }}
@@ -5677,6 +5652,9 @@ export const MemberSpacePage = () => {
             Contacter l&apos;administration
           </div>
         </button>
+
+        {/* Floating chat widget — bottom-right, below the contact-admin FAB */}
+        <ChatFloatingWidget />
       </div>
     );
   }
