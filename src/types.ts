@@ -168,3 +168,62 @@ export interface PartnerApplication {
   status: 'pending' | 'approved' | 'rejected';
   createdAt: Timestamp | string;
 }
+
+export type ChatChannelType = 'general' | 'custom';
+export type ChatChannelStatus = 'pending' | 'approved' | 'rejected';
+
+export interface ChatChannelLastMessage {
+  text: string;
+  senderId: string;
+  senderName: string;
+  createdAt: Timestamp | string;
+  hasAttachment?: boolean;
+}
+
+export interface ChatChannel {
+  id?: string;
+  name: string;
+  description?: string;
+  type: ChatChannelType;
+  status: ChatChannelStatus;
+  isAllMembers: boolean;
+  memberUids: string[];
+  createdBy: string;
+  createdByName: string;
+  createdAt: Timestamp | string;
+  approvedBy?: string;
+  approvedAt?: Timestamp | string;
+  rejectedReason?: string;
+  iconColor?: string;
+  lastMessage?: ChatChannelLastMessage;
+  lastActivityAt?: Timestamp | string;
+}
+
+export interface ChatMessageReply {
+  messageId: string;
+  text: string;
+  senderName: string;
+}
+
+export interface ChatMessage {
+  id?: string;
+  text: string;
+  senderId: string;
+  senderName: string;
+  senderPhoto?: string;
+  createdAt: Timestamp | string;
+  editedAt?: Timestamp | string;
+  replyTo?: ChatMessageReply;
+  attachmentUrl?: string;
+  attachmentId?: string;
+  attachmentName?: string;
+  attachmentType?: string;
+  attachmentSize?: number;
+  reactions?: Record<string, string[]>;
+  deletedAt?: Timestamp | string;
+}
+
+export interface ChatChannelRead {
+  channelId: string;
+  lastReadAt: Timestamp | string;
+}
