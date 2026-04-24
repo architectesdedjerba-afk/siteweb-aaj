@@ -654,7 +654,7 @@ export const MemberSpacePage = () => {
       await setDoc(
         doc(db, 'users', user.uid),
         {
-          photoURL: base64,
+          photoBase64: base64,
         },
         { merge: true }
       );
@@ -3142,9 +3142,9 @@ export const MemberSpacePage = () => {
                             className="hidden"
                           />
                           <div className="w-48 h-48 rounded bg-slate-100 border-2 border-aaj-border flex items-center justify-center overflow-hidden">
-                            {userProfile?.photoURL ? (
+                            {userProfile?.photoBase64 ? (
                               <img
-                                src={userProfile.photoURL}
+                                src={userProfile.photoBase64}
                                 alt="Profile"
                                 className="w-full h-full object-cover"
                                 referrerPolicy="no-referrer"
