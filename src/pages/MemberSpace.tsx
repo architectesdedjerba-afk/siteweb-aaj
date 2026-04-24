@@ -2216,8 +2216,16 @@ export const MemberSpacePage = () => {
                               className="p-6 border border-aaj-border rounded bg-white hover:shadow-xl transition-shadow group"
                             >
                               <div className="flex gap-6">
-                                <div className="w-16 h-16 bg-slate-50 border border-aaj-border rounded flex items-center justify-center text-aaj-royal group-hover:bg-aaj-royal group-hover:text-white transition-colors">
-                                  <UserCircle size={32} />
+                                <div className="w-16 h-16 bg-slate-50 border border-aaj-border rounded flex items-center justify-center text-aaj-royal group-hover:bg-aaj-royal group-hover:text-white transition-colors overflow-hidden">
+                                  {member.photoBase64 ? (
+                                    <img
+                                      src={member.photoBase64}
+                                      alt={member.displayName}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <UserCircle size={32} />
+                                  )}
                                 </div>
                                 <div className="flex-1">
                                   <h3 className="text-lg font-black uppercase tracking-tight mb-1">
@@ -2272,8 +2280,16 @@ export const MemberSpacePage = () => {
                                 >
                                   <td className="p-4">
                                     <div className="flex items-center gap-3">
-                                      <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-aaj-gray group-hover:text-aaj-royal transition-colors">
-                                        <UserCircle size={18} />
+                                      <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-aaj-gray group-hover:text-aaj-royal transition-colors overflow-hidden">
+                                        {member.photoBase64 ? (
+                                          <img
+                                            src={member.photoBase64}
+                                            alt={member.displayName}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        ) : (
+                                          <UserCircle size={18} />
+                                        )}
                                       </div>
                                       <div>
                                         <p className="text-sm font-black uppercase tracking-tight">
