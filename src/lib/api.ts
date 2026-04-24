@@ -91,6 +91,25 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ password: newPassword, currentPassword }),
     }),
+  testMail: (to?: string) =>
+    http<{
+      ok: boolean;
+      to: string;
+      tcpOk: boolean | null;
+      elapsedMs: number;
+      smtp: {
+        host: string;
+        port: number;
+        encryption: string;
+        from_email: string;
+        from_name: string;
+        has_password: boolean;
+      };
+      log: string[];
+    }>('/auth/test-mail', {
+      method: 'POST',
+      body: JSON.stringify({ to }),
+    }),
 
   // ---- collections ----
   list: (

@@ -145,6 +145,33 @@ export const MemberSpacePage = () => {
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [contactForm, setContactForm] = useState({ subject: '', message: '' });
   const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
+  const [createdCredentials, setCreatedCredentials] = useState<null | {
+    matricule: string;
+    email: string;
+    tempPassword?: string;
+    emailSent: boolean;
+    mode: 'created' | 'approved';
+  }>(null);
+  const [credentialsCopied, setCredentialsCopied] = useState<'all' | 'pwd' | null>(null);
+  const [mailTest, setMailTest] = useState<{
+    to: string;
+    sending: boolean;
+    result: null | {
+      ok: boolean;
+      tcpOk: boolean | null;
+      elapsedMs: number;
+      smtp: {
+        host: string;
+        port: number;
+        encryption: string;
+        from_email: string;
+        from_name: string;
+        has_password: boolean;
+      };
+      log: string[];
+    };
+    error: string | null;
+  }>({ to: '', sending: false, result: null, error: null });
   const [adminMessages, setAdminMessages] = useState<any[]>([]);
   const [userMessages, setUserMessages] = useState<any[]>([]);
   const [newContactFile, setNewContactFile] = useState({ base64: '', name: '' });
@@ -1223,6 +1250,34 @@ export const MemberSpacePage = () => {
     }
   };
 
+  const handleTestMail = async () => {
+    if (!can('config_manage')) return;
+    setMailTest((s) => ({ ...s, sending: true, result: null, error: null }));
+    try {
+      const target = mailTest.to.trim() || user?.email || '';
+      const result = await apiClient.testMail(target || undefined);
+      setMailTest({
+        to: result.to,
+        sending: false,
+        result: {
+          ok: result.ok,
+          tcpOk: result.tcpOk,
+          elapsedMs: result.elapsedMs,
+          smtp: result.smtp,
+          log: result.log,
+        },
+        error: null,
+      });
+    } catch (err: any) {
+      setMailTest((s) => ({
+        ...s,
+        sending: false,
+        error: err?.message || String(err),
+        result: null,
+      }));
+    }
+  };
+
   const handleAddMember = async (e: FormEvent) => {
     e.preventDefault();
     if (!can('members_manage')) return;
@@ -1262,12 +1317,13 @@ export const MemberSpacePage = () => {
         role: 'member',
         status: 'active',
       });
-      const pwdLine = tempPassword ? `\nMot de passe temporaire : ${tempPassword}` : '';
-      alert(
-        emailSent
-          ? `Membre ajouté avec succès !\nMatricule : ${matricule}\nEmail : ${newMember.email}${pwdLine}\n\nUn email avec ces identifiants a été envoyé (pensez à vérifier les spams).`
-          : `Membre ajouté avec succès !\nMatricule : ${matricule}\nEmail : ${newMember.email}${pwdLine}\n\nATTENTION : l'email de bienvenue n'a pas pu être envoyé — transmettez manuellement les identifiants ci-dessus au nouvel adhérent.`
-      );
+      setCreatedCredentials({
+        matricule,
+        email: newMember.email,
+        tempPassword,
+        emailSent,
+        mode: 'created',
+      });
       setIsAddMemberModalOpen(false);
       setNewMember({
         firstName: '',
@@ -1338,12 +1394,13 @@ export const MemberSpacePage = () => {
         licenseNumber: matricule,
       });
 
-      const pwdLine = tempPassword ? `\nMot de passe temporaire : ${tempPassword}` : '';
-      alert(
-        emailSent
-          ? `Demande validée !\nMatricule : ${matricule}\nEmail : ${app.email}${pwdLine}\n\nUn email avec ces identifiants a été envoyé (pensez à vérifier les spams).`
-          : `Demande validée !\nMatricule : ${matricule}\nEmail : ${app.email}${pwdLine}\n\nATTENTION : l'email de bienvenue n'a pas pu être envoyé — transmettez manuellement les identifiants ci-dessus à l'adhérent.`
-      );
+      setCreatedCredentials({
+        matricule,
+        email: app.email,
+        tempPassword,
+        emailSent,
+        mode: 'approved',
+      });
     } catch (err) {
       console.error('Error approving application:', err);
       alert('Erreur lors de la validation de la demande.');
@@ -1566,13 +1623,29 @@ export const MemberSpacePage = () => {
     if (!can('roles_manage')) return;
     if (role.isAllAccess) return;
     setSavingRoleId(role.id);
+    // Optimistic update so the checkbox flips immediately, even while the
+    // request is in flight.
+    setRolesList((prev) =>
+      prev.map((r) =>
+        r.id === role.id
+          ? { ...r, permissions: { ...(r.permissions ?? {}), [permKey]: value } }
+          : r
+      )
+    );
     try {
-      await updateDoc(doc(db, 'roles', role.id), {
-        [`permissions.${permKey}`]: value,
-      });
+      const nextPermissions = { ...(role.permissions ?? {}), [permKey]: value };
+      await updateDoc(doc(db, 'roles', role.id), { permissions: nextPermissions });
     } catch (err) {
       console.error('Error toggling permission:', err);
       alert('Erreur lors de la mise à jour de la permission.');
+      // Roll back optimistic change on failure.
+      setRolesList((prev) =>
+        prev.map((r) =>
+          r.id === role.id
+            ? { ...r, permissions: { ...(r.permissions ?? {}), [permKey]: !value } }
+            : r
+        )
+      );
     } finally {
       setSavingRoleId(null);
     }
@@ -3751,6 +3824,90 @@ export const MemberSpacePage = () => {
                       </div>
                     )}
 
+                    {/* SMTP diagnostic */}
+                    <section className="border border-aaj-border rounded overflow-hidden">
+                      <div className="p-5 bg-slate-50 border-b border-aaj-border">
+                        <h3 className="text-sm font-black uppercase tracking-widest text-aaj-dark">
+                          Diagnostic SMTP
+                        </h3>
+                        <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-wider mt-1">
+                          Tester l&apos;envoi d&apos;email (adhésion, mot de passe oublié, compte
+                          créé)
+                        </p>
+                      </div>
+                      <div className="p-5 space-y-3">
+                        <div className="flex flex-col md:flex-row gap-3">
+                          <input
+                            type="email"
+                            value={mailTest.to}
+                            onChange={(e) =>
+                              setMailTest((s) => ({ ...s, to: e.target.value }))
+                            }
+                            placeholder={user?.email || 'destinataire@exemple.com'}
+                            className="flex-1 bg-white border border-aaj-border rounded px-4 py-2 text-xs font-medium focus:outline-none focus:border-aaj-royal"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleTestMail}
+                            disabled={mailTest.sending}
+                            className="bg-aaj-dark text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                          >
+                            {mailTest.sending ? (
+                              <Loader2 className="animate-spin" size={12} />
+                            ) : (
+                              <Send size={12} />
+                            )}
+                            Envoyer un email de test
+                          </button>
+                        </div>
+
+                        {mailTest.error && (
+                          <div className="p-3 rounded border bg-red-50 border-red-200 text-red-700 text-[11px] font-bold uppercase tracking-widest">
+                            {mailTest.error}
+                          </div>
+                        )}
+
+                        {mailTest.result && (
+                          <div
+                            className={`p-3 rounded border text-[11px] ${
+                              mailTest.result.ok
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                : 'bg-red-50 border-red-200 text-red-800'
+                            }`}
+                          >
+                            <div className="font-black uppercase tracking-widest mb-2">
+                              {mailTest.result.ok
+                                ? `Email envoyé en ${mailTest.result.elapsedMs} ms`
+                                : `Échec d'envoi après ${mailTest.result.elapsedMs} ms`}
+                            </div>
+                            <div className="font-mono text-[10px] leading-relaxed">
+                              host : {mailTest.result.smtp.host}:
+                              {mailTest.result.smtp.port} ({mailTest.result.smtp.encryption ||
+                                'plain'})
+                              <br />
+                              from : {mailTest.result.smtp.from_email} (
+                              {mailTest.result.smtp.from_name})
+                              <br />
+                              password :{' '}
+                              {mailTest.result.smtp.has_password ? 'configuré' : 'VIDE ⚠'}
+                              <br />
+                              tcp :{' '}
+                              {mailTest.result.tcpOk === null
+                                ? 'non testé'
+                                : mailTest.result.tcpOk
+                                  ? 'port ouvert ✓'
+                                  : 'port injoignable ✗'}
+                            </div>
+                            {mailTest.result.log.length > 0 && (
+                              <pre className="mt-2 p-2 bg-white/60 rounded border border-slate-200 text-[10px] overflow-x-auto whitespace-pre-wrap break-all">
+                                {mailTest.result.log.join('\n')}
+                              </pre>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </section>
+
                     {/* Member Types */}
                     <section className="border border-aaj-border rounded overflow-hidden">
                       <div className="p-5 bg-slate-50 border-b border-aaj-border flex flex-wrap items-center justify-between gap-3">
@@ -5671,6 +5828,141 @@ export const MemberSpacePage = () => {
                     className="px-6 border border-aaj-border rounded font-black uppercase tracking-widest text-[11px] text-aaj-gray hover:bg-white transition-all"
                   >
                     Annuler
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Credentials modal — shown after admin creates/approves a member account */}
+        <AnimatePresence>
+          {createdCredentials && (
+            <div
+              className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+              onClick={() => {
+                setCreatedCredentials(null);
+                setCredentialsCopied(null);
+              }}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                className="bg-white max-w-lg w-full p-8 border border-aaj-border rounded"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between mb-6">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2">
+                      {createdCredentials.emailSent ? (
+                        <CheckCircle2 size={22} className="text-green-600" />
+                      ) : (
+                        <XCircle size={22} className="text-red-500" />
+                      )}
+                      <h3 className="text-xl font-black uppercase tracking-tight text-aaj-dark">
+                        {createdCredentials.mode === 'approved'
+                          ? 'Demande validée'
+                          : 'Membre ajouté'}
+                      </h3>
+                    </div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-aaj-gray">
+                      {createdCredentials.emailSent
+                        ? "Un email a été envoyé au membre (vérifier les spams)"
+                        : "L'email n'a pas pu partir — transmettez ces identifiants manuellement"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setCreatedCredentials(null);
+                      setCredentialsCopied(null);
+                    }}
+                    className="text-aaj-gray hover:text-aaj-dark transition-colors"
+                    aria-label="Fermer"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="space-y-3 mb-6">
+                  <div>
+                    <div className="text-[9px] font-black uppercase tracking-[2px] text-aaj-gray mb-1">
+                      Matricule
+                    </div>
+                    <div className="font-mono text-sm bg-slate-50 border border-aaj-border rounded px-3 py-2 select-all">
+                      {createdCredentials.matricule}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] font-black uppercase tracking-[2px] text-aaj-gray mb-1">
+                      Email
+                    </div>
+                    <div className="font-mono text-sm bg-slate-50 border border-aaj-border rounded px-3 py-2 select-all break-all">
+                      {createdCredentials.email}
+                    </div>
+                  </div>
+                  {createdCredentials.tempPassword && (
+                    <div>
+                      <div className="text-[9px] font-black uppercase tracking-[2px] text-aaj-gray mb-1">
+                        Mot de passe temporaire
+                      </div>
+                      <div className="flex gap-2">
+                        <div className="flex-1 font-mono text-sm bg-amber-50 border border-amber-200 rounded px-3 py-2 select-all">
+                          {createdCredentials.tempPassword}
+                        </div>
+                        <button
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(
+                                createdCredentials.tempPassword ?? ''
+                              );
+                              setCredentialsCopied('pwd');
+                              setTimeout(() => setCredentialsCopied(null), 2000);
+                            } catch {
+                              /* clipboard blocked */
+                            }
+                          }}
+                          className="px-3 rounded border border-aaj-border text-[10px] font-black uppercase tracking-widest text-aaj-dark hover:bg-slate-50 transition-all"
+                        >
+                          {credentialsCopied === 'pwd' ? 'Copié !' : 'Copier'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={async () => {
+                      const lines = [
+                        `Matricule : ${createdCredentials.matricule}`,
+                        `Email : ${createdCredentials.email}`,
+                      ];
+                      if (createdCredentials.tempPassword) {
+                        lines.push(
+                          `Mot de passe temporaire : ${createdCredentials.tempPassword}`
+                        );
+                      }
+                      try {
+                        await navigator.clipboard.writeText(lines.join('\n'));
+                        setCredentialsCopied('all');
+                        setTimeout(() => setCredentialsCopied(null), 2000);
+                      } catch {
+                        /* clipboard blocked */
+                      }
+                    }}
+                    className="flex-1 bg-aaj-dark text-white py-3 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all"
+                  >
+                    {credentialsCopied === 'all' ? 'Copié !' : 'Copier tout'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCreatedCredentials(null);
+                      setCredentialsCopied(null);
+                    }}
+                    className="px-6 border border-aaj-border rounded font-black uppercase tracking-widest text-[11px] text-aaj-gray hover:bg-slate-50 transition-all"
+                  >
+                    Fermer
                   </button>
                 </div>
               </motion.div>

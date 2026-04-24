@@ -45,6 +45,10 @@ return [
         'password'   => 'CHANGE_ME',
         'from_email' => 'no-reply@votre-domaine.tn',
         'from_name'  => 'Architectes de Jerba',
+        // Optional — who receives notifications for new membership / partner
+        // applications. Accepts a single address or an array. If omitted,
+        // all active super-admins and admins in the `users` table are notified.
+        // 'admin_notify' => ['bureau@votre-domaine.tn'],
     ],
 
     // ---- Uploads ----
