@@ -116,3 +116,117 @@ function send_mail(string $toEmail, string $toName, string $subject, string $htm
     }
     return $ok;
 }
+
+/**
+ * Admins to notify when a public form comes in. Priority:
+ *   1. explicit `smtp.admin_notify` in config.php (string or array of emails)
+ *   2. all active super-admins and admins from the `users` table
+ *   3. the SMTP from_email as a last-resort fallback
+ */
+function admin_notify_emails(): array
+{
+    global $CONFIG;
+    $configured = $CONFIG['smtp']['admin_notify'] ?? null;
+    if ($configured) {
+        $list = is_array($configured) ? $configured : [$configured];
+        return array_values(array_filter(array_map('trim', $list)));
+    }
+    try {
+        $stmt = db()->query(
+            "SELECT email FROM users
+              WHERE email IS NOT NULL AND email <> ''
+                AND (role = 'super-admin' OR role = 'admin')
+                AND (status IS NULL OR status <> 'archived')"
+        );
+        $emails = [];
+        foreach ($stmt->fetchAll() as $r) {
+            if (!empty($r['email'])) $emails[] = $r['email'];
+        }
+        if ($emails) return $emails;
+    } catch (Throwable $e) {
+        error_log('admin_notify_emails: ' . $e->getMessage());
+    }
+    $from = $CONFIG['smtp']['from_email'] ?? '';
+    return $from ? [$from] : [];
+}
+
+function notify_membership_application(array $app): void
+{
+    global $CONFIG;
+    $siteUrl = rtrim((string)($CONFIG['site']['url'] ?? ''), '/');
+    $applicantEmail = (string)($app['email'] ?? '');
+    $firstName = htmlspecialchars((string)($app['firstName'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $lastName  = htmlspecialchars((string)($app['lastName'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $fullName  = trim($firstName . ' ' . $lastName) ?: htmlspecialchars((string)($app['fullName'] ?? $applicantEmail), ENT_QUOTES, 'UTF-8');
+    $category  = htmlspecialchars((string)($app['category'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $city      = htmlspecialchars((string)($app['city'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $phone     = htmlspecialchars((string)($app['phone'] ?? ''), ENT_QUOTES, 'UTF-8');
+
+    // Ack to the applicant
+    if ($applicantEmail !== '') {
+        $html = "<p>Bonjour $fullName,</p>"
+              . "<p>Nous avons bien reçu votre demande d'adhésion à l'Association des "
+              . "Architectes de Jerba. Elle est maintenant en cours d'examen par le "
+              . "bureau exécutif — vous recevrez une réponse prochainement.</p>"
+              . "<p style='color:#555;font-size:13px'>Récapitulatif :<br>"
+              . "Nom : $fullName<br>"
+              . "Catégorie : $category<br>"
+              . "Ville : $city</p>"
+              . "<p>— L'équipe AAJ</p>";
+        send_mail($applicantEmail, trim($firstName . ' ' . $lastName), "Votre demande d'adhésion à l'AAJ", $html);
+    }
+
+    // Notification to admins
+    $adminUrl = $siteUrl ? ($siteUrl . '/espace-adherents') : '';
+    $htmlAdmin = "<p>Une nouvelle demande d'adhésion vient d'être soumise :</p>"
+               . "<ul>"
+               . "<li><strong>Nom :</strong> $fullName</li>"
+               . "<li><strong>Email :</strong> " . htmlspecialchars($applicantEmail, ENT_QUOTES, 'UTF-8') . "</li>"
+               . "<li><strong>Téléphone :</strong> $phone</li>"
+               . "<li><strong>Catégorie :</strong> $category</li>"
+               . "<li><strong>Ville :</strong> $city</li>"
+               . "</ul>"
+               . ($adminUrl ? "<p><a href=\"$adminUrl\">Traiter la demande dans l'espace adhérents</a></p>" : '');
+    foreach (admin_notify_emails() as $adminEmail) {
+        send_mail($adminEmail, '', "Nouvelle demande d'adhésion AAJ : $fullName", $htmlAdmin);
+    }
+}
+
+function notify_partner_application(array $app): void
+{
+    global $CONFIG;
+    $siteUrl = rtrim((string)($CONFIG['site']['url'] ?? ''), '/');
+    $contactEmail = (string)($app['email'] ?? '');
+    $contactName  = htmlspecialchars((string)($app['contactName'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $company      = htmlspecialchars((string)($app['companyName'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $activity     = htmlspecialchars((string)($app['activity'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $sponsorship  = htmlspecialchars((string)($app['sponsorshipType'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $phone        = htmlspecialchars((string)($app['phone'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $message      = htmlspecialchars((string)($app['message'] ?? ''), ENT_QUOTES, 'UTF-8');
+
+    // Ack to the applicant
+    if ($contactEmail !== '') {
+        $html = "<p>Bonjour $contactName,</p>"
+              . "<p>Nous avons bien reçu votre proposition de partenariat pour $company. "
+              . "Notre équipe vous contactera prochainement pour discuter des prochaines "
+              . "étapes.</p>"
+              . "<p>— L'équipe AAJ</p>";
+        send_mail($contactEmail, $contactName, 'Votre proposition de partenariat AAJ', $html);
+    }
+
+    $adminUrl = $siteUrl ? ($siteUrl . '/espace-adherents') : '';
+    $htmlAdmin = "<p>Nouvelle proposition de partenariat :</p>"
+               . "<ul>"
+               . "<li><strong>Contact :</strong> $contactName</li>"
+               . "<li><strong>Email :</strong> " . htmlspecialchars($contactEmail, ENT_QUOTES, 'UTF-8') . "</li>"
+               . "<li><strong>Téléphone :</strong> $phone</li>"
+               . "<li><strong>Société :</strong> $company</li>"
+               . "<li><strong>Activité :</strong> $activity</li>"
+               . "<li><strong>Type de sponsoring :</strong> $sponsorship</li>"
+               . "</ul>"
+               . ($message !== '' ? "<p><strong>Message :</strong><br>" . nl2br($message) . "</p>" : '')
+               . ($adminUrl ? "<p><a href=\"$adminUrl\">Voir dans l'espace adhérents</a></p>" : '');
+    foreach (admin_notify_emails() as $adminEmail) {
+        send_mail($adminEmail, '', 'Nouvelle proposition de partenariat AAJ', $htmlAdmin);
+    }
+}

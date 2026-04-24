@@ -406,6 +406,9 @@ function build_specs(): array
             }
             return $p;
         },
+        'afterInsert' => function (array $row, array $view, array $payload): void {
+            notify_membership_application($view);
+        },
         'canList' => fn(?array $u) => $u && (is_admin($u) || user_has_permission($u, 'members_manage')),
         'canGet'  => fn(?array $u, array $r) => $u && (is_admin($u) || user_has_permission($u, 'members_manage')),
         'canCreate' => fn(?array $u, array $p) => true,
@@ -447,6 +450,9 @@ function build_specs(): array
         'beforeInsert' => function (array $p): array {
             $p['status'] = $p['status'] ?? 'pending';
             return $p;
+        },
+        'afterInsert' => function (array $row, array $view, array $payload): void {
+            notify_partner_application($view);
         },
         'canList' => fn(?array $u) => $u && (is_admin($u) || user_has_permission($u, 'partners_manage')),
         'canGet'  => fn(?array $u, array $r) => $u && (is_admin($u) || user_has_permission($u, 'partners_manage')),
@@ -844,7 +850,20 @@ function create_one(array $spec): void
 
     $get = db()->prepare("SELECT * FROM `{$spec['table']}` WHERE `$idCol` = ? LIMIT 1");
     $get->execute([$id]);
-    json_response(['item' => ($spec['toView'])($get->fetch())]);
+    $freshRow = $get->fetch();
+    $view = ($spec['toView'])($freshRow);
+
+    // Optional after-insert hook — used for notification emails, audit logging, etc.
+    // Failures are logged but never block the 200 response (the row is already saved).
+    if (isset($spec['afterInsert'])) {
+        try {
+            ($spec['afterInsert'])($freshRow, $view, $payload);
+        } catch (Throwable $e) {
+            error_log('afterInsert hook failed for ' . $spec['table'] . ': ' . $e->getMessage());
+        }
+    }
+
+    json_response(['item' => $view]);
 }
 
 function update_one(array $spec, string $id): void

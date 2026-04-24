@@ -26,6 +26,9 @@ function handle_auth(string $method, array $rest): void
     if ($sub === 'password' && $method === 'POST') {
         auth_password_change(); return;
     }
+    if ($sub === 'test-mail' && $method === 'POST') {
+        auth_test_mail(); return;
+    }
 
     json_error('not_found', 'Endpoint auth inconnu.', 404);
 }
@@ -271,6 +274,71 @@ function auth_create_account(): void
         // fails (spam, SPF/DKIM issues, typo, etc.). The account is
         // `must_reset=1` anyway so this value is only usable for first login.
         'tempPassword' => $tempPassword,
+    ]);
+}
+
+/**
+ * Super-admin SMTP diagnostic. Attempts to send a minimal test email to the
+ * address supplied in the request (or the caller's own email) and returns
+ * whether it worked + any buffered error_log lines. Used from the admin UI
+ * when welcome / reset emails are not arriving.
+ */
+function auth_test_mail(): void
+{
+    global $CONFIG;
+    $actor = require_auth();
+    require_super_admin($actor);
+
+    $body = read_json_body();
+    $to = strtolower(trim((string)($body['to'] ?? $actor['email'] ?? '')));
+    if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        json_error('invalid_email', 'Email destinataire invalide.', 400);
+    }
+
+    // Capture error_log output for the duration of the call so we can
+    // surface SMTP errors back to the admin without digging into cPanel.
+    $buffer = [];
+    $prevHandler = set_error_handler(null);
+    $originalErrorLog = ini_get('error_log');
+    $tmpLog = tempnam(sys_get_temp_dir(), 'aaj-mail-');
+    if ($tmpLog !== false) ini_set('error_log', $tmpLog);
+
+    $t0 = microtime(true);
+    $ok = send_mail(
+        $to,
+        (string)($actor['display_name'] ?? ''),
+        'Test SMTP — Architectes de Jerba',
+        '<p>Ceci est un email de test envoyé depuis l\'espace admin AAJ.</p>'
+        . '<p>Si vous recevez ce message, la configuration SMTP fonctionne.</p>'
+    );
+    $elapsedMs = (int)round((microtime(true) - $t0) * 1000);
+
+    if ($tmpLog !== false) {
+        ini_set('error_log', $originalErrorLog);
+        $raw = @file_get_contents($tmpLog);
+        if ($raw !== false) {
+            foreach (explode("\n", $raw) as $line) {
+                $line = trim($line);
+                if ($line !== '') $buffer[] = $line;
+            }
+        }
+        @unlink($tmpLog);
+    }
+    if ($prevHandler) set_error_handler($prevHandler);
+
+    json_response([
+        'ok'        => $ok,
+        'to'        => $to,
+        'elapsedMs' => $elapsedMs,
+        'smtp'      => [
+            'host'       => (string)($CONFIG['smtp']['host'] ?? ''),
+            'port'       => (int)($CONFIG['smtp']['port'] ?? 0),
+            'encryption' => (string)($CONFIG['smtp']['encryption'] ?? ''),
+            'from_email' => (string)($CONFIG['smtp']['from_email'] ?? ''),
+            'from_name'  => (string)($CONFIG['smtp']['from_name'] ?? ''),
+            'has_password' => !empty($CONFIG['smtp']['password']),
+        ],
+        'log'       => $buffer,
     ]);
 }
 
