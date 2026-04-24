@@ -61,6 +61,12 @@ interface UnescoMapProps {
   marker?: { lat: number; lng: number; label?: string } | null;
   height?: number | string;
   fitKey?: string | number;
+  /**
+   * When set, the map zooms to this bounding box ([minLng, minLat,
+   * maxLng, maxLat]). Used when a legend entry is clicked so the user
+   * jumps straight to that zone. Re-applied whenever the tuple changes.
+   */
+  focusBbox?: [number, number, number, number] | null;
 }
 
 // Djerba's approximate centre — used when the FeatureCollection has no
@@ -75,6 +81,7 @@ export function UnescoMap({
   marker,
   height = 480,
   fitKey,
+  focusBbox,
 }: UnescoMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -112,22 +119,19 @@ export function UnescoMap({
           'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
       }
     );
-    // Labels overlay on top of imagery. CartoDB's "voyager_only_labels"
-    // variant is a transparent raster that ships place names + road labels
-    // with halos for readability — the Esri Reference layer we used first
-    // had very sparse coverage for Djerba. Stays in the default tilePane
-    // so our zone polygons render above it; the polygons' 0.25 fillOpacity
-    // lets labels show through for the Google-Maps-hybrid feel.
-    const hybridLabels = L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',
-      {
-        maxZoom: 20,
-        subdomains: 'abcd',
-        attribution:
-          '&copy; <a href="https://carto.com/attributions">CARTO</a> &mdash; &copy; OpenStreetMap contributors',
-      }
-    );
-    const hybrid = L.layerGroup([imagery, hybridLabels]);
+    // Hybrid overlay — we tried Esri's `World_Boundaries_and_Places` and
+    // CartoDB's `voyager_only_labels` and found both essentially empty
+    // over Djerba at the zoom levels members actually use (the label
+    // rasters return ~200-byte blank tiles). OSM's standard tile set has
+    // the dense labelling we need (roads, villages, neighbourhoods). We
+    // overlay it at 45% opacity on top of imagery so the satellite still
+    // reads through while every place name remains legible.
+    const hybridOsm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      opacity: 0.45,
+      attribution: '&copy; OpenStreetMap contributors',
+    });
+    const hybrid = L.layerGroup([imagery, hybridOsm]);
 
     // Default = Hybride (satellite + labels), matching the Google-Maps
     // satellite experience. Users can switch to plain satellite or OSM.
@@ -252,6 +256,19 @@ export function UnescoMap({
       markerRef.current = m;
     }
   }, [marker?.lat, marker?.lng, marker?.label]);
+
+  // --- focusBbox : zoom on a specific zone when the parent requests it ---
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focusBbox) return;
+    map.fitBounds(
+      [
+        [focusBbox[1], focusBbox[0]],
+        [focusBbox[3], focusBbox[2]],
+      ],
+      { padding: [32, 32], maxZoom: 16 }
+    );
+  }, [focusBbox?.[0], focusBbox?.[1], focusBbox?.[2], focusBbox?.[3]]);
 
   const heightStyle = typeof height === 'number' ? `${height}px` : height;
   return (

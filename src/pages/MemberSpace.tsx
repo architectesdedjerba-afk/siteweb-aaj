@@ -42,6 +42,9 @@ import {
   Landmark,
   MapPinned,
   FileCheck,
+  Pin,
+  PinOff,
+  PanelLeftOpen,
 } from 'lucide-react';
 import {
   // auth API
@@ -190,6 +193,36 @@ export const MemberSpacePage = () => {
     user?.uid ?? null,
     chatModerator
   );
+
+  // Sidebar preference — pinned (default) or auto-hidden behind an overlay.
+  // Persisted in localStorage so the member's choice survives reloads.
+  const [sidebarPinned, setSidebarPinned] = useState<boolean>(true);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('aaj_sidebar_pinned');
+      if (v === 'false') setSidebarPinned(false);
+    } catch {
+      // ignore
+    }
+  }, []);
+  const toggleSidebarPinned = () => {
+    setSidebarPinned((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem('aaj_sidebar_pinned', String(next));
+      } catch {
+        // ignore
+      }
+      if (!next) setSidebarOpen(false);
+      return next;
+    });
+  };
+  // Pick a tab in the sidebar — auto-closes the overlay when unpinned.
+  const selectTab = (id: string) => {
+    setActiveTab(id);
+    if (!sidebarPinned) setSidebarOpen(false);
+  };
 
   const canReviewUnesco =
     isAdmin ||
@@ -1826,9 +1859,74 @@ export const MemberSpacePage = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+          {/* Floating "open menu" button surfaces when the sidebar is
+              auto-hidden (pin released) and currently closed. */}
+          {!sidebarPinned && !sidebarOpen && (
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Ouvrir le menu"
+              className="mb-6 inline-flex items-center gap-2 px-4 py-2 border border-aaj-border rounded text-[10px] uppercase tracking-[2px] font-black text-aaj-dark bg-white hover:bg-slate-50"
+            >
+              <PanelLeftOpen size={14} /> Menu
+            </button>
+          )}
+          {/* Backdrop behind the sliding sidebar when overlaying content. */}
+          {!sidebarPinned && sidebarOpen && (
+            <div
+              onClick={() => setSidebarOpen(false)}
+              className="fixed inset-0 z-40 bg-black/40"
+              aria-hidden="true"
+            />
+          )}
+
+          <div
+            className={
+              sidebarPinned
+                ? 'flex flex-col lg:flex-row gap-8 lg:gap-12 items-start'
+                : 'block'
+            }
+          >
             {/* Sidebar Navigation */}
-            <aside className="lg:col-span-3">
+            <aside
+              className={
+                sidebarPinned
+                  ? 'w-full lg:w-72 lg:shrink-0'
+                  : `fixed top-0 left-0 z-50 h-full w-80 max-w-[85vw] bg-white shadow-2xl overflow-y-auto p-6 transition-transform duration-200 ${
+                      sidebarOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
+                    }`
+              }
+            >
+              <div className="flex items-center justify-between gap-2 mb-5 px-2">
+                <span className="text-[9px] uppercase tracking-[3px] text-aaj-gray font-black">
+                  Navigation
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={toggleSidebarPinned}
+                    title={
+                      sidebarPinned
+                        ? 'Désépingler (masquer automatiquement)'
+                        : 'Épingler le menu'
+                    }
+                    aria-pressed={sidebarPinned}
+                    className="p-1.5 text-aaj-gray hover:text-aaj-royal rounded hover:bg-slate-50"
+                  >
+                    {sidebarPinned ? <PinOff size={14} /> : <Pin size={14} />}
+                  </button>
+                  {!sidebarPinned && (
+                    <button
+                      type="button"
+                      onClick={() => setSidebarOpen(false)}
+                      title="Fermer"
+                      className="p-1.5 text-aaj-gray hover:text-aaj-royal rounded hover:bg-slate-50"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
               <nav className="space-y-1">
                 {[
                   {
@@ -1881,7 +1979,7 @@ export const MemberSpacePage = () => {
                 ].map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => setActiveTab(item.id)}
+                    onClick={() => selectTab(item.id)}
                     className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
                       activeTab === item.id
                         ? 'bg-aaj-dark text-white shadow-lg'
@@ -2022,7 +2120,13 @@ export const MemberSpacePage = () => {
             </aside>
 
             {/* Main Dashboard Grid */}
-            <main className="lg:col-span-9 space-y-12">
+            <main
+              className={
+                sidebarPinned
+                  ? 'flex-1 min-w-0 space-y-12'
+                  : 'w-full min-w-0 space-y-12'
+              }
+            >
               <AnimatePresence mode="wait">
                 {activeTab === 'dashboard' && (
                   <motion.div
