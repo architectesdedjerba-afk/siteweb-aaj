@@ -236,6 +236,54 @@ SQL,
     }
 }
 
+/**
+ * Migration 003 — backfill UNESCO permissions on existing system roles.
+ *
+ * `seed_default_roles_if_missing()` uses INSERT IGNORE, which means
+ * previously-seeded roles keep their original permissions JSON when a
+ * new permission key (here: `unesco_view`, `unesco_permits_submit`) is
+ * added to the code. For the UNESCO feature to be ON by default for
+ * everyone, we need to push the new keys into the persisted permissions
+ * of the `admin`, `representative`, and `member` rows — but ONLY if the
+ * key is missing (so that a super-admin who has explicitly disabled the
+ * permission afterwards keeps their override).
+ *
+ * Idempotent: reading the existing JSON, merging, and writing only when
+ * the merge actually changes something.
+ */
+function migration_003_unesco_default_perms(): void
+{
+    $pdo = db();
+    $keys = ['unesco_view', 'unesco_permits_submit'];
+    $systemRoles = ['admin', 'representative', 'member'];
+
+    $stmt = $pdo->prepare('SELECT id, permissions FROM roles WHERE id = ? LIMIT 1');
+    $update = $pdo->prepare('UPDATE roles SET permissions = :perms WHERE id = :id');
+
+    foreach ($systemRoles as $roleId) {
+        $stmt->execute([$roleId]);
+        $row = $stmt->fetch();
+        if (!$row) continue; // role hasn't been seeded yet; seeder will handle it
+
+        $perms = is_string($row['permissions'])
+            ? (json_decode((string)$row['permissions'], true) ?: [])
+            : (array)$row['permissions'];
+        $changed = false;
+        foreach ($keys as $k) {
+            if (!array_key_exists($k, $perms)) {
+                $perms[$k] = true;
+                $changed = true;
+            }
+        }
+        if ($changed) {
+            $update->execute([
+                ':perms' => json_encode($perms, JSON_UNESCAPED_UNICODE),
+                ':id'    => $roleId,
+            ]);
+        }
+    }
+}
+
 function run_auto_migrations(): void
 {
     try {
@@ -245,6 +293,11 @@ function run_auto_migrations(): void
     }
     try {
         migration_002_unesco_tables();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_003_unesco_default_perms();
     } catch (Throwable $e) {
         // Never break the request if a migration fails; surface in error_log so
         // ops can grep production logs instead of seeing a 500.
