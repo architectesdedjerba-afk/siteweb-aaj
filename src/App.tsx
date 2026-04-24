@@ -16,6 +16,7 @@ import { MembershipApplicationPage } from "./pages/MembershipApplication";
 import { PartnerApplicationPage } from "./pages/PartnerApplication";
 import { ResetPasswordPage } from "./pages/ResetPassword";
 import { LegalNoticePage } from "./pages/LegalNotice";
+import { NotFoundPage } from "./pages/NotFound";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { CookieBanner } from "./components/CookieBanner";
@@ -54,6 +55,12 @@ export default function App() {
           <AuthProvider>
             <BrowserRouter>
             <ScrollToTop />
+            <a
+              href="#main-content"
+              className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[200] focus:bg-aaj-dark focus:text-white focus:px-6 focus:py-3 focus:text-[11px] focus:font-black focus:uppercase focus:tracking-[3px]"
+            >
+              Aller au contenu principal
+            </a>
             <div className="flex flex-col min-h-screen selection:bg-aaj-royal selection:text-white bg-white">
               <Navbar />
               <main id="main-content" className="grow" tabIndex={-1}>
@@ -68,6 +75,7 @@ export default function App() {
                   <Route path="/devenir-partenaire" element={<PartnerApplicationPage />} />
                   <Route path="/reset-password" element={<ResetPasswordPage />} />
                   <Route path="/mentions-legales" element={<LegalNoticePage />} />
+                  <Route path="*" element={<NotFoundPage />} />
                 </Routes>
               </main>
               <Footer />

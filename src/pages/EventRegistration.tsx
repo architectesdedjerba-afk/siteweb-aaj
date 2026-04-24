@@ -139,7 +139,7 @@ export const EventRegistrationPage = () => {
                 required
               />
               {errors.fullName && (
-                <p id="er-name-err" className="text-xs text-red-600">
+                <p id="er-name-err" role="alert" className="text-xs text-aaj-error font-bold">
                   {errors.fullName}
                 </p>
               )}
@@ -163,7 +163,7 @@ export const EventRegistrationPage = () => {
                 required
               />
               {errors.email && (
-                <p id="er-email-err" className="text-xs text-red-600">
+                <p id="er-email-err" role="alert" className="text-xs text-aaj-error font-bold">
                   {errors.email}
                 </p>
               )}

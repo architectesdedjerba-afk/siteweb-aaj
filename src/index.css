@@ -8,7 +8,8 @@
   --color-aaj-dark: #0A192F;
   --color-aaj-royal: #0047AB;
   --color-aaj-soft: #E6F0FF;
-  --color-aaj-gray: #505F79;
+  --color-aaj-gray: #3F4A5C; /* WCAG AAA ~8.7:1 on white */
+  --color-aaj-gray-light: #6B7689; /* placeholders / tertiary text */
   --color-aaj-border: #D8E2EF;
 
   --color-aaj-success: #059669;
@@ -80,5 +81,41 @@
     overflow: visible;
     clip: auto;
     white-space: normal;
+  }
+
+  /* Skeleton loading shimmer */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: #E6F0FF;
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.7),
+      transparent
+    );
+    animation: skeleton-shimmer 1.6s infinite;
+  }
+  @keyframes skeleton-shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  /* Reveal on scroll base (paired with JS or IntersectionObserver) */
+  .reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
