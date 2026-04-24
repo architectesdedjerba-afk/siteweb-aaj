@@ -39,6 +39,9 @@ import {
   KeyRound,
   Search,
   MessagesSquare,
+  Landmark,
+  MapPinned,
+  FileCheck,
 } from 'lucide-react';
 import {
   // auth API
@@ -89,6 +92,10 @@ import { SearchableSelect } from '../components/SearchableSelect';
 import { ChatPage } from '../components/chat/ChatPage';
 import { ChannelApprovals } from '../components/chat/ChannelApprovals';
 import { useChatBadge } from '../lib/useChat';
+import { UnescoMemberView } from '../components/unesco/UnescoMemberView';
+import { UnescoAdminParams } from '../components/unesco/UnescoAdminParams';
+import { UnescoAdminPermits } from '../components/unesco/UnescoAdminPermits';
+import { api as apiClient } from '../lib/api';
 
 export const MemberSpacePage = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -181,6 +188,33 @@ export const MemberSpacePage = () => {
     user?.uid ?? null,
     chatModerator
   );
+
+  const canReviewUnesco =
+    isAdmin ||
+    userRole?.permissions?.unesco_manage === true ||
+    userRole?.permissions?.unesco_permits_review === true;
+  const [unescoPendingReview, setUnescoPendingReview] = useState(0);
+  useEffect(() => {
+    if (!user || !canReviewUnesco) {
+      setUnescoPendingReview(0);
+      return;
+    }
+    let cancelled = false;
+    const fetchCounts = () => {
+      apiClient.unesco
+        .statusCounts()
+        .then((r) => {
+          if (!cancelled) setUnescoPendingReview(r.pendingReview);
+        })
+        .catch(() => {});
+    };
+    fetchCounts();
+    const iv = setInterval(fetchCounts, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, [user, canReviewUnesco]);
 
   const profileFileInputRef = useRef<HTMLInputElement>(null);
   const libraryFileInputRef = useRef<HTMLInputElement>(null);
@@ -1837,6 +1871,16 @@ export const MemberSpacePage = () => {
                     label: 'Annuaire des Membres',
                     badge: 0,
                   },
+                  ...(can('unesco_view')
+                    ? [
+                        {
+                          id: 'unesco',
+                          icon: <Landmark size={18} />,
+                          label: 'Djerba UNESCO',
+                          badge: 0,
+                        },
+                      ]
+                    : []),
                   { id: 'settings', icon: <Settings size={18} />, label: 'Mon Profil', badge: 0 },
                 ].map((item) => (
                   <button
@@ -1930,6 +1974,19 @@ export const MemberSpacePage = () => {
                     label: 'Modération Discussions',
                     perm: 'chat_manage',
                     badge: chatPendingApprovals,
+                  },
+                  {
+                    id: 'admin-unesco',
+                    icon: <MapPinned size={18} />,
+                    label: 'Paramètres UNESCO',
+                    perm: 'unesco_manage',
+                  },
+                  {
+                    id: 'admin-unesco-permits',
+                    icon: <FileCheck size={18} />,
+                    label: 'Instruction UNESCO',
+                    perm: 'unesco_permits_review',
+                    badge: unescoPendingReview,
                   },
                 ].filter((item) => can(item.perm));
 
@@ -4551,6 +4608,40 @@ export const MemberSpacePage = () => {
                     )}
                   </motion.div>
                 )}
+
+                {activeTab === 'unesco' && can('unesco_view') && (
+                  <motion.div
+                    key="unesco"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                  >
+                    <UnescoMemberView canSubmit={can('unesco_permits_submit') || isAdmin} />
+                  </motion.div>
+                )}
+
+                {activeTab === 'admin-unesco' && can('unesco_manage') && (
+                  <motion.div
+                    key="admin-unesco"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                  >
+                    <UnescoAdminParams />
+                  </motion.div>
+                )}
+
+                {activeTab === 'admin-unesco-permits' &&
+                  (can('unesco_permits_review') || can('unesco_manage')) && (
+                    <motion.div
+                      key="admin-unesco-permits"
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                    >
+                      <UnescoAdminPermits />
+                    </motion.div>
+                  )}
               </AnimatePresence>
             </main>
           </div>

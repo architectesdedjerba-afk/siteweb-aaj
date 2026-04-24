@@ -81,6 +81,11 @@ try {
         handle_files($method, array_slice($segments, 1));
     }
 
+    if ($root === 'unesco') {
+        require __DIR__ . '/endpoints/unesco.php';
+        handle_unesco($method, array_slice($segments, 1));
+    }
+
     json_error('not_found', 'Endpoint inconnu.', 404);
 } catch (PDOException $e) {
     error_log('[api-db] ' . $e->getMessage());
