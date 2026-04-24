@@ -22,16 +22,6 @@ coverage/
 .env.production.local
 !.env.example
 
-# Firebase (legacy — kept while the migration export runs)
-.firebase/
-firebase-debug.log
-firebase-debug.*.log
-firestore-debug.log
-ui-debug.log
-serviceAccount.json
-serviceAccount*.json
-firebase-export.json
-
 # cPanel backend secrets & uploaded files
 api/config.php
 api/uploads-storage/*

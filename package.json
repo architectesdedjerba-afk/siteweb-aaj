@@ -13,9 +13,7 @@
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\"",
-    "typecheck": "tsc --noEmit",
-    "migrate:export": "node scripts/export-firebase.mjs",
-    "migrate:import": "node scripts/import-to-cpanel.mjs"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
@@ -29,7 +27,6 @@
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
-    "firebase-admin": "^13.0.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.18.0",
