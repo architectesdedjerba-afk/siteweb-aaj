@@ -68,7 +68,7 @@ export function ChatFloatingWidget() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         style={{ bottom: `${bottom}px` }}
-        className="fixed right-6 z-40 w-14 h-14 rounded-full bg-aaj-royal text-white shadow-2xl hover:bg-aaj-dark active:scale-95 transition-all flex items-center justify-center group"
+        className="fixed right-6 z-[1100] w-14 h-14 rounded-full bg-aaj-royal text-white shadow-2xl hover:bg-aaj-dark active:scale-95 transition-all flex items-center justify-center group"
         aria-label={open ? 'Fermer la messagerie' : 'Ouvrir la messagerie'}
       >
         <AnimatePresence mode="wait" initial={false}>
@@ -114,7 +114,10 @@ export function ChatFloatingWidget() {
             exit={{ opacity: 0, y: 24, scale: 0.96 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
             className={[
-              'fixed z-40 bg-white shadow-2xl border border-aaj-border overflow-hidden flex flex-col',
+              // z-[1100] keeps the popup above Leaflet map panes/controls
+              // (Leaflet defaults: panes 200-650, controls 1000) and the
+              // project's standard z-[100]/[200] modal layer.
+              'fixed z-[1100] bg-white shadow-2xl border border-aaj-border overflow-hidden flex flex-col',
               // Mobile: full-screen sheet
               'inset-0 rounded-none',
               // Desktop: anchored just above the FAB (bottom-6 + 56px FAB + 16px gap = 96px)
