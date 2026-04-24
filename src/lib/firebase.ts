@@ -178,10 +178,7 @@ export async function createUserWithEmailAndPassword(
  * omitted — the backend waives the check because the user already proved
  * they knew the temp password to reach this point.
  */
-export async function changePassword(
-  newPassword: string,
-  currentPassword?: string
-): Promise<User> {
+export async function changePassword(newPassword: string, currentPassword?: string): Promise<User> {
   const res = await api.changePassword(newPassword, currentPassword);
   auth.setUser(res.user);
   return toUser(res.user);

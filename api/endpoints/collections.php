@@ -352,35 +352,47 @@ function build_specs(): array
         'orderBy' => ['created_at', 'DESC'],
         'toView' => fn(array $r) => [
             'id' => $r['id'],
-            'fullName' => $r['full_name'], 'email' => $r['email'], 'phone' => $r['phone'],
+            'fullName' => $r['full_name'],
+            'firstName' => $r['first_name'] ?? null,
+            'lastName' => $r['last_name'] ?? null,
+            'email' => $r['email'], 'phone' => $r['phone'],
             'category' => $r['category'], 'matricule' => $r['matricule'], 'city' => $r['city'],
+            'birthDate' => $r['birth_date'] ?? null,
+            'memberTypeLetter' => $r['member_type_letter'] ?? null,
             'cvFileName' => $r['cv_file_name'],
             'status' => $r['status'],
             'createdAt' => iso_datetime($r['created_at']),
         ],
         'toRow' => function (array $p) {
             $row = [];
-            if (array_key_exists('fullName', $p))   $row['full_name'] = $p['fullName'];
-            if (array_key_exists('email', $p))      $row['email'] = $p['email'];
-            if (array_key_exists('phone', $p))      $row['phone'] = $p['phone'];
-            if (array_key_exists('category', $p))   $row['category'] = $p['category'];
-            if (array_key_exists('matricule', $p))  $row['matricule'] = $p['matricule'];
-            if (array_key_exists('city', $p))       $row['city'] = $p['city'];
-            if (array_key_exists('cvFileName', $p)) $row['cv_file_name'] = $p['cvFileName'];
-            if (array_key_exists('status', $p))     $row['status'] = $p['status'];
+            if (array_key_exists('fullName', $p))         $row['full_name'] = $p['fullName'];
+            if (array_key_exists('firstName', $p))        $row['first_name'] = $p['firstName'];
+            if (array_key_exists('lastName', $p))         $row['last_name'] = $p['lastName'];
+            if (array_key_exists('email', $p))            $row['email'] = $p['email'];
+            if (array_key_exists('phone', $p))            $row['phone'] = $p['phone'];
+            if (array_key_exists('category', $p))         $row['category'] = $p['category'];
+            if (array_key_exists('matricule', $p))        $row['matricule'] = $p['matricule'];
+            if (array_key_exists('city', $p))             $row['city'] = $p['city'];
+            if (array_key_exists('birthDate', $p))        $row['birth_date'] = $p['birthDate'];
+            if (array_key_exists('memberTypeLetter', $p)) $row['member_type_letter'] = $p['memberTypeLetter'];
+            if (array_key_exists('cvFileName', $p))       $row['cv_file_name'] = $p['cvFileName'];
+            if (array_key_exists('status', $p))           $row['status'] = $p['status'];
             return $row;
         },
         'validateCreate' => function (array $p): void {
-            foreach (['fullName','email','phone','category','matricule','city'] as $k) {
+            foreach (['firstName','lastName','email','phone','category','city','birthDate','memberTypeLetter'] as $k) {
                 if (empty($p[$k]) || !is_string($p[$k])) json_error('invalid_input', "Champ requis : $k", 400);
             }
             if (!filter_var($p['email'], FILTER_VALIDATE_EMAIL)) json_error('invalid_email', 'Email invalide.', 400);
-            if (!is_string($p['category']) || $p['category'] === '' || strlen($p['category']) > 100) {
-                json_error('invalid_category', 'Catégorie invalide.', 400);
-            }
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $p['birthDate'])) json_error('invalid_birthdate', 'Date de naissance invalide.', 400);
+            if (strlen($p['memberTypeLetter']) !== 1) json_error('invalid_member_type', 'Type de membre invalide.', 400);
         },
         'beforeInsert' => function (array $p): array {
             $p['status'] = $p['status'] ?? 'pending';
+            // Derive fullName server-side so the admin list keeps working with a single display field.
+            if (empty($p['fullName']) && (!empty($p['firstName']) || !empty($p['lastName']))) {
+                $p['fullName'] = trim(($p['firstName'] ?? '') . ' ' . ($p['lastName'] ?? ''));
+            }
             return $p;
         },
         'canList' => fn(?array $u) => $u && (is_admin($u) || user_has_permission($u, 'members_manage')),
