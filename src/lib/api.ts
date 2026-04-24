@@ -68,21 +68,28 @@ export const api = {
     }),
   createAccount: (payload: {
     email: string;
-    password: string;
     displayName?: string;
     firstName?: string;
     lastName?: string;
     role?: string;
     status?: string;
     category?: string;
+    memberType?: string;
+    memberTypeLetter?: string;
+    birthDate?: string;
     licenseNumber?: string;
     mobile?: string;
     address?: string;
     cotisations?: Record<string, any>;
   }) =>
-    http<{ ok: true; user: any }>('/auth/accounts', {
+    http<{ ok: true; user: any; emailSent: boolean }>('/auth/accounts', {
       method: 'POST',
       body: JSON.stringify(payload),
+    }),
+  changePassword: (newPassword: string, currentPassword?: string) =>
+    http<{ ok: true; user: any }>('/auth/password', {
+      method: 'POST',
+      body: JSON.stringify({ password: newPassword, currentPassword }),
     }),
 
   // ---- collections ----

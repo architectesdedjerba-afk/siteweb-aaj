@@ -33,6 +33,7 @@ export interface UserProfile {
   email: string;
   role: UserRole;
   status: UserStatus;
+  mustReset?: boolean;
   category?: MemberCategory | string;
   memberType?: string; // label from config/memberTypes
   memberTypeLetter?: string; // letter used in matricule AAJ

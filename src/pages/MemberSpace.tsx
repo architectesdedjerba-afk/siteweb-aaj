@@ -46,6 +46,8 @@ import {
   sendPasswordResetEmail,
   onAuthStateChanged,
   signOut,
+  changePassword,
+  adminCreateAccount,
   type User,
   // firestore-shaped API
   doc,
@@ -155,6 +157,12 @@ export const MemberSpacePage = () => {
     type: 'success' | 'error';
     text: string;
   } | null>(null);
+
+  // Forced password change on first login (admin-issued temp password).
+  const [forcePwdForm, setForcePwdForm] = useState({ password: '', confirm: '' });
+  const [forcePwdError, setForcePwdError] = useState<string | null>(null);
+  const [forcePwdSubmitting, setForcePwdSubmitting] = useState(false);
+  const mustChangePassword = Boolean(userProfile?.mustReset);
 
   const isSuperAdmin = userProfile?.role === 'super-admin' || userRole?.isAllAccess === true;
   const isAdmin = userProfile?.role === 'admin' || isSuperAdmin;
@@ -569,6 +577,36 @@ export const MemberSpacePage = () => {
       alert('Erreur lors de la mise à jour de la photo.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleForcedPasswordChange = async (e: FormEvent) => {
+    e.preventDefault();
+    setForcePwdError(null);
+    if (forcePwdForm.password.length < 6) {
+      setForcePwdError('Le mot de passe doit contenir au moins 6 caractères.');
+      return;
+    }
+    if (forcePwdForm.password !== forcePwdForm.confirm) {
+      setForcePwdError('Les mots de passe ne correspondent pas.');
+      return;
+    }
+    setForcePwdSubmitting(true);
+    try {
+      await changePassword(forcePwdForm.password);
+      // Refresh local profile state immediately; AuthContext + the users/{uid}
+      // subscription will also pick up `mustReset = false` on next tick.
+      setUserProfile((prev: any) => (prev ? { ...prev, mustReset: false } : prev));
+      setForcePwdForm({ password: '', confirm: '' });
+    } catch (err: any) {
+      console.error('Forced password change failed:', err);
+      setForcePwdError(
+        err?.code === 'weak_password'
+          ? 'Le mot de passe doit contenir au moins 6 caractères.'
+          : 'Impossible de modifier le mot de passe. Veuillez réessayer.'
+      );
+    } finally {
+      setForcePwdSubmitting(false);
     }
   };
 
@@ -1121,13 +1159,11 @@ export const MemberSpacePage = () => {
       const typeEntry = memberTypesList.find((t) => t.letter === newMember.memberTypeLetter);
       const memberTypeLabel = typeEntry?.label || newMember.category;
 
-      const memberId = `member_${Date.now()}`;
-      await setDoc(doc(db, 'users', memberId), {
-        uid: memberId,
+      const { emailSent } = await adminCreateAccount({
+        email: newMember.email,
+        displayName: `${newMember.firstName} ${newMember.lastName}`.trim(),
         firstName: newMember.firstName,
         lastName: newMember.lastName,
-        displayName: `${newMember.firstName} ${newMember.lastName}`,
-        email: newMember.email,
         mobile: newMember.phone,
         category: memberTypeLabel,
         memberType: memberTypeLabel,
@@ -1137,9 +1173,12 @@ export const MemberSpacePage = () => {
         address: newMember.city,
         role: 'member',
         status: 'active',
-        createdAt: serverTimestamp(),
       });
-      alert(`Membre ajouté avec succès ! Matricule: ${matricule}`);
+      alert(
+        emailSent
+          ? `Membre ajouté avec succès ! Matricule : ${matricule}.\nUn email contenant le mot de passe temporaire a été envoyé à ${newMember.email}.`
+          : `Membre ajouté avec succès ! Matricule : ${matricule}.\nATTENTION : l'email de bienvenue n'a pas pu être envoyé. Demandez une réinitialisation de mot de passe.`
+      );
       setIsAddMemberModalOpen(false);
       setNewMember({
         firstName: '',
@@ -1441,6 +1480,90 @@ export const MemberSpacePage = () => {
   if (user) {
     return (
       <div className="pt-16 min-h-screen bg-white">
+        {mustChangePassword && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-aaj-dark/95 backdrop-blur-sm" />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="relative bg-white w-full max-w-md shadow-2xl rounded overflow-hidden"
+            >
+              <div className="p-8 border-b border-aaj-border bg-slate-50">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 bg-aaj-soft rounded flex items-center justify-center text-aaj-royal flex-shrink-0 border border-aaj-royal/10">
+                    <KeyRound size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black uppercase tracking-tight text-aaj-dark">
+                      Changement de mot de passe requis
+                    </h3>
+                    <p className="text-[11px] text-aaj-gray font-bold uppercase tracking-widest mt-2 leading-relaxed">
+                      Votre mot de passe temporaire doit être remplacé avant de continuer.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <form onSubmit={handleForcedPasswordChange} className="p-8 space-y-6">
+                {forcePwdError && (
+                  <div className="p-4 bg-red-50 text-red-600 rounded border border-red-100 text-[11px] font-bold uppercase tracking-wider flex items-center gap-3">
+                    <XCircle size={16} />
+                    {forcePwdError}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1">
+                    Nouveau mot de passe
+                  </label>
+                  <input
+                    type="password"
+                    value={forcePwdForm.password}
+                    onChange={(e) => setForcePwdForm({ ...forcePwdForm, password: e.target.value })}
+                    minLength={6}
+                    required
+                    autoFocus
+                    className="w-full bg-slate-50 border border-aaj-border rounded px-5 py-4 focus:outline-none focus:ring-1 focus:ring-aaj-royal focus:bg-white transition-all text-sm font-medium"
+                    placeholder="••••••••"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1">
+                    Confirmer le mot de passe
+                  </label>
+                  <input
+                    type="password"
+                    value={forcePwdForm.confirm}
+                    onChange={(e) => setForcePwdForm({ ...forcePwdForm, confirm: e.target.value })}
+                    minLength={6}
+                    required
+                    className="w-full bg-slate-50 border border-aaj-border rounded px-5 py-4 focus:outline-none focus:ring-1 focus:ring-aaj-royal focus:bg-white transition-all text-sm font-medium"
+                    placeholder="••••••••"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={forcePwdSubmitting}
+                  className="w-full bg-aaj-dark text-white py-4 rounded font-black uppercase tracking-[3px] text-xs hover:bg-aaj-royal transition-all active:scale-[0.98] flex items-center justify-center gap-3"
+                >
+                  {forcePwdSubmitting ? (
+                    <Loader2 className="animate-spin" size={20} />
+                  ) : (
+                    <>
+                      <Save size={16} />
+                      Enregistrer et continuer
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="w-full text-[10px] font-black uppercase tracking-[3px] text-aaj-gray hover:text-aaj-dark transition-colors py-2"
+                >
+                  Se déconnecter
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
         <div className="max-w-7xl mx-auto px-6 py-12">
           {/* Header Dashboard */}
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 pb-8 border-b border-aaj-border">

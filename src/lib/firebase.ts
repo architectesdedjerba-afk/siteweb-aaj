@@ -21,6 +21,7 @@ export type User = {
   uid: string;
   email: string | null;
   displayName: string | null;
+  mustReset?: boolean;
   emailVerified?: boolean;
   isAnonymous?: boolean;
   providerData?: Array<{
@@ -104,6 +105,7 @@ function toUser(profile: any): User {
     uid: profile.uid,
     email: profile.email ?? null,
     displayName: profile.displayName || composed || null,
+    mustReset: Boolean(profile.mustReset),
     emailVerified: true,
     isAnonymous: false,
     providerData: [],
@@ -157,15 +159,57 @@ export async function confirmPasswordReset(
 /**
  * In Firestore land this creates an auth user. In our world, only
  * administrators with `accounts.create` can do this via /auth/accounts,
- * which does NOT log the new user in. Returns a credential-shaped result.
+ * which does NOT log the new user in. The backend always generates the
+ * password itself and emails it to the new user, so the `password` arg
+ * below is ignored — kept for call-site compatibility.
  */
 export async function createUserWithEmailAndPassword(
   _auth: AuthState,
   email: string,
-  password: string
+  _password: string
 ): Promise<{ user: User }> {
-  const res = await api.createAccount({ email, password });
+  const res = await api.createAccount({ email });
   return { user: toUser(res.user) };
+}
+
+/**
+ * Change the current user's password. When the account is flagged
+ * `must_reset` (admin-issued temp password), `currentPassword` can be
+ * omitted — the backend waives the check because the user already proved
+ * they knew the temp password to reach this point.
+ */
+export async function changePassword(newPassword: string, currentPassword?: string): Promise<User> {
+  const res = await api.changePassword(newPassword, currentPassword);
+  auth.setUser(res.user);
+  return toUser(res.user);
+}
+
+/**
+ * Admin path: create a new member account. The backend generates a temp
+ * password, emails it to the new user, and flags `must_reset = 1` so the
+ * user is forced to choose a new password on first login.
+ *
+ * Returns `{ user, emailSent }` — `emailSent` is false when the SMTP call
+ * fails so the caller can surface a fallback message.
+ */
+export async function adminCreateAccount(payload: {
+  email: string;
+  displayName?: string;
+  firstName?: string;
+  lastName?: string;
+  role?: string;
+  status?: string;
+  category?: string;
+  memberType?: string;
+  memberTypeLetter?: string;
+  birthDate?: string;
+  licenseNumber?: string;
+  mobile?: string;
+  address?: string;
+  cotisations?: Record<string, any>;
+}): Promise<{ user: User; emailSent: boolean }> {
+  const res = await api.createAccount(payload);
+  return { user: toUser(res.user), emailSent: res.emailSent };
 }
 
 export function onAuthStateChanged(_auth: AuthState, cb: AuthListener): () => void {
