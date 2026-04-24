@@ -112,19 +112,22 @@ export function UnescoMap({
           'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
       }
     );
-    // Labels + roads overlays on top of imagery. Stays in the default
-    // tilePane (below overlayPane) so our zone polygons render above the
-    // labels. Since polygons use a 0.25 fillOpacity, labels still show
-    // through — the exact feel of Google Maps' satellite-with-labels.
+    // Labels overlay on top of imagery. CartoDB's "voyager_only_labels"
+    // variant is a transparent raster that ships place names + road labels
+    // with halos for readability — the Esri Reference layer we used first
+    // had very sparse coverage for Djerba. Stays in the default tilePane
+    // so our zone polygons render above it; the polygons' 0.25 fillOpacity
+    // lets labels show through for the Google-Maps-hybrid feel.
     const hybridLabels = L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-      { maxZoom: 19 }
+      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',
+      {
+        maxZoom: 20,
+        subdomains: 'abcd',
+        attribution:
+          '&copy; <a href="https://carto.com/attributions">CARTO</a> &mdash; &copy; OpenStreetMap contributors',
+      }
     );
-    const hybridRoads = L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
-      { maxZoom: 19 }
-    );
-    const hybrid = L.layerGroup([imagery, hybridRoads, hybridLabels]);
+    const hybrid = L.layerGroup([imagery, hybridLabels]);
 
     // Default = Hybride (satellite + labels), matching the Google-Maps
     // satellite experience. Users can switch to plain satellite or OSM.

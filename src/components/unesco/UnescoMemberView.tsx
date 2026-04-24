@@ -232,6 +232,9 @@ function MapTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sources.map((s) => s.id).join(',')]);
 
+  // Source ids actually published today (server filters `is_active = 1`).
+  const activeSourceIds = useMemo(() => new Set(sources.map((s) => s.id)), [sources]);
+
   const filteredGeojson = useMemo<UnescoGeoJson | null>(() => {
     if (!geojson) return null;
     if (sources.length <= 1) return geojson;
@@ -244,11 +247,17 @@ function MapTab({
     };
   }, [geojson, enabledSourceIds, sources.length]);
 
+  // Legend mirrors exactly what's drawn on the map: visible zones whose
+  // source is both active on the server AND toggled on in the multi-select
+  // (if any).
   const visibleZones = useMemo(() => {
-    const kept = zones.filter((z) => z.isVisible !== false);
-    if (sources.length <= 1) return kept;
-    return kept.filter((z) => enabledSourceIds.has(z.kmzSourceId));
-  }, [zones, sources.length, enabledSourceIds]);
+    return zones.filter((z) => {
+      if (z.isVisible === false) return false;
+      if (!activeSourceIds.has(z.kmzSourceId)) return false;
+      if (sources.length > 1 && !enabledSourceIds.has(z.kmzSourceId)) return false;
+      return true;
+    });
+  }, [zones, activeSourceIds, enabledSourceIds, sources.length]);
 
   const isEmpty = !geojson || geojson.features.length === 0;
 
