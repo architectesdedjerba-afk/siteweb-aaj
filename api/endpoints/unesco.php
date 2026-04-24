@@ -252,6 +252,7 @@ function unesco_geojson(): void
 
     $features = [];
     $bbox = null;
+    $sourceSummaries = [];
     foreach ($sources as $src) {
         $geojsonPath = (string)($src['geojson_path'] ?? '');
         if ($geojsonPath === '') continue;
@@ -262,6 +263,7 @@ function unesco_geojson(): void
         $fc = json_decode($raw, true);
         if (!is_array($fc) || empty($fc['features'])) continue;
 
+        $kept = 0;
         foreach ($fc['features'] as $feat) {
             $props = $feat['properties'] ?? [];
             $fk = (string)($props['_featureKey'] ?? '');
@@ -276,19 +278,31 @@ function unesco_geojson(): void
                 $props['externalUrl'] = $zone['external_url'];
             }
             $props['kmzSourceId'] = $src['id'];
+            $props['kmzSourceTitle'] = $src['title'];
             $feat['properties'] = $props;
             $features[] = $feat;
+            $kept++;
         }
 
         if (!empty($fc['bbox'])) {
             $bbox = bbox_merge($bbox, $fc['bbox']);
         }
+
+        $sourceSummaries[] = [
+            'id' => $src['id'],
+            'title' => $src['title'],
+            'description' => $src['description'] ?? null,
+            'featureCount' => $kept,
+            'sortOrder' => (int)($src['sort_order'] ?? 0),
+            'bbox' => !empty($fc['bbox']) ? $fc['bbox'] : null,
+        ];
     }
 
     json_response([
         'type' => 'FeatureCollection',
         'features' => $features,
         'bbox' => $bbox,
+        'sources' => $sourceSummaries,
     ]);
 }
 

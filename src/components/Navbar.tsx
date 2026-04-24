@@ -5,15 +5,27 @@
 
 import { Link, useLocation } from "react-router-dom";
 import { UserCircle, Menu, X } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useI18n } from "../lib/i18n";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 
 export const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
   const { t } = useI18n();
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    setIsOpen(false);
+  }, [location.pathname]);
 
   const navLinks = [
     { name: t("nav.home"), path: "/" },
@@ -23,7 +35,14 @@ export const Navbar = () => {
   ];
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-white/70 backdrop-blur-lg h-16 border-b border-aaj-border" aria-label="Navigation principale">
+    <nav
+      className={`fixed top-0 left-0 right-0 z-50 h-16 border-b transition-all duration-300 ${
+        scrolled
+          ? "bg-white/90 backdrop-blur-lg border-aaj-border shadow-sm"
+          : "bg-white/70 backdrop-blur-lg border-transparent"
+      }`}
+      aria-label="Navigation principale"
+    >
       <div className="max-w-7xl mx-auto px-6 h-full">
         <div className="flex justify-between items-center h-full">
           <Link to="/" className="flex items-center gap-1 group" aria-label="Accueil AAJ">

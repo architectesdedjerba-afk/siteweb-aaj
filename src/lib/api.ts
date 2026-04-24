@@ -170,6 +170,14 @@ export const api = {
           geometry: { type: string; coordinates: any };
         }>;
         bbox: [number, number, number, number] | null;
+        sources: Array<{
+          id: string;
+          title: string;
+          description: string | null;
+          featureCount: number;
+          sortOrder: number;
+          bbox: [number, number, number, number] | null;
+        }>;
       }>('/unesco/geojson'),
 
     listKmzSources: () => http<{ items: UnescoKmzSource[] }>('/unesco/kmz-sources'),
@@ -262,6 +270,15 @@ export const api = {
 };
 
 // ---- UNESCO types ----
+export interface UnescoGeoJsonSource {
+  id: string;
+  title: string;
+  description: string | null;
+  featureCount: number;
+  sortOrder: number;
+  bbox: [number, number, number, number] | null;
+}
+
 export interface UnescoKmzSource {
   id: string;
   title: string;

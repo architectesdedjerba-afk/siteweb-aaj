@@ -44,6 +44,14 @@ export interface UnescoGeoJson {
     geometry: { type: string; coordinates: any };
   }>;
   bbox: [number, number, number, number] | null;
+  sources?: Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    featureCount: number;
+    sortOrder: number;
+    bbox: [number, number, number, number] | null;
+  }>;
 }
 
 interface UnescoMapProps {
@@ -90,11 +98,13 @@ export function UnescoMap({
       scrollWheelZoom: true,
     });
 
+    // Plan (OSM)
     const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
     });
-    const esri = L.tileLayer(
+    // Satellite imagery (Esri World Imagery)
+    const imagery = L.tileLayer(
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       {
         maxZoom: 19,
@@ -102,8 +112,30 @@ export function UnescoMap({
           'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
       }
     );
-    osm.addTo(map);
-    L.control.layers({ Plan: osm, Satellite: esri }, {}, { position: 'topright' }).addTo(map);
+    // Labels + roads overlays on top of imagery. Stays in the default
+    // tilePane (below overlayPane) so our zone polygons render above the
+    // labels. Since polygons use a 0.25 fillOpacity, labels still show
+    // through — the exact feel of Google Maps' satellite-with-labels.
+    const hybridLabels = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 19 }
+    );
+    const hybridRoads = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 19 }
+    );
+    const hybrid = L.layerGroup([imagery, hybridRoads, hybridLabels]);
+
+    // Default = Hybride (satellite + labels), matching the Google-Maps
+    // satellite experience. Users can switch to plain satellite or OSM.
+    hybrid.addTo(map);
+    L.control
+      .layers(
+        { Hybride: hybrid, Satellite: imagery, Plan: osm },
+        {},
+        { position: 'topright' }
+      )
+      .addTo(map);
 
     map.on('click', (e: L.LeafletMouseEvent) => {
       // Don't fire `onPick` when the click landed on a zone (the zone
@@ -169,8 +201,13 @@ export function UnescoMap({
         }`;
         lyr.bindTooltip(tooltip, { direction: 'top', sticky: true });
         lyr.on('click', (e) => {
-          // Don't let the map-level click fire too.
-          L.DomEvent.stopPropagation(e);
+          // Halt both Leaflet's own event and the underlying DOM event so
+          // document-level listeners (e.g. the ZonePopup click-outside
+          // handler) don't fire when the user switches from one zone to
+          // another.
+          L.DomEvent.stopPropagation(e as unknown as Event);
+          const oe = (e as unknown as { originalEvent?: MouseEvent }).originalEvent;
+          if (oe && typeof oe.stopPropagation === 'function') oe.stopPropagation();
           zoneHandlerRef.current?.(props);
         });
       },

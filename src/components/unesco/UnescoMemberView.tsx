@@ -28,8 +28,11 @@ import {
   Pencil,
   PlusCircle,
   ChevronRight,
+  ChevronDown,
   Paperclip,
   MapPin,
+  Layers,
+  CheckCheck,
 } from 'lucide-react';
 import {
   api,
@@ -40,7 +43,10 @@ import {
 } from '../../lib/api';
 import { UnescoMap, type UnescoGeoJson } from './UnescoMap';
 import {
+  DJERBA_MUNICIPALITIES,
   DOCUMENT_CATEGORIES,
+  LAND_TYPES,
+  PERMIT_MAIN_UPLOAD_SLOTS,
   StatusBadge,
   documentCategoryLabel,
   formatDateTime,
@@ -213,13 +219,51 @@ function MapTab({
   docsById: Record<string, UnescoDocument>;
 }) {
   const [selected, setSelected] = useState<Record<string, any> | null>(null);
+  const sources = geojson?.sources ?? [];
+  // `enabledSourceIds` defaults to "all active" and is re-initialised on
+  // every sources-list change. Users toggle individual KMZ files via the
+  // checkbox dropdown; unchecking a file hides its zones on the map.
+  const [enabledSourceIds, setEnabledSourceIds] = useState<Set<string>>(
+    () => new Set(sources.map((s) => s.id))
+  );
+  useEffect(() => {
+    setEnabledSourceIds(new Set(sources.map((s) => s.id)));
+    // We intentionally re-sync on sources ID set change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sources.map((s) => s.id).join(',')]);
 
-  const visibleZones = useMemo(() => zones.filter((z) => z.isVisible !== false), [zones]);
+  const filteredGeojson = useMemo<UnescoGeoJson | null>(() => {
+    if (!geojson) return null;
+    if (sources.length <= 1) return geojson;
+    return {
+      ...geojson,
+      features: geojson.features.filter((f) => {
+        const sid = f.properties?.kmzSourceId as string | undefined;
+        return !sid || enabledSourceIds.has(sid);
+      }),
+    };
+  }, [geojson, enabledSourceIds, sources.length]);
+
+  const visibleZones = useMemo(() => {
+    const kept = zones.filter((z) => z.isVisible !== false);
+    if (sources.length <= 1) return kept;
+    return kept.filter((z) => enabledSourceIds.has(z.kmzSourceId));
+  }, [zones, sources.length, enabledSourceIds]);
+
   const isEmpty = !geojson || geojson.features.length === 0;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
       <div className="lg:col-span-3">
+        {sources.length > 1 && (
+          <div className="mb-4">
+            <KmzMultiSelect
+              sources={sources}
+              enabled={enabledSourceIds}
+              onChange={setEnabledSourceIds}
+            />
+          </div>
+        )}
         {isEmpty ? (
           <div className="border border-aaj-border rounded p-8 text-center bg-slate-50">
             <Info className="mx-auto text-aaj-gray mb-3" size={24} />
@@ -230,7 +274,12 @@ function MapTab({
           </div>
         ) : (
           <div className="relative">
-            <UnescoMap geojson={geojson} onZoneClick={(props) => setSelected(props)} height={520} />
+            <UnescoMap
+              geojson={filteredGeojson}
+              onZoneClick={(props) => setSelected(props)}
+              height={520}
+              fitKey={Array.from(enabledSourceIds).sort().join(',')}
+            />
             {selected && (
               <ZonePopup props={selected} docsById={docsById} onClose={() => setSelected(null)} />
             )}
@@ -269,6 +318,100 @@ function MapTab({
   );
 }
 
+/**
+ * Small dropdown that lets the member choose which KMZ files are layered on
+ * the map. Only surfaces when 2+ sources exist — a single source needs no
+ * toggle.
+ */
+function KmzMultiSelect({
+  sources,
+  enabled,
+  onChange,
+}: {
+  sources: NonNullable<UnescoGeoJson['sources']>;
+  enabled: Set<string>;
+  onChange: (next: Set<string>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      if (!containerRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  const toggle = (id: string) => {
+    const next = new Set(enabled);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange(next);
+  };
+  const allOn = () => onChange(new Set(sources.map((s) => s.id)));
+  const allOff = () => onChange(new Set());
+
+  const total = sources.length;
+  const checked = sources.filter((s) => enabled.has(s.id)).length;
+
+  return (
+    <div ref={containerRef} className="relative inline-block text-left">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-2 px-3 py-2 border border-aaj-border text-[10px] uppercase tracking-[2px] font-black rounded bg-white hover:bg-slate-50"
+      >
+        <Layers size={14} />
+        Cartes affichées ({checked}/{total})
+        <ChevronDown size={14} />
+      </button>
+      {open && (
+        <div className="absolute z-[500] mt-1 w-72 border border-aaj-border bg-white shadow-lg rounded overflow-hidden">
+          <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-aaj-border bg-slate-50">
+            <button
+              type="button"
+              onClick={allOn}
+              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[2px] font-black text-aaj-royal hover:underline"
+            >
+              <CheckCheck size={12} /> Tout cocher
+            </button>
+            <button
+              type="button"
+              onClick={allOff}
+              className="text-[10px] uppercase tracking-[2px] font-black text-aaj-gray hover:text-aaj-dark hover:underline"
+            >
+              Tout décocher
+            </button>
+          </div>
+          <ul className="max-h-72 overflow-y-auto divide-y divide-aaj-border">
+            {sources.map((s) => (
+              <li key={s.id}>
+                <label className="flex items-start gap-3 px-3 py-2.5 hover:bg-slate-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enabled.has(s.id)}
+                    onChange={() => toggle(s.id)}
+                    className="mt-1"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold truncate">{s.title}</p>
+                    <p className="text-[10px] uppercase tracking-[2px] text-aaj-gray mt-0.5">
+                      {s.featureCount} zone{s.featureCount > 1 ? 's' : ''}
+                    </p>
+                  </div>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ZonePopup({
   props,
   docsById,
@@ -285,8 +428,32 @@ function ZonePopup({
   const external = typeof props.externalUrl === 'string' ? props.externalUrl : null;
   const doc = docId ? docsById[docId] : null;
 
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // Close the popup on any click outside its frame, or on Escape. The
+  // listener is registered AFTER the mount, so the very click that opened
+  // the popup can't reach here. Zone polygons call stopPropagation on the
+  // original DOM event so picking a different zone swaps the content
+  // instead of closing → reopening.
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!panelRef.current) return;
+      if (!panelRef.current.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
   return (
     <div
+      ref={panelRef}
       role="dialog"
       aria-modal="false"
       className="absolute top-4 right-4 z-[500] max-w-sm w-[calc(100%-2rem)] border border-aaj-border bg-white shadow-2xl rounded overflow-hidden"
@@ -623,23 +790,42 @@ function PermitForm({
   onCancel: () => void;
   onSaved: (permit: UnescoPermit) => Promise<void> | void;
 }) {
+  // `parcelNumber` doubles as the land-type flag ("Zone urbaine" /
+  // "Zone agricole") — stored in the existing column to avoid a schema
+  // migration.
+  const initialLandType =
+    initial?.parcelNumber && LAND_TYPES.some((l) => l.key === initial.parcelNumber)
+      ? initial.parcelNumber
+      : '';
+
   const [form, setForm] = useState({
     title: initial?.title ?? '',
-    projectRef: initial?.projectRef ?? '',
     description: initial?.description ?? '',
     address: initial?.address ?? '',
     city: initial?.city ?? '',
-    parcelNumber: initial?.parcelNumber ?? '',
+    landType: initialLandType,
     projectType: initial?.projectType ?? '',
     surfaceSqm: initial?.surfaceSqm?.toString() ?? '',
     floorsCount: initial?.floorsCount?.toString() ?? '',
     latitude: initial?.latitude ?? null,
     longitude: initial?.longitude ?? null,
   });
+
+  // 3 mandatory slots (architecture / topography / property deed). Each
+  // slot accepts exactly one file, staged locally and uploaded on save.
+  const [slotFiles, setSlotFiles] = useState<Record<string, File | null>>({
+    architecture: null,
+    topography: null,
+    property_deed: null,
+  });
+  // Extra free-form attachments.
+  const [otherFiles, setOtherFiles] = useState<File[]>([]);
+
+  const slotInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const otherInputRef = useRef<HTMLInputElement | null>(null);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [files, setFiles] = useState<File[]>([]);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const zonesById = useMemo(() => {
     const m: Record<string, UnescoZone> = {};
@@ -649,8 +835,7 @@ function PermitForm({
 
   const autoZone = useMemo(() => {
     if (!geojson || form.latitude === null || form.longitude === null) return null;
-    // Do a client-side point-in-polygon hint only for UX — the server is
-    // authoritative and will recompute on save.
+    // Client-side point-in-polygon hint only — server recomputes at save.
     for (const feat of geojson.features) {
       if (pointInGeometry(feat.geometry, form.longitude, form.latitude)) {
         const zid = feat.properties.zoneId as string | undefined;
@@ -667,6 +852,45 @@ function PermitForm({
     setForm((prev) => ({ ...prev, latitude: c.lat, longitude: c.lng }));
   };
 
+  // Look up which of the existing attachments fill each main slot so the
+  // UI can show "déjà joint" next to the upload control.
+  const existingByKind = useMemo(() => {
+    const m: Record<string, UnescoPermit['files'][number] | undefined> = {};
+    if (initial) {
+      for (const f of initial.files) {
+        if (!m[f.kind]) m[f.kind] = f;
+      }
+    }
+    return m;
+  }, [initial]);
+
+  const uploadAndReplaceSlot = async (
+    permitId: string,
+    kind: string,
+    file: File
+  ): Promise<UnescoPermit | null> => {
+    // If a file already exists for this slot, detach it first so we only
+    // ever keep one architecture / topography / deed at a time.
+    const existing = existingByKind[kind];
+    let latest: UnescoPermit | null = null;
+    if (existing) {
+      try {
+        const r = await api.unesco.detachPermitFile(permitId, existing.id);
+        latest = r.item;
+      } catch (e) {
+        console.error('Détachement de l\'ancien fichier échoué', e);
+      }
+    }
+    const up = await api.uploadFile(file, 'unesco_permits', 'private');
+    const { item } = await api.unesco.attachPermitFile(permitId, {
+      fileId: up.id,
+      title: file.name,
+      kind,
+    });
+    latest = item;
+    return latest;
+  };
+
   const handleSubmit = async (submitToReview: boolean) => {
     setError(null);
     if (!form.title.trim()) {
@@ -677,11 +901,11 @@ function PermitForm({
     try {
       const payload = {
         title: form.title.trim(),
-        projectRef: form.projectRef || undefined,
         description: form.description || undefined,
         address: form.address || undefined,
         city: form.city || undefined,
-        parcelNumber: form.parcelNumber || undefined,
+        // Re-use the `parcelNumber` column to store the land type.
+        parcelNumber: form.landType || undefined,
         projectType: form.projectType || undefined,
         surfaceSqm: form.surfaceSqm ? Number(form.surfaceSqm) : undefined,
         floorsCount: form.floorsCount ? Number(form.floorsCount) : undefined,
@@ -698,21 +922,30 @@ function PermitForm({
         result = item;
       }
 
-      // Upload any newly-selected files, attach them to the permit.
-      if (files.length > 0) {
-        for (const f of files) {
-          try {
-            const up = await api.uploadFile(f, 'unesco_permits', 'private');
-            const { item } = await api.unesco.attachPermitFile(result.id, {
-              fileId: up.id,
-              title: f.name,
-            });
-            result = item;
-          } catch (e) {
-            // Surface upload errors but don't block the workflow — the
-            // permit has been created already.
-            console.error('Upload pièce jointe échouée', e);
-          }
+      // Upload the main 3 slots, each with its specific `kind`.
+      for (const slot of PERMIT_MAIN_UPLOAD_SLOTS) {
+        const file = slotFiles[slot.kind];
+        if (!file) continue;
+        try {
+          const updated = await uploadAndReplaceSlot(result.id, slot.kind, file);
+          if (updated) result = updated;
+        } catch (e) {
+          console.error('Upload ' + slot.label + ' échoué', e);
+        }
+      }
+
+      // Upload additional files as generic attachments.
+      for (const f of otherFiles) {
+        try {
+          const up = await api.uploadFile(f, 'unesco_permits', 'private');
+          const { item } = await api.unesco.attachPermitFile(result.id, {
+            fileId: up.id,
+            title: f.name,
+            kind: 'attachment',
+          });
+          result = item;
+        } catch (e) {
+          console.error('Upload pièce jointe échouée', e);
         }
       }
 
@@ -734,7 +967,7 @@ function PermitForm({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-xl font-black uppercase tracking-tight">
-            {initial ? 'Modifier la demande' : 'Nouvelle demande UNESCO'}
+            {initial ? 'Modifier la demande INP' : 'Nouvelle demande INP'}
           </h3>
           <p className="text-xs text-aaj-gray mt-1">
             Les champs marqués d'un astérisque sont obligatoires.
@@ -760,26 +993,15 @@ function PermitForm({
               placeholder="Ex. Réhabilitation maison Ben Ayed"
             />
           </Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Référence projet">
-              <input
-                type="text"
-                value={form.projectRef}
-                onChange={(e) => update('projectRef', e.target.value)}
-                className="w-full px-3 py-2 border border-aaj-border text-sm rounded"
-                placeholder="Ex. 2026-001"
-              />
-            </Field>
-            <Field label="Type de projet">
-              <input
-                type="text"
-                value={form.projectType}
-                onChange={(e) => update('projectType', e.target.value)}
-                className="w-full px-3 py-2 border border-aaj-border text-sm rounded"
-                placeholder="Réhabilitation, construction…"
-              />
-            </Field>
-          </div>
+          <Field label="Type de projet">
+            <input
+              type="text"
+              value={form.projectType}
+              onChange={(e) => update('projectType', e.target.value)}
+              className="w-full px-3 py-2 border border-aaj-border text-sm rounded"
+              placeholder="Réhabilitation, construction…"
+            />
+          </Field>
           <Field label="Description">
             <textarea
               value={form.description}
@@ -790,7 +1012,7 @@ function PermitForm({
             />
           </Field>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Surface (m²)">
+            <Field label="Surface couverte totale (m²)">
               <input
                 type="number"
                 step="0.01"
@@ -820,22 +1042,53 @@ function PermitForm({
                 className="w-full px-3 py-2 border border-aaj-border text-sm rounded"
               />
             </Field>
-            <Field label="Ville">
-              <input
-                type="text"
+            <Field label="Municipalité">
+              <select
                 value={form.city}
                 onChange={(e) => update('city', e.target.value)}
-                className="w-full px-3 py-2 border border-aaj-border text-sm rounded"
-              />
+                className="w-full px-3 py-2 border border-aaj-border text-sm rounded bg-white"
+              >
+                <option value="">— Choisir —</option>
+                {DJERBA_MUNICIPALITIES.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
             </Field>
           </div>
-          <Field label="Numéro de parcelle">
-            <input
-              type="text"
-              value={form.parcelNumber}
-              onChange={(e) => update('parcelNumber', e.target.value)}
-              className="w-full px-3 py-2 border border-aaj-border text-sm rounded"
-            />
+          <Field label="Type de terrain">
+            <div
+              role="radiogroup"
+              aria-label="Type de terrain"
+              className="flex flex-wrap gap-2"
+            >
+              {LAND_TYPES.map((lt) => {
+                const active = form.landType === lt.key;
+                return (
+                  <button
+                    key={lt.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => update('landType', active ? '' : lt.key)}
+                    className={`inline-flex items-center gap-2 px-3 py-2 text-[11px] uppercase tracking-[2px] font-black rounded border ${
+                      active
+                        ? 'bg-aaj-dark text-white border-aaj-dark'
+                        : 'bg-white text-aaj-gray border-aaj-border hover:bg-slate-50'
+                    }`}
+                  >
+                    <span
+                      aria-hidden
+                      className={`inline-block w-3 h-3 rounded-sm border ${
+                        active ? 'bg-white border-white' : 'border-aaj-border'
+                      }`}
+                    />
+                    {lt.label}
+                  </button>
+                );
+              })}
+            </div>
           </Field>
           <Field label="Localisation sur la carte (cliquez pour placer l'épingle)">
             <UnescoMap
@@ -871,31 +1124,106 @@ function PermitForm({
       </div>
 
       <div>
-        <h4 className="text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-2">
-          Pièces jointes (plans, photos, PDF)
+        <h4 className="text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-3">
+          Pièces obligatoires
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {PERMIT_MAIN_UPLOAD_SLOTS.map((slot) => {
+            const pending = slotFiles[slot.kind];
+            const existing = existingByKind[slot.kind];
+            const filled = Boolean(pending || existing);
+            return (
+              <div
+                key={slot.kind}
+                className={`border rounded p-4 ${
+                  filled ? 'border-aaj-royal bg-slate-50' : 'border-dashed border-aaj-border'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-[10px] uppercase tracking-[2px] font-black text-aaj-royal">
+                    {slot.label}
+                  </p>
+                  {filled && <CheckCheck size={14} className="text-aaj-royal" />}
+                </div>
+                <p className="text-[11px] text-aaj-gray mt-1 leading-snug">{slot.hint}</p>
+
+                {pending && (
+                  <div className="mt-3 flex items-center justify-between gap-2 text-xs">
+                    <span className="inline-flex items-center gap-1.5 text-aaj-dark truncate">
+                      <Paperclip size={12} />
+                      {pending.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSlotFiles((prev) => ({ ...prev, [slot.kind]: null }))
+                      }
+                      className="text-red-600 hover:underline"
+                    >
+                      Retirer
+                    </button>
+                  </div>
+                )}
+                {!pending && existing && (
+                  <p className="mt-3 text-xs text-aaj-gray">
+                    <Paperclip size={12} className="inline mr-1" />
+                    Déjà joint : {existing.title || existing.originalName}
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => slotInputRefs.current[slot.kind]?.click()}
+                  className="mt-3 inline-flex items-center gap-2 px-3 py-2 border border-aaj-border text-[10px] uppercase tracking-[2px] font-black rounded hover:bg-white bg-white"
+                >
+                  <Upload size={12} />
+                  {existing || pending ? 'Remplacer' : 'Téléverser'}
+                </button>
+                <input
+                  ref={(el) => {
+                    slotInputRefs.current[slot.kind] = el;
+                  }}
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f)
+                      setSlotFiles((prev) => ({ ...prev, [slot.kind]: f }));
+                    e.target.value = '';
+                  }}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <h4 className="text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-3">
+          Autres pièces (optionnel)
         </h4>
         <div className="border border-dashed border-aaj-border rounded p-4">
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => otherInputRef.current?.click()}
             className="inline-flex items-center gap-2 px-3 py-2 border border-aaj-border text-[10px] uppercase tracking-[2px] font-black rounded hover:bg-slate-50"
           >
             <Upload size={14} /> Ajouter un fichier
           </button>
           <input
-            ref={fileInputRef}
+            ref={otherInputRef}
             type="file"
             className="hidden"
             multiple
             onChange={(e) => {
               const sel = Array.from(e.target.files ?? []);
-              setFiles((prev) => [...prev, ...sel]);
+              setOtherFiles((prev) => [...prev, ...sel]);
               e.target.value = '';
             }}
           />
-          {files.length > 0 && (
+          {otherFiles.length > 0 && (
             <ul className="mt-3 space-y-1 text-xs">
-              {files.map((f, i) => (
+              {otherFiles.map((f, i) => (
                 <li key={i} className="flex items-center justify-between gap-3">
                   <span className="inline-flex items-center gap-2">
                     <Paperclip size={12} />
@@ -903,7 +1231,7 @@ function PermitForm({
                   </span>
                   <button
                     type="button"
-                    onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                    onClick={() => setOtherFiles((prev) => prev.filter((_, idx) => idx !== i))}
                     className="text-red-600 hover:underline"
                   >
                     Retirer

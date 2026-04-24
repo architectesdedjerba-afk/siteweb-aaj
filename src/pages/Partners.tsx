@@ -46,8 +46,19 @@ export const PartnersPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {categories.map((cat, idx) => {
              const colors = idx === 0 ? "bg-aaj-dark" : idx === 1 ? "bg-aaj-royal" : "bg-aaj-gray";
+             const featured = idx === 1;
              return (
-              <div key={idx} className="flex flex-col h-full border border-aaj-border group hover:border-aaj-royal transition-all rounded overflow-hidden">
+              <div
+                key={idx}
+                className={`flex flex-col h-full border group hover:border-aaj-royal transition-all rounded overflow-hidden ${
+                  featured ? "border-aaj-royal shadow-xl md:-translate-y-2" : "border-aaj-border"
+                }`}
+              >
+                {featured && (
+                  <div className="bg-aaj-royal text-white text-center py-2 text-[9px] uppercase tracking-[3px] font-black">
+                    Recommandé
+                  </div>
+                )}
                 <div className={`${colors} p-10 text-white text-center flex flex-col items-center`}>
                   {cat.icon}
                   <span className="block text-[10px] uppercase tracking-[3px] font-black opacity-70 mb-2">{cat.name}</span>
@@ -57,11 +68,18 @@ export const PartnersPage = () => {
                   <ul className="space-y-4 mb-10 flex-1">
                     {cat.benefits.map((benefit, bIdx) => (
                       <li key={bIdx} className="text-[11px] flex gap-3 text-aaj-gray font-bold uppercase tracking-wider">
-                        <span className="text-aaj-royal">/</span> {benefit}
+                        <span className="text-aaj-royal" aria-hidden="true">/</span> {benefit}
                       </li>
                     ))}
                   </ul>
-                  <Link to="/devenir-partenaire" className="w-full border border-aaj-border py-4 rounded text-[10px] font-black uppercase tracking-[2px] hover:bg-aaj-dark hover:text-white transition-all text-center">
+                  <Link
+                    to="/devenir-partenaire"
+                    className={`w-full py-4 rounded text-[10px] font-black uppercase tracking-[2px] transition-all text-center ${
+                      featured
+                        ? "bg-aaj-royal text-white hover:bg-aaj-dark"
+                        : "border border-aaj-border hover:bg-aaj-dark hover:text-white hover:border-aaj-dark"
+                    }`}
+                  >
                     Nous Contacter
                   </Link>
                 </div>
@@ -72,12 +90,18 @@ export const PartnersPage = () => {
 
         <div className="mt-32">
           <h2 className="text-[12px] uppercase tracking-[2px] text-aaj-gray font-bold mb-12 flex items-center gap-4">
-             Ils nous font confiance <span className="flex-1 h-px bg-aaj-border"></span>
+             Ils nous font confiance <span className="flex-1 h-px bg-aaj-border" aria-hidden="true"></span>
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-12 opacity-30 grayscale hover:grayscale-0 transition-all duration-700">
-            {[1, 2, 3, 4, 5].map(i => (
-              <div key={i} className="h-16 bg-slate-100 flex items-center justify-center border border-dashed border-slate-300 rounded">
-                <span className="text-[10px] font-bold text-slate-400">LOGO PARTENAIRE</span>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div
+                key={i}
+                className="aspect-[3/2] bg-slate-50 flex items-center justify-center border border-aaj-border rounded hover:border-aaj-royal hover:bg-white transition-all"
+                aria-hidden="true"
+              >
+                <span className="text-[9px] uppercase tracking-[3px] font-black text-aaj-gray-light">
+                  À venir
+                </span>
               </div>
             ))}
           </div>
