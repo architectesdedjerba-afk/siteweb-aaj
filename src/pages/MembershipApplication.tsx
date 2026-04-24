@@ -4,9 +4,9 @@
  */
 
 import { motion } from 'motion/react';
-import { ArrowLeft, CheckCircle2, Loader2, Upload } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Loader2, Upload, Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { addDoc, collection, serverTimestamp, db } from '../lib/firebase';
 import { useToast } from '../lib/toast';
 import {
@@ -18,14 +18,22 @@ import {
   required,
   ValidationErrors,
 } from '../lib/validation';
-import type { MemberCategory } from '../types';
+import {
+  DEFAULT_MEMBER_TYPES,
+  DEFAULT_VILLES,
+  loadMemberTypes,
+  loadVilles,
+  type MemberType,
+} from '../lib/memberConfig';
+import { SearchableSelect } from '../components/SearchableSelect';
 
 interface FormState {
-  fullName: string;
+  firstName: string;
+  lastName: string;
   phone: string;
   email: string;
-  category: MemberCategory;
-  matricule: string;
+  birthDate: string;
+  memberTypeLetter: string;
   city: string;
   cvFileName: string;
 }
@@ -34,22 +42,39 @@ export const MembershipApplicationPage = () => {
   const toast = useToast();
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [villesList, setVillesList] = useState<string[]>(DEFAULT_VILLES);
+  const [memberTypesList, setMemberTypesList] = useState<MemberType[]>(DEFAULT_MEMBER_TYPES);
   const [form, setForm] = useState<FormState>({
-    fullName: '',
+    firstName: '',
+    lastName: '',
     phone: '',
     email: '',
-    category: 'Architecte',
-    matricule: '',
+    birthDate: '',
+    memberTypeLetter: 'A',
     city: '',
     cvFileName: '',
   });
   const [errors, setErrors] = useState<ValidationErrors<FormState>>({});
 
+  useEffect(() => {
+    loadVilles()
+      .then(setVillesList)
+      .catch(() => setVillesList(DEFAULT_VILLES));
+    loadMemberTypes()
+      .then(setMemberTypesList)
+      .catch(() => setMemberTypesList(DEFAULT_MEMBER_TYPES));
+  }, []);
+
+  const selectedType = memberTypesList.find((t) => t.letter === form.memberTypeLetter);
+  const categoryLabel = selectedType?.label || 'Architecte';
+
   const validate = (f: FormState): ValidationErrors<FormState> => ({
-    fullName: first(required(f.fullName, 'Nom complet'), maxLength(f.fullName, 200)),
+    firstName: first(required(f.firstName, 'Prénom'), maxLength(f.firstName, 100)),
+    lastName: first(required(f.lastName, 'Nom'), maxLength(f.lastName, 100)),
     phone: first(required(f.phone, 'Téléphone'), vPhone(f.phone)),
     email: first(required(f.email, 'Email'), vEmail(f.email)),
-    matricule: required(f.matricule, 'Matricule'),
+    birthDate: required(f.birthDate, 'Date de naissance'),
+    memberTypeLetter: required(f.memberTypeLetter, 'Type de membre'),
     city: required(f.city, 'Ville'),
   });
 
@@ -64,11 +89,14 @@ export const MembershipApplicationPage = () => {
     setSubmitting(true);
     try {
       await addDoc(collection(db, 'membership_applications'), {
-        fullName: form.fullName,
+        firstName: form.firstName,
+        lastName: form.lastName,
+        fullName: `${form.firstName} ${form.lastName}`.trim(),
         phone: form.phone,
         email: form.email,
-        category: form.category,
-        matricule: form.matricule,
+        birthDate: form.birthDate,
+        memberTypeLetter: form.memberTypeLetter,
+        category: categoryLabel,
         city: form.city,
         cvFileName: form.cvFileName,
         status: 'pending',
@@ -136,29 +164,53 @@ export const MembershipApplicationPage = () => {
           noValidate
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+            {/* Informations Personnelles */}
             <div className="space-y-6">
               <h2 className="text-[10px] uppercase font-black tracking-[4px] text-aaj-royal mb-8 border-b border-aaj-border pb-2">
                 Informations Personnelles
               </h2>
-              <div className="space-y-2">
-                <label
-                  htmlFor="ma-name"
-                  className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1"
-                >
-                  Nom Complet
-                </label>
-                <input
-                  id="ma-name"
-                  type="text"
-                  value={form.fullName}
-                  onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-                  aria-invalid={!!errors.fullName}
-                  className="w-full bg-white border border-aaj-border px-6 py-4 focus:outline-none focus:ring-1 focus:ring-aaj-royal transition-all text-sm font-medium"
-                  placeholder="Prénom Nom"
-                  required
-                />
-                {errors.fullName && <p className="text-xs text-red-600">{errors.fullName}</p>}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label
+                    htmlFor="ma-first"
+                    className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1"
+                  >
+                    Prénom
+                  </label>
+                  <input
+                    id="ma-first"
+                    type="text"
+                    value={form.firstName}
+                    onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                    aria-invalid={!!errors.firstName}
+                    className="w-full bg-white border border-aaj-border px-4 py-4 focus:outline-none focus:ring-1 focus:ring-aaj-royal transition-all text-sm font-medium"
+                    placeholder="Prénom"
+                    required
+                  />
+                  {errors.firstName && <p className="text-xs text-red-600">{errors.firstName}</p>}
+                </div>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="ma-last"
+                    className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1"
+                  >
+                    Nom
+                  </label>
+                  <input
+                    id="ma-last"
+                    type="text"
+                    value={form.lastName}
+                    onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                    aria-invalid={!!errors.lastName}
+                    className="w-full bg-white border border-aaj-border px-4 py-4 focus:outline-none focus:ring-1 focus:ring-aaj-royal transition-all text-sm font-medium"
+                    placeholder="Nom"
+                    required
+                  />
+                  {errors.lastName && <p className="text-xs text-red-600">{errors.lastName}</p>}
+                </div>
               </div>
+
               <div className="space-y-2">
                 <label
                   htmlFor="ma-phone"
@@ -178,6 +230,7 @@ export const MembershipApplicationPage = () => {
                 />
                 {errors.phone && <p className="text-xs text-red-600">{errors.phone}</p>}
               </div>
+
               <div className="space-y-2">
                 <label
                   htmlFor="ma-email"
@@ -197,8 +250,28 @@ export const MembershipApplicationPage = () => {
                 />
                 {errors.email && <p className="text-xs text-red-600">{errors.email}</p>}
               </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="ma-birth"
+                  className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1"
+                >
+                  Date de Naissance
+                </label>
+                <input
+                  id="ma-birth"
+                  type="date"
+                  value={form.birthDate}
+                  onChange={(e) => setForm({ ...form, birthDate: e.target.value })}
+                  aria-invalid={!!errors.birthDate}
+                  className="w-full bg-white border border-aaj-border px-6 py-4 focus:outline-none focus:ring-1 focus:ring-aaj-royal transition-all text-sm font-medium"
+                  required
+                />
+                {errors.birthDate && <p className="text-xs text-red-600">{errors.birthDate}</p>}
+              </div>
             </div>
 
+            {/* Profil Professionnel */}
             <div className="space-y-6">
               <h2 className="text-[10px] uppercase font-black tracking-[4px] text-aaj-royal mb-8 border-b border-aaj-border pb-2">
                 Profil Professionnel
@@ -206,43 +279,24 @@ export const MembershipApplicationPage = () => {
 
               <div className="space-y-2">
                 <label
-                  htmlFor="ma-cat"
+                  htmlFor="ma-type"
                   className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1"
                 >
-                  Catégorie
+                  Type de Membre
                 </label>
                 <select
-                  id="ma-cat"
-                  value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value as MemberCategory })}
+                  id="ma-type"
+                  value={form.memberTypeLetter}
+                  onChange={(e) => setForm({ ...form, memberTypeLetter: e.target.value })}
                   className="w-full bg-white border border-aaj-border px-6 py-4 focus:outline-none focus:ring-1 focus:ring-aaj-royal transition-all text-sm font-bold uppercase tracking-widest cursor-pointer"
                   required
                 >
-                  <option value="Architecte">Architecte</option>
-                  <option value="Architecte Stagiaire">Architecte Stagiaire</option>
+                  {memberTypesList.map((t) => (
+                    <option key={t.letter} value={t.letter}>
+                      {t.label} ({t.letter})
+                    </option>
+                  ))}
                 </select>
-              </div>
-
-              <div className="space-y-2">
-                <label
-                  htmlFor="ma-matric"
-                  className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1"
-                >
-                  {form.category === 'Architecte'
-                    ? "Numéro de matricule de l'ordre"
-                    : 'Numéro de matricule étudiant'}
-                </label>
-                <input
-                  id="ma-matric"
-                  type="text"
-                  value={form.matricule}
-                  onChange={(e) => setForm({ ...form, matricule: e.target.value })}
-                  aria-invalid={!!errors.matricule}
-                  className="w-full bg-white border border-aaj-border px-6 py-4 focus:outline-none focus:ring-1 focus:ring-aaj-royal transition-all text-sm font-medium"
-                  placeholder={form.category === 'Architecte' ? 'Ex: 1234/TN' : 'Ex: ETU-7890'}
-                  required
-                />
-                {errors.matricule && <p className="text-xs text-red-600">{errors.matricule}</p>}
               </div>
 
               <div className="space-y-2">
@@ -252,20 +306,30 @@ export const MembershipApplicationPage = () => {
                 >
                   Ville de Résidence
                 </label>
-                <input
+                <SearchableSelect
                   id="ma-city"
-                  type="text"
                   value={form.city}
-                  onChange={(e) => setForm({ ...form, city: e.target.value })}
-                  aria-invalid={!!errors.city}
-                  className="w-full bg-white border border-aaj-border px-6 py-4 focus:outline-none focus:ring-1 focus:ring-aaj-royal transition-all text-sm font-medium"
-                  placeholder="Ex: Houmt Souk"
+                  onChange={(v) => setForm({ ...form, city: v })}
+                  options={villesList}
+                  placeholder="Sélectionner une délégation"
                   required
                 />
                 {errors.city && <p className="text-xs text-red-600">{errors.city}</p>}
               </div>
 
-              <div className="space-y-2 pt-4">
+              <div className="bg-white border border-aaj-border/70 p-4 rounded flex items-start gap-3">
+                <Info
+                  size={16}
+                  className="text-aaj-royal mt-0.5 flex-shrink-0"
+                  aria-hidden="true"
+                />
+                <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-tight leading-relaxed">
+                  Votre matricule AAJ sera attribué automatiquement par l'administration lors de la
+                  validation de votre demande.
+                </p>
+              </div>
+
+              <div className="space-y-2 pt-2">
                 <label
                   htmlFor="ma-cv"
                   className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1 mb-2 block"
