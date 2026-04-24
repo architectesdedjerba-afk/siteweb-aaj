@@ -195,22 +195,40 @@ function build_specs(): array
     ];
 
     // ---------------- commission_pvs ----------------
+    ensure_column('commission_pvs', 'files', 'JSON NULL');
     $specs['commission_pvs'] = [
         'table' => 'commission_pvs',
         'idColumn' => 'id',
         'orderBy' => ['created_at', 'DESC'],
-        'toView' => fn(array $r) => [
-            'id' => $r['id'],
-            'town' => $r['town'], 'date' => $r['date'], 'count' => (int)$r['count'],
-            'fileBase64' => $r['file_url'], 'fileName' => $r['file_name'],
-            'createdAt' => iso_datetime($r['created_at']),
-        ],
+        'toView' => function (array $r) {
+            $files = [];
+            if (!empty($r['files'])) {
+                $decoded = json_decode((string)$r['files'], true);
+                if (is_array($decoded)) $files = array_values(array_filter($decoded, 'is_array'));
+            }
+            return [
+                'id' => $r['id'],
+                'town' => $r['town'],
+                'date' => $r['date'],
+                'count' => (int)$r['count'],
+                'files' => $files,
+                // Backward-compat for rows created before the multi-file migration.
+                'fileBase64' => $r['file_url'] ?? '',
+                'fileName' => $r['file_name'] ?? '',
+                'createdAt' => iso_datetime($r['created_at']),
+            ];
+        },
         'toRow' => function (array $p) {
             $row = [];
             foreach (['town','date'] as $k) if (array_key_exists($k, $p)) $row[$k] = $p[$k];
             if (array_key_exists('count', $p))      $row['count'] = (int)$p['count'];
-            if (array_key_exists('fileBase64', $p)) $row['file_url'] = $p['fileBase64'];
-            if (array_key_exists('fileName', $p))   $row['file_name'] = $p['fileName'];
+            if (array_key_exists('fileBase64', $p)) $row['file_url'] = (string)$p['fileBase64'];
+            if (array_key_exists('fileName', $p))   $row['file_name'] = (string)$p['fileName'];
+            if (array_key_exists('files', $p)) {
+                $row['files'] = is_array($p['files'])
+                    ? json_encode(array_values($p['files']), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                    : null;
+            }
             return $row;
         },
         'canList' => fn(?array $u) => $u && (is_admin($u) || ($u['status'] === 'active')),

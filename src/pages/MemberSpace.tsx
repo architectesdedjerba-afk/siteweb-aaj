@@ -257,13 +257,19 @@ export const MemberSpacePage = () => {
   const pvFileInputRef = useRef<HTMLInputElement>(null);
 
   const [newNews, setNewNews] = useState({ title: '', content: '', fileBase64: '', fileName: '' });
-  const [newPV, setNewPV] = useState({
+  type PVFile = { id: string; url: string; name: string; type: string };
+  const [newPV, setNewPV] = useState<{
+    town: string;
+    date: string;
+    count: string;
+    files: PVFile[];
+  }>({
     town: 'Houmt Souk',
     date: '',
     count: '0',
-    fileBase64: '',
-    fileName: '',
+    files: [],
   });
+  const [pvUploading, setPvUploading] = useState(false);
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -891,18 +897,21 @@ export const MemberSpacePage = () => {
   const handleAddPV = async (e: FormEvent) => {
     e.preventDefault();
     if (!can('commissions_create')) return;
-    if (!newPV.fileBase64) {
-      alert('Veuillez sélectionner un fichier PV.');
+    if (newPV.files.length === 0) {
+      alert('Veuillez sélectionner au moins un fichier (image ou PDF).');
       return;
     }
     setIsSaving(true);
     try {
       await addDoc(collection(db, 'commission_pvs'), {
-        ...newPV,
+        town: newPV.town,
+        date: newPV.date,
+        count: newPV.count,
+        files: newPV.files,
         createdAt: serverTimestamp(),
-        fileType: 'pdf',
       });
-      setNewPV({ town: 'Houmt Souk', date: '', count: '0', fileBase64: '', fileName: '' });
+      setNewPV({ town: 'Houmt Souk', date: '', count: '0', files: [] });
+      if (pvFileInputRef.current) pvFileInputRef.current.value = '';
       alert('Avis publié avec succès !');
     } catch (err) {
       console.error('Error adding PV:', err);
@@ -910,6 +919,29 @@ export const MemberSpacePage = () => {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handlePvFilesSelected = async (list: FileList | null) => {
+    if (!list || list.length === 0) return;
+    setPvUploading(true);
+    try {
+      const uploaded: PVFile[] = [];
+      for (const file of Array.from(list)) {
+        const res = await apiClient.uploadFile(file, 'commission_pvs', 'members');
+        uploaded.push({ id: res.id, url: res.url, name: res.name, type: res.type });
+      }
+      setNewPV((prev) => ({ ...prev, files: [...prev.files, ...uploaded] }));
+    } catch (err: any) {
+      console.error('Error uploading PV files:', err);
+      alert(err?.message || "Erreur lors de l'upload des fichiers.");
+    } finally {
+      setPvUploading(false);
+      if (pvFileInputRef.current) pvFileInputRef.current.value = '';
+    }
+  };
+
+  const removePvFile = (idx: number) => {
+    setNewPV((prev) => ({ ...prev, files: prev.files.filter((_, i) => i !== idx) }));
   };
 
   const getMemberStartYear = (member: any): number => {
@@ -2420,10 +2452,21 @@ export const MemberSpacePage = () => {
                       <div className="space-y-4">
                         {commissionPVs
                           .filter((pv) => pv.town === selectedCommune)
-                          .map((pv, idx) => (
+                          .map((pv, idx) => {
+                            const pvFiles: PVFile[] = Array.isArray(pv.files) && pv.files.length > 0
+                              ? pv.files
+                              : pv.fileBase64
+                                ? [{
+                                    id: `legacy-${idx}`,
+                                    url: pv.fileBase64,
+                                    name: pv.fileName || `PV_Commission_${selectedCommune}_${pv.date}.pdf`,
+                                    type: 'application/pdf',
+                                  }]
+                                : [];
+                            return (
                             <div
-                              key={idx}
-                              className="p-6 border border-aaj-border rounded bg-white hover:border-aaj-royal group transition-all"
+                              key={pv.id || idx}
+                              className="p-6 border border-aaj-border rounded bg-white hover:border-aaj-royal group transition-all space-y-4"
                             >
                               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                 <div>
@@ -2442,21 +2485,53 @@ export const MemberSpacePage = () => {
                                     </span>
                                   </div>
                                   <p className="text-[9px] font-bold text-aaj-gray uppercase tracking-widest">
-                                    {pv.fileName || 'Procès-verbal de commission'}
+                                    {pvFiles.length} fichier{pvFiles.length > 1 ? 's' : ''} joint{pvFiles.length > 1 ? 's' : ''}
                                   </p>
                                 </div>
-                                <a
-                                  href={pv.fileBase64}
-                                  download={
-                                    pv.fileName || `PV_Commission_${selectedCommune}_${pv.date}.pdf`
-                                  }
-                                  className="bg-slate-100 text-aaj-dark px-6 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal hover:text-white transition-all flex items-center gap-2 border border-transparent hover:border-aaj-royal"
-                                >
-                                  <Download size={14} /> Télécharger le PV
-                                </a>
                               </div>
+                              {pvFiles.length > 0 && (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                  {pvFiles.map((f, fi) => {
+                                    const isImg = (f.type || '').startsWith('image/');
+                                    return (
+                                      <a
+                                        key={f.id || fi}
+                                        href={f.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        download={f.name}
+                                        className="block border border-aaj-border rounded overflow-hidden bg-slate-50 hover:border-aaj-royal transition-all"
+                                        title={f.name}
+                                      >
+                                        {isImg ? (
+                                          <img
+                                            src={f.url}
+                                            alt={f.name}
+                                            className="w-full aspect-square object-cover"
+                                            loading="lazy"
+                                          />
+                                        ) : (
+                                          <div className="w-full aspect-square flex flex-col items-center justify-center gap-2 bg-white">
+                                            <FileText size={28} className="text-aaj-royal" />
+                                            <span className="text-[9px] font-black uppercase tracking-widest text-aaj-gray">
+                                              PDF
+                                            </span>
+                                          </div>
+                                        )}
+                                        <div className="px-2 py-1.5 bg-white border-t border-aaj-border flex items-center gap-1">
+                                          <Download size={10} className="shrink-0 text-aaj-gray" />
+                                          <span className="text-[9px] font-bold truncate text-aaj-dark">
+                                            {f.name}
+                                          </span>
+                                        </div>
+                                      </a>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
-                          ))}
+                            );
+                          })}
                         {commissionPVs.filter((pv) => pv.town === selectedCommune).length === 0 && (
                           <div className="p-12 border border-dashed border-aaj-border rounded text-center opacity-50">
                             <p className="text-xs font-black uppercase tracking-widest text-aaj-gray">
@@ -4276,27 +4351,67 @@ export const MemberSpacePage = () => {
 
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                          Fichier PV (PDF)
+                          Fichiers PV (images ou PDF)
                         </label>
                         <div className="border border-aaj-border rounded bg-white p-8 text-center relative group overflow-hidden">
                           <input
+                            ref={pvFileInputRef}
                             type="file"
-                            required
-                            accept="application/pdf"
-                            onChange={async (e) => {
-                              if (e.target.files?.[0]) {
-                                const file = e.target.files[0];
-                                const base64 = await fileToBase64(file);
-                                setNewPV({ ...newPV, fileBase64: base64, fileName: file.name });
-                              }
-                            }}
-                            className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                            multiple
+                            accept="image/*,application/pdf"
+                            disabled={pvUploading}
+                            onChange={(e) => handlePvFilesSelected(e.target.files)}
+                            className="absolute inset-0 opacity-0 cursor-pointer z-10 disabled:cursor-not-allowed"
                           />
-                          <Upload size={24} className="mx-auto text-aaj-royal mb-2" />
+                          {pvUploading ? (
+                            <Loader2 size={24} className="mx-auto text-aaj-royal mb-2 animate-spin" />
+                          ) : (
+                            <Upload size={24} className="mx-auto text-aaj-royal mb-2" />
+                          )}
                           <p className="text-[10px] font-black uppercase tracking-widest group-hover:text-aaj-royal transition-colors">
-                            {newPV.fileName || 'Sélectionner le document officiel'}
+                            {pvUploading
+                              ? 'Envoi en cours…'
+                              : newPV.files.length > 0
+                                ? `Ajouter d'autres fichiers (${newPV.files.length} sélectionné${newPV.files.length > 1 ? 's' : ''})`
+                                : 'Sélectionner une ou plusieurs images / PDF'}
                           </p>
                         </div>
+                        {newPV.files.length > 0 && (
+                          <ul className="mt-4 space-y-2">
+                            {newPV.files.map((f, idx) => {
+                              const isImg = (f.type || '').startsWith('image/');
+                              return (
+                                <li
+                                  key={f.id}
+                                  className="flex items-center gap-3 p-2 border border-aaj-border rounded bg-white"
+                                >
+                                  {isImg ? (
+                                    <img
+                                      src={f.url}
+                                      alt={f.name}
+                                      className="w-10 h-10 object-cover rounded border border-aaj-border"
+                                    />
+                                  ) : (
+                                    <div className="w-10 h-10 flex items-center justify-center rounded border border-aaj-border bg-slate-50">
+                                      <FileText size={16} className="text-aaj-royal" />
+                                    </div>
+                                  )}
+                                  <span className="flex-1 text-[11px] font-bold truncate text-aaj-dark">
+                                    {f.name}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removePvFile(idx)}
+                                    className="text-aaj-gray hover:text-red-600 transition-colors"
+                                    aria-label="Retirer ce fichier"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
                       </div>
 
                       <div className="space-y-2">

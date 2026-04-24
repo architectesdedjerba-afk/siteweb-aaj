@@ -77,13 +77,27 @@ function files_upload(): void
     $up = $_FILES['file'];
     if ($up['error'] !== UPLOAD_ERR_OK) json_error('upload_failed', 'Erreur d\'upload.', 400);
 
-    $maxBytes = (int)$CONFIG['uploads']['max_bytes'];
-    if ($up['size'] > $maxBytes) json_error('too_large', 'Fichier trop volumineux.', 413);
+    // Some folders are explicitly exempted from the app-level size cap (the
+    // OS/PHP upload limits still apply — see api/.user.ini).
+    $unlimitedFolders = ['commission_pvs', 'unesco_permits'];
+    if (!in_array($folder, $unlimitedFolders, true)) {
+        $maxBytes = (int)$CONFIG['uploads']['max_bytes'];
+        if ($maxBytes > 0 && $up['size'] > $maxBytes) {
+            json_error('too_large', 'Fichier trop volumineux.', 413);
+        }
+    }
 
     $finfo = new finfo(FILEINFO_MIME_TYPE);
     $mime = (string)$finfo->file($up['tmp_name']);
     $allowed = $CONFIG['uploads']['allowed_mime'];
-    if (!in_array($mime, $allowed, true)) json_error('invalid_mime', 'Type de fichier non autorisé.', 415);
+    // Commission PVs accept any image/* or PDF — architects often submit a
+    // stack of phone photos of the paper PV instead of a scanned PDF.
+    $isImageOrPdf = (strpos($mime, 'image/') === 0) || $mime === 'application/pdf';
+    if ($folder === 'commission_pvs') {
+        if (!$isImageOrPdf) json_error('invalid_mime', 'Seules les images et les PDF sont acceptés.', 415);
+    } elseif (!in_array($mime, $allowed, true)) {
+        json_error('invalid_mime', 'Type de fichier non autorisé.', 415);
+    }
 
     $storageDir = rtrim((string)$CONFIG['uploads']['storage_dir'], '/\\');
     $folderDir = $storageDir . DIRECTORY_SEPARATOR . $folder;

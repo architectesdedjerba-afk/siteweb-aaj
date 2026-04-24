@@ -43,6 +43,9 @@ function ensure_column(string $table, string $column, string $definition): void
         'users' => [
             'archived_at' => 'DATETIME NULL',
         ],
+        'commission_pvs' => [
+            'files' => 'JSON NULL',
+        ],
     ];
     static $done = [];
 
