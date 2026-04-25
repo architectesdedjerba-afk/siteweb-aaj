@@ -46,6 +46,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'chat_manage', label: 'Modérer la messagerie interne (canaux & messages)' },
       { key: 'unesco_manage', label: 'Gérer Djerba UNESCO (KMZ, zones, documents)' },
       { key: 'unesco_permits_review', label: 'Instruire les demandes de permis UNESCO' },
+      { key: 'notifications_send', label: 'Diffuser des notifications aux adhérents' },
     ],
   },
   {
@@ -116,6 +117,7 @@ export const DEFAULT_ROLES: DefaultRole[] = [
       'unesco_permits_submit',
       'unesco_manage',
       'unesco_permits_review',
+      'notifications_send',
     ]),
   },
   {

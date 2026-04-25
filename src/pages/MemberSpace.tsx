@@ -5,7 +5,7 @@
 
 import { useState, useEffect, FormEvent, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   UserCircle,
   LogOut,
@@ -46,6 +46,8 @@ import {
   Pin,
   PinOff,
   PanelLeftOpen,
+  Bell,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
   // auth API
@@ -107,6 +109,9 @@ import { UnescoMemberView } from '../components/unesco/UnescoMemberView';
 import { UnescoAdminParams } from '../components/unesco/UnescoAdminParams';
 import { UnescoAdminPermits } from '../components/unesco/UnescoAdminPermits';
 import { api as apiClient } from '../lib/api';
+import { useNotifications } from '../lib/NotificationContext';
+import { NotificationsList } from '../components/notifications/NotificationsList';
+import { NotificationPreferences } from '../components/notifications/NotificationPreferences';
 
 export const MemberSpacePage = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -116,6 +121,8 @@ export const MemberSpacePage = () => {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [userRole, setUserRole] = useState<Role | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { unreadCount: notifUnreadCount } = useNotifications();
   const [isSaving, setIsSaving] = useState(false);
   const [annuaireViewMode, setAnnuaireViewMode] = useState<'grid' | 'list'>('grid');
   const [editingMember, setEditingMember] = useState<any>(null);
@@ -260,7 +267,18 @@ export const MemberSpacePage = () => {
   const selectTab = (id: string) => {
     setActiveTab(id);
     if (!sidebarPinned) setSidebarOpen(false);
+    // Garde l'URL synchro pour les liens profonds (?tab=...).
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', id);
+    setSearchParams(next, { replace: true });
   };
+
+  // Lit ?tab=... au chargement (ex: lien depuis le drawer cloche).
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && tab !== activeTab) setActiveTab(tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const canReviewUnesco =
     isAdmin ||
@@ -1975,6 +1993,8 @@ export const MemberSpacePage = () => {
             ...(can('unesco_view')
               ? [{ id: 'unesco', icon: <Landmark size={18} />, label: 'Djerba UNESCO', badge: 0 }]
               : []),
+            { id: 'notifications', icon: <Bell size={18} />, label: 'Notifications', badge: notifUnreadCount },
+            { id: 'notifications-prefs', icon: <SlidersHorizontal size={18} />, label: 'Préférences notifs', badge: 0 },
             { id: 'settings', icon: <Settings size={18} />, label: 'Mon Profil', badge: 0 },
           ].map((item) => (
             <button
@@ -3356,6 +3376,48 @@ export const MemberSpacePage = () => {
                         )}
                       </div>
                     </div>
+                  </motion.div>
+                )}
+
+                {activeTab === 'notifications' && (
+                  <motion.div
+                    key="notifications"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="space-y-6"
+                  >
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-aaj-border pb-6">
+                      <div>
+                        <h2 className="text-2xl font-black uppercase tracking-tighter">Notifications</h2>
+                        <p className="text-sm text-slate-600 mt-1">
+                          Consultez et gérez l’ensemble de vos notifications.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-aaj-border bg-white overflow-hidden">
+                      <NotificationsList maxHeight="70vh" />
+                    </div>
+                  </motion.div>
+                )}
+
+                {activeTab === 'notifications-prefs' && (
+                  <motion.div
+                    key="notifications-prefs"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="space-y-6"
+                  >
+                    <div className="border-b border-aaj-border pb-6">
+                      <h2 className="text-2xl font-black uppercase tracking-tighter">
+                        Préférences de notification
+                      </h2>
+                      <p className="text-sm text-slate-600 mt-1">
+                        Adaptez la fréquence et les canaux pour ne recevoir que ce qui compte.
+                      </p>
+                    </div>
+                    <NotificationPreferences />
                   </motion.div>
                 )}
 

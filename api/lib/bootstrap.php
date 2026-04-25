@@ -30,6 +30,7 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/permissions.php';
 require_once __DIR__ . '/ids.php';
 require_once __DIR__ . '/mail.php';
+require_once __DIR__ . '/notifications.php';
 require_once __DIR__ . '/migrations.php';
 require_once __DIR__ . '/kmz.php';
 require_once __DIR__ . '/geo.php';

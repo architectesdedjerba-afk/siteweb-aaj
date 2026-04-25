@@ -153,6 +153,17 @@ function build_specs(): array
             if (array_key_exists('fileName', $p))   $row['file_name'] = $p['fileName'];
             return $row;
         },
+        'afterInsert' => function (array $row, array $view, array $payload): void {
+            push_notifications_to_users(resolve_notification_scope('active'), [
+                'type'     => 'news',
+                'title'    => 'Actualité publiée : ' . (string)($view['title'] ?? ''),
+                'body'     => isset($view['type']) ? (string)$view['type'] : null,
+                'link'     => '/evennements',
+                'icon'     => 'newspaper',
+                'priority' => 'normal',
+                'data'     => ['newsId' => $view['id'] ?? null],
+            ]);
+        },
         'canList' => fn(?array $u) => true,
         'canGet'  => fn(?array $u, array $r) => true,
         'canCreate' => fn(?array $u, array $p) => $u && (is_admin($u) || user_has_permission($u, 'news_manage')),
@@ -234,6 +245,20 @@ function build_specs(): array
             }
             return $row;
         },
+        'afterInsert' => function (array $row, array $view, array $payload): void {
+            $town = (string)($view['town'] ?? '');
+            $type = (string)($view['type'] ?? '');
+            $body = trim($town . ($type !== '' ? ' — ' . $type : ''));
+            push_notifications_to_users(resolve_notification_scope('active'), [
+                'type'     => 'commission_pv',
+                'title'    => 'Nouvel avis de commission',
+                'body'     => $body !== '' ? $body : null,
+                'link'     => '/espace-adherents',
+                'icon'     => 'clipboard-list',
+                'priority' => 'normal',
+                'data'     => ['pvId' => $view['id'] ?? null],
+            ]);
+        },
         'canList' => fn(?array $u) => $u && (is_admin($u) || ($u['status'] === 'active')),
         'canGet'  => fn(?array $u, array $r) => $u && (is_admin($u) || ($u['status'] === 'active')),
         'canCreate' => fn(?array $u, array $p) => $u && (is_admin($u) || user_has_permission($u, 'commissions_create') || (is_representative($u) && $u['status'] === 'active')),
@@ -267,6 +292,21 @@ function build_specs(): array
             // Non-admins see only their own messages.
             if (is_admin($u) || user_has_permission($u, 'messages_inbox')) return [];
             return [['user_id', '=', $u['uid']]];
+        },
+        'afterInsert' => function (array $row, array $view, array $payload): void {
+            $subject = (string)($view['subject'] ?? '');
+            $email   = (string)($view['userEmail'] ?? '');
+            push_notifications_to_users(admin_recipient_uids(), [
+                'type'       => 'contact_message',
+                'title'      => 'Nouveau message',
+                'body'       => trim(($email !== '' ? $email . ' — ' : '') . $subject),
+                'link'       => '/espace-adherents',
+                'icon'       => 'mail',
+                'priority'   => 'normal',
+                'data'       => ['messageId' => $view['id'] ?? null],
+                'senderUid'  => $view['userId']   ?? null,
+                'senderName' => $view['userEmail'] ?? null,
+            ]);
         },
         'canList' => fn(?array $u) => (bool)$u,
         'canGet'  => fn(?array $u, array $r) => $u && ($r['user_id'] === $u['uid'] || is_admin($u) || user_has_permission($u, 'messages_inbox')),
@@ -337,6 +377,18 @@ function build_specs(): array
         'listFilter' => function (array $u, array $qs): array {
             if (is_admin($u) || user_has_permission($u, 'profileRequests_manage')) return [];
             return [['uid', '=', $u['uid']]];
+        },
+        'afterInsert' => function (array $row, array $view, array $payload): void {
+            $name = trim(($view['firstName'] ?? '') . ' ' . ($view['lastName'] ?? '')) ?: (string)($view['userEmail'] ?? 'un membre');
+            push_notifications_to_users(admin_recipient_uids(), [
+                'type'     => 'profile_update_request',
+                'title'    => 'Demande de mise à jour de profil',
+                'body'     => $name,
+                'link'     => '/espace-adherents',
+                'icon'     => 'user-cog',
+                'priority' => 'normal',
+                'data'     => ['requestId' => $view['id'] ?? null],
+            ]);
         },
         'canList' => fn(?array $u) => (bool)$u,
         'canGet'  => fn(?array $u, array $r) => $u && ($r['uid'] === $u['uid'] || is_admin($u) || user_has_permission($u, 'profileRequests_manage')),
@@ -512,6 +564,129 @@ function build_specs(): array
         'canDelete' => fn(array $u, array $r) => is_super_admin($u) || user_has_permission($u, 'config_manage'),
     ];
 
+
+    // ---------------- notifications ----------------
+    // Une ligne par destinataire. Lecture/écriture restreinte au
+    // destinataire (sauf admin pour la création unique). Le broadcast
+    // multi-destinataires passe par /api/notifications/broadcast.
+    $specs['notifications'] = [
+        'table' => 'notifications',
+        'idColumn' => 'id',
+        'orderBy' => ['created_at', 'DESC'],
+        'toView' => fn(array $r) => notification_view($r),
+        'toRow'  => function (array $p) {
+            $row = [];
+            if (array_key_exists('recipientUid', $p)) $row['recipient_uid'] = (string)$p['recipientUid'];
+            if (array_key_exists('type', $p))         $row['type'] = mb_substr((string)$p['type'], 0, 50);
+            if (array_key_exists('title', $p))        $row['title'] = mb_substr((string)$p['title'], 0, 300);
+            if (array_key_exists('body', $p))         $row['body'] = $p['body'] === null ? null : (string)$p['body'];
+            if (array_key_exists('link', $p))         $row['link'] = $p['link'] === null ? null : mb_substr((string)$p['link'], 0, 500);
+            if (array_key_exists('icon', $p))         $row['icon'] = $p['icon'] === null ? null : mb_substr((string)$p['icon'], 0, 50);
+            if (array_key_exists('priority', $p)) {
+                $row['priority'] = in_array($p['priority'], ['low','normal','high'], true) ? (string)$p['priority'] : 'normal';
+            }
+            if (array_key_exists('data', $p)) {
+                $row['data'] = is_array($p['data']) ? json_encode($p['data'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+            }
+            if (array_key_exists('senderUid', $p))  $row['sender_uid'] = $p['senderUid'];
+            if (array_key_exists('senderName', $p)) $row['sender_name'] = $p['senderName'] === null ? null : mb_substr((string)$p['senderName'], 0, 200);
+            if (array_key_exists('readAt', $p)) {
+                $row['read_at'] = $p['readAt'] ? gmdate('Y-m-d H:i:s', strtotime((string)$p['readAt']) ?: time()) : null;
+            }
+            if (array_key_exists('archivedAt', $p)) {
+                $row['archived_at'] = $p['archivedAt'] ? gmdate('Y-m-d H:i:s', strtotime((string)$p['archivedAt']) ?: time()) : null;
+            }
+            return $row;
+        },
+        'validateCreate' => function (array $p): void {
+            if (empty($p['recipientUid']) || !is_string($p['recipientUid'])) {
+                json_error('invalid_input', 'recipientUid requis.', 400);
+            }
+            if (empty($p['title']) || !is_string($p['title'])) {
+                json_error('invalid_input', 'title requis.', 400);
+            }
+        },
+        'beforeInsert' => function (array $p): array {
+            $p['type'] = $p['type'] ?? 'system';
+            $p['priority'] = $p['priority'] ?? 'normal';
+            // Stamp the sender from the current session if not provided.
+            if (empty($p['senderUid']) || empty($p['senderName'])) {
+                $u = current_user();
+                if ($u) {
+                    $p['senderUid']  = $p['senderUid']  ?? ($u['uid'] ?? null);
+                    $p['senderName'] = $p['senderName'] ?? ($u['displayName'] ?? null);
+                }
+            }
+            return $p;
+        },
+        'listFilter' => function (array $u, array $qs): array {
+            // Chaque user ne voit que ses propres notifications, point.
+            // Les admins n'ont aucun super-pouvoir ici (c'est leur boîte
+            // perso) — pour broadcaster ils utilisent /broadcast.
+            return [['recipient_uid', '=', $u['uid']]];
+        },
+        'canList' => fn(?array $u) => (bool)$u,
+        'canGet'  => fn(?array $u, array $r) => $u && ($r['recipient_uid'] === $u['uid'] || is_admin($u)),
+        'canCreate' => function (?array $u, array $p): bool {
+            if (!$u) return false;
+            // Self-create autorisé (helpers internes / tests) — la
+            // création par un autre user nécessite un permission admin.
+            if (($p['recipientUid'] ?? null) === $u['uid']) return true;
+            return is_admin($u) || user_has_permission($u, 'notifications_send');
+        },
+        'canUpdate' => function (array $u, array $r, array $patch): bool {
+            // Le destinataire peut uniquement modifier readAt / archivedAt.
+            if ($r['recipient_uid'] !== $u['uid']) return is_admin($u);
+            $allowed = ['readAt', 'archivedAt'];
+            foreach (array_keys($patch) as $k) {
+                if (!in_array($k, $allowed, true)) return false;
+            }
+            return true;
+        },
+        'canDelete' => fn(array $u, array $r) => $u && ($r['recipient_uid'] === $u['uid'] || is_admin($u)),
+    ];
+
+    // ---------------- notification_preferences ----------------
+    // Composite id "{uid}_{type}". Chaque user gère uniquement les siennes.
+    $specs['notification_preferences'] = [
+        'table' => 'notification_preferences',
+        'idColumn' => 'id',
+        'orderBy' => ['type', 'ASC'],
+        'toView' => fn(array $r) => [
+            'id'        => (string)$r['id'],
+            'uid'       => (string)$r['uid'],
+            'type'      => (string)$r['type'],
+            'inApp'     => (int)($r['in_app'] ?? 1) === 1,
+            'email'     => (int)($r['email'] ?? 0) === 1,
+            'updatedAt' => iso_datetime($r['updated_at'] ?? null),
+            'createdAt' => iso_datetime($r['created_at'] ?? null),
+        ],
+        'toRow' => function (array $p) {
+            $row = [];
+            if (array_key_exists('uid', $p))   $row['uid']   = (string)$p['uid'];
+            if (array_key_exists('type', $p))  $row['type']  = mb_substr((string)$p['type'], 0, 50);
+            if (array_key_exists('inApp', $p)) $row['in_app'] = $p['inApp'] ? 1 : 0;
+            if (array_key_exists('email', $p)) $row['email']  = $p['email'] ? 1 : 0;
+            return $row;
+        },
+        'beforeInsert' => function (array $p): array {
+            // Force l'id composé pour pouvoir l'updater par PUT directement.
+            $uid  = (string)($p['uid']  ?? '');
+            $type = (string)($p['type'] ?? '');
+            if ($uid !== '' && $type !== '') {
+                $p['id'] = $uid . '_' . preg_replace('/[^a-zA-Z0-9_-]/', '_', $type);
+            }
+            return $p;
+        },
+        'listFilter' => function (array $u, array $qs): array {
+            return [['uid', '=', $u['uid']]];
+        },
+        'canList' => fn(?array $u) => (bool)$u,
+        'canGet'  => fn(?array $u, array $r) => $u && $r['uid'] === $u['uid'],
+        'canCreate' => fn(?array $u, array $p) => $u && (($p['uid'] ?? null) === $u['uid']),
+        'canUpdate' => fn(array $u, array $r, array $patch) => $u && $r['uid'] === $u['uid'],
+        'canDelete' => fn(array $u, array $r) => $u && $r['uid'] === $u['uid'],
+    ];
 
     // ---------------- chat_channels ----------------
     $specs['chat_channels'] = [
