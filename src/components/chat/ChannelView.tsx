@@ -175,7 +175,10 @@ export function ChannelView({
         <div className="flex-1 flex flex-col min-w-0 relative">
           <div
             ref={scrollRef}
-            className="flex-1 overflow-y-auto px-4 py-4 bg-gradient-to-b from-slate-50/40 to-white"
+            // overflow-x-hidden is defensive — message bubbles cap at 75%
+            // width, but pathological content (long unbreakable URLs) could
+            // still push horizontal scroll on the scroll container itself.
+            className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 bg-gradient-to-b from-slate-50/40 to-white"
           >
             {loading ? (
               <div className="h-full flex items-center justify-center">

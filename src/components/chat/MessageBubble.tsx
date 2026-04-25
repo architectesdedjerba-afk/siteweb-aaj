@@ -113,7 +113,11 @@ export function MessageBubble({
         {!groupedWithPrev && sender && <Avatar profile={sender} size={36} />}
       </div>
 
-      <div className={`flex flex-col max-w-[75%] ${isMine ? 'items-end' : 'items-start'}`}>
+      {/* `min-w-0` lets this flex item shrink so its children can truncate
+          (long filenames, URLs) instead of forcing horizontal overflow. */}
+      <div
+        className={`flex flex-col max-w-[75%] min-w-0 ${isMine ? 'items-end' : 'items-start'}`}
+      >
         {!groupedWithPrev && (
           <div
             className={`flex items-baseline gap-2 mb-1 px-1 ${isMine ? 'flex-row-reverse' : ''}`}
@@ -161,11 +165,14 @@ export function MessageBubble({
                   isMine ? 'bg-white/10 hover:bg-white/20' : 'bg-aaj-soft hover:bg-slate-100'
                 } transition-colors`}
               >
-                <FileText size={18} />
-                <span className="text-[11px] flex-1 truncate">
+                <FileText size={18} className="flex-shrink-0" />
+                {/* `min-w-0` is required for `truncate` to take effect on a
+                    flex child — without it the span keeps its intrinsic
+                    content width and pushes the row past the bubble edge. */}
+                <span className="text-[11px] flex-1 min-w-0 truncate">
                   {message.attachmentName || 'Pièce jointe'}
                 </span>
-                <Download size={14} />
+                <Download size={14} className="flex-shrink-0" />
               </a>
             )}
 
