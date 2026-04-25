@@ -116,7 +116,6 @@ export const MemberSpacePage = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSaving, setIsSaving] = useState(false);
   const [annuaireViewMode, setAnnuaireViewMode] = useState<'grid' | 'list'>('grid');
-  const [fabBottom, setFabBottom] = useState(100);
   const [editingMember, setEditingMember] = useState<any>(null);
   const [editSelectedYears, setEditSelectedYears] = useState<string[]>([]);
   const [editBulkAmount, setEditBulkAmount] = useState<string>('');
@@ -583,26 +582,6 @@ export const MemberSpacePage = () => {
       setError("Votre compte a été archivé. Contactez l'administration pour plus d'informations.");
     }
   }, [userProfile]);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const footer = document.querySelector('footer');
-      if (footer) {
-        const footerRect = footer.getBoundingClientRect();
-        const viewportHeight = window.innerHeight;
-
-        if (footerRect.top < viewportHeight) {
-          const overlap = viewportHeight - footerRect.top;
-          setFabBottom(overlap + 85);
-        } else {
-          setFabBottom(100);
-        }
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   // Auto-generate Matricule AAJ when birthDate + type letter are set
   useEffect(() => {
@@ -1998,6 +1977,19 @@ export const MemberSpacePage = () => {
             </button>
           ))}
         </nav>
+        <div className="mt-6 pt-6 border-t border-aaj-border/60">
+          <button
+            type="button"
+            onClick={() => {
+              setIsContactModalOpen(true);
+              if (!sidebarPinned) setSidebarOpen(false);
+            }}
+            className="w-full flex items-center gap-4 px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] text-aaj-gray hover:bg-aaj-dark hover:text-white border border-aaj-border hover:border-aaj-dark transition-all"
+          >
+            <MessageSquare size={18} className="text-aaj-royal" />
+            Contacter l&apos;administration
+          </button>
+        </div>
         {(() => {
           const adminItems = [
             { id: 'admin-roles', icon: <KeyRound size={18} />, label: 'Rôles & Permissions', perm: 'roles_manage' },
@@ -6384,19 +6376,9 @@ export const MemberSpacePage = () => {
           )}
         </AnimatePresence>
 
-        {/* Floating Action Button: Contact Admin — stacks above the chat FAB */}
-        <button
-          onClick={() => setIsContactModalOpen(true)}
-          style={{ bottom: `${fabBottom}px` }}
-          className="fixed right-6 md:right-8 w-14 h-14 bg-aaj-dark text-white rounded-full flex items-center justify-center shadow-2xl hover:bg-aaj-royal hover:scale-110 active:scale-95 transition-all z-40 group border-4 border-white/20"
-        >
-          <MessageSquare size={24} className="group-hover:rotate-12 transition-all" />
-          <div className="absolute right-full mr-4 bg-aaj-dark text-white px-4 py-2 rounded text-[10px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 pointer-events-none transition-all whitespace-nowrap shadow-xl">
-            Contacter l&apos;administration
-          </div>
-        </button>
-
-        {/* Floating chat widget — bottom-right, below the contact-admin FAB */}
+        {/* Floating chat widget — sole bottom-right FAB. The "Contacter
+            l'administration" entry now lives in the sidebar to avoid stacking
+            two near-identical messaging icons. */}
         <ChatFloatingWidget />
 
         {/* Overlay sidebar — portaled to <body> so `position: fixed`
