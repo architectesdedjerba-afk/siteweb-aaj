@@ -171,7 +171,7 @@ export function ChannelView({
         onToggleInfo={() => setShowInfo((s) => !s)}
       />
 
-      <div className="flex-1 flex min-h-0">
+      <div className="flex-1 flex min-h-0 relative">
         <div className="flex-1 flex flex-col min-w-0 relative">
           <div
             ref={scrollRef}
@@ -231,15 +231,32 @@ export function ChannelView({
           />
         </div>
 
-        {showInfo && (
-          <ChannelInfoPanel
-            channel={channel}
-            members={members}
-            currentUid={currentUid}
-            isModerator={isModerator}
-            onClose={() => setShowInfo(false)}
-          />
-        )}
+        {/* Info panel as a slide-in overlay rather than a flex sibling.
+            On the narrow floating popup (~760px), the channel list already
+            consumes 320px — adding a 320px sibling pane would squeeze the
+            messages column and overflow the right edge. The overlay pattern
+            keeps the conversation visible underneath and never affects
+            layout width. */}
+        <AnimatePresence>
+          {showInfo && (
+            <motion.div
+              key="channel-info-panel"
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="absolute inset-y-0 right-0 w-full max-w-[320px] z-20 shadow-2xl"
+            >
+              <ChannelInfoPanel
+                channel={channel}
+                members={members}
+                currentUid={currentUid}
+                isModerator={isModerator}
+                onClose={() => setShowInfo(false)}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

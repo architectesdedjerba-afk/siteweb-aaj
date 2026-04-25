@@ -96,7 +96,9 @@ export function ChannelInfoPanel({
   };
 
   return (
-    <aside className="w-80 border-l border-aaj-border bg-white flex flex-col flex-shrink-0">
+    // Sized by the parent overlay wrapper in ChannelView (max-w-[320px]) so
+    // the panel stays clipped to the popup width and never overflows.
+    <aside className="h-full w-full border-l border-aaj-border bg-white flex flex-col">
       <div className="p-4 border-b border-aaj-border flex items-center justify-between">
         <h3 className="text-[11px] font-black uppercase tracking-[2px] text-aaj-dark">
           Détails du canal
