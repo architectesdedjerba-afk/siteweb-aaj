@@ -8,6 +8,7 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { confirmPasswordReset, verifyPasswordResetCode, auth } from '../lib/firebase';
 import { motion } from 'motion/react';
 import { Shield, Loader2, CheckCircle2, XCircle, ArrowLeft, Key } from 'lucide-react';
+import { PasswordInput } from '../components/PasswordInput';
 
 export const ResetPasswordPage = () => {
   const [searchParams] = useSearchParams();
@@ -131,8 +132,7 @@ export const ResetPasswordPage = () => {
               <label className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1">
                 Nouveau mot de passe
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-slate-50 border border-aaj-border rounded px-6 py-4 focus:outline-none focus:ring-1 focus:ring-aaj-royal focus:bg-white transition-all text-sm font-medium"
@@ -144,8 +144,7 @@ export const ResetPasswordPage = () => {
               <label className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1">
                 Confirmer le mot de passe
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full bg-slate-50 border border-aaj-border rounded px-6 py-4 focus:outline-none focus:ring-1 focus:ring-aaj-royal focus:bg-white transition-all text-sm font-medium"
