@@ -45,6 +45,7 @@ function ensure_column(string $table, string $column, string $definition): void
         ],
         'commission_pvs' => [
             'files' => 'JSON NULL',
+            'type'  => 'VARCHAR(100) NULL',
         ],
     ];
     static $done = [];

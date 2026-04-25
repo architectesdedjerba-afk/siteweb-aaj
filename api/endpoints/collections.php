@@ -196,6 +196,7 @@ function build_specs(): array
 
     // ---------------- commission_pvs ----------------
     ensure_column('commission_pvs', 'files', 'JSON NULL');
+    ensure_column('commission_pvs', 'type', 'VARCHAR(100) NULL');
     $specs['commission_pvs'] = [
         'table' => 'commission_pvs',
         'idColumn' => 'id',
@@ -211,6 +212,7 @@ function build_specs(): array
                 'town' => $r['town'],
                 'date' => $r['date'],
                 'count' => (int)$r['count'],
+                'type' => $r['type'] ?? '',
                 'files' => $files,
                 // Backward-compat for rows created before the multi-file migration.
                 'fileBase64' => $r['file_url'] ?? '',
@@ -222,6 +224,7 @@ function build_specs(): array
             $row = [];
             foreach (['town','date'] as $k) if (array_key_exists($k, $p)) $row[$k] = $p[$k];
             if (array_key_exists('count', $p))      $row['count'] = (int)$p['count'];
+            if (array_key_exists('type', $p))       $row['type'] = $p['type'] === null ? null : (string)$p['type'];
             if (array_key_exists('fileBase64', $p)) $row['file_url'] = (string)$p['fileBase64'];
             if (array_key_exists('fileName', $p))   $row['file_name'] = (string)$p['fileName'];
             if (array_key_exists('files', $p)) {
