@@ -113,7 +113,11 @@ export function MessageBubble({
         {!groupedWithPrev && sender && <Avatar profile={sender} size={36} />}
       </div>
 
-      <div className={`flex flex-col max-w-[75%] ${isMine ? 'items-end' : 'items-start'}`}>
+      {/* `min-w-0` lets this flex item shrink so its children can truncate
+          (long filenames, URLs) instead of forcing horizontal overflow. */}
+      <div
+        className={`flex flex-col max-w-[75%] min-w-0 ${isMine ? 'items-end' : 'items-start'}`}
+      >
         {!groupedWithPrev && (
           <div
             className={`flex items-baseline gap-2 mb-1 px-1 ${isMine ? 'flex-row-reverse' : ''}`}
@@ -152,22 +156,56 @@ export function MessageBubble({
               </div>
             )}
 
-            {message.attachmentUrl && (
-              <a
-                href={message.attachmentUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`flex items-center gap-2 p-2 mb-2 rounded ${
-                  isMine ? 'bg-white/10 hover:bg-white/20' : 'bg-aaj-soft hover:bg-slate-100'
-                } transition-colors`}
-              >
-                <FileText size={18} />
-                <span className="text-[11px] flex-1 truncate">
-                  {message.attachmentName || 'Pièce jointe'}
-                </span>
-                <Download size={14} />
-              </a>
-            )}
+            {message.attachmentUrl &&
+              (isImageAttachment(message.attachmentType, message.attachmentName) ? (
+                // Inline image preview — click to open the original in a new
+                // tab. `loading="lazy"` keeps the message list responsive even
+                // when scrolling through many images.
+                <a
+                  href={message.attachmentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block mb-2 overflow-hidden rounded-lg group/img relative"
+                  title={
+                    message.attachmentName
+                      ? `Ouvrir « ${message.attachmentName} »`
+                      : "Ouvrir l'image"
+                  }
+                >
+                  <img
+                    src={message.attachmentUrl}
+                    alt={message.attachmentName || 'Image partagée'}
+                    loading="lazy"
+                    decoding="async"
+                    className="block max-w-full max-h-72 w-auto h-auto rounded-lg group-hover/img:opacity-90 transition-opacity"
+                  />
+                  {/* Tiny corner badge so users know they can click to enlarge. */}
+                  <span
+                    className="absolute top-1.5 right-1.5 bg-black/55 text-white text-[10px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover/img:opacity-100 transition-opacity pointer-events-none"
+                    aria-hidden
+                  >
+                    Agrandir
+                  </span>
+                </a>
+              ) : (
+                <a
+                  href={message.attachmentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex items-center gap-2 p-2 mb-2 rounded ${
+                    isMine ? 'bg-white/10 hover:bg-white/20' : 'bg-aaj-soft hover:bg-slate-100'
+                  } transition-colors`}
+                >
+                  <FileText size={18} className="flex-shrink-0" />
+                  {/* `min-w-0` is required for `truncate` to take effect on a
+                      flex child — without it the span keeps its intrinsic
+                      content width and pushes the row past the bubble edge. */}
+                  <span className="text-[11px] flex-1 min-w-0 truncate">
+                    {message.attachmentName || 'Pièce jointe'}
+                  </span>
+                  <Download size={14} className="flex-shrink-0" />
+                </a>
+              ))}
 
             {message.text && <div className="text-sm leading-relaxed">{message.text}</div>}
 
@@ -346,6 +384,19 @@ function ToolbarButton({
       {children}
     </button>
   );
+}
+
+/** Image MIME types or filename extensions we render inline. We rely on the
+ *  MIME type when the upload API provided one, and fall back to the filename
+ *  extension for older messages whose `attachmentType` is missing. */
+const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'bmp', 'svg']);
+
+function isImageAttachment(type?: string, name?: string): boolean {
+  if (type && type.toLowerCase().startsWith('image/')) return true;
+  if (!name) return false;
+  const dot = name.lastIndexOf('.');
+  if (dot < 0) return false;
+  return IMAGE_EXTENSIONS.has(name.slice(dot + 1).toLowerCase());
 }
 
 function toDate(value: ChatMessage['createdAt']): Date | null {

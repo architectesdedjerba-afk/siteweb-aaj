@@ -98,6 +98,7 @@ import {
 } from '../lib/memberConfig';
 import CommissionCalendar from '../components/CommissionCalendar';
 import { PasswordInput } from '../components/PasswordInput';
+import { uploadFile, deleteFile } from '../lib/storage';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { ChannelApprovals } from '../components/chat/ChannelApprovals';
 import { ChatFloatingWidget } from '../components/chat/ChatFloatingWidget';
@@ -117,7 +118,6 @@ export const MemberSpacePage = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSaving, setIsSaving] = useState(false);
   const [annuaireViewMode, setAnnuaireViewMode] = useState<'grid' | 'list'>('grid');
-  const [fabBottom, setFabBottom] = useState(100);
   const [editingMember, setEditingMember] = useState<any>(null);
   const [editSelectedYears, setEditSelectedYears] = useState<string[]>([]);
   const [editBulkAmount, setEditBulkAmount] = useState<string>('');
@@ -585,26 +585,6 @@ export const MemberSpacePage = () => {
     }
   }, [userProfile]);
 
-  useEffect(() => {
-    const handleScroll = () => {
-      const footer = document.querySelector('footer');
-      if (footer) {
-        const footerRect = footer.getBoundingClientRect();
-        const viewportHeight = window.innerHeight;
-
-        if (footerRect.top < viewportHeight) {
-          const overlap = viewportHeight - footerRect.top;
-          setFabBottom(overlap + 85);
-        } else {
-          setFabBottom(100);
-        }
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
   // Auto-generate Matricule AAJ when birthDate + type letter are set
   useEffect(() => {
     if (!newMember.birthDate || !newMember.memberTypeLetter) return;
@@ -820,7 +800,17 @@ export const MemberSpacePage = () => {
     setResetSent(false);
   };
 
-  const [newDoc, setNewDoc] = useState({
+  const [newDoc, setNewDoc] = useState<{
+    name: string;
+    url: string;
+    category: string;
+    commune: string;
+    arrondissement: string;
+    legalType: string;
+    fileType: string;
+    file: File | null;
+    fileName: string;
+  }>({
     name: '',
     url: '',
     category: "Plan d'Aménagement",
@@ -828,44 +818,32 @@ export const MemberSpacePage = () => {
     arrondissement: '',
     legalType: 'Contrat',
     fileType: 'pdf',
-    fileBase64: '',
+    file: null,
     fileName: '',
   });
 
-  const handleLibraryFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLibraryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0]) return;
     const file = e.target.files[0];
-
-    // Check file size (limit to 1MB for Base64 in Firestore)
-    if (file.size > 1024 * 1024) {
-      alert('Le fichier est trop lourd (max 1Mo).');
-      return;
-    }
-
-    try {
-      const base64 = await fileToBase64(file);
-      setNewDoc({
-        ...newDoc,
-        fileBase64: base64,
-        fileName: file.name,
-        fileType: file.name.split('.').pop() || 'pdf',
-      });
-    } catch (err) {
-      console.error('Error converting file:', err);
-      alert('Erreur lors de la lecture du fichier.');
-    }
+    setNewDoc({
+      ...newDoc,
+      file,
+      fileName: file.name,
+      fileType: file.name.split('.').pop()?.toLowerCase() || 'pdf',
+    });
   };
 
   const handleAddDocument = async (e: FormEvent) => {
     e.preventDefault();
     if (!can('library_manage')) return;
 
-    if (!newDoc.url && !newDoc.fileBase64) {
+    if (!newDoc.url && !newDoc.file) {
       alert('Veuillez fournir un lien ou uploader un document.');
       return;
     }
 
     setIsSaving(true);
+    let uploadedFileId: string | null = null;
     try {
       const docData: any = {
         name: newDoc.name,
@@ -874,11 +852,16 @@ export const MemberSpacePage = () => {
         createdAt: serverTimestamp(),
       };
 
-      if (newDoc.url) docData.url = newDoc.url;
-      if (newDoc.fileBase64) {
-        docData.fileBase64 = newDoc.fileBase64;
-        docData.fileName = newDoc.fileName;
-        if (!docData.url) docData.url = newDoc.fileBase64;
+      if (newDoc.file) {
+        // Stream the binary to /api/files (cPanel disk storage). The DB only
+        // stores the public URL + file id — no more base64 blobs in MySQL.
+        const result = await uploadFile(newDoc.file, 'documents');
+        docData.url = result.url;
+        docData.fileId = result.path;
+        docData.fileName = newDoc.file.name;
+        uploadedFileId = result.path;
+      } else if (newDoc.url) {
+        docData.url = newDoc.url;
       }
 
       if (newDoc.category === "Plan d'Aménagement") {
@@ -899,14 +882,24 @@ export const MemberSpacePage = () => {
         arrondissement: '',
         legalType: 'Contrat',
         fileType: 'pdf',
-        fileBase64: '',
+        file: null,
         fileName: '',
       });
       if (libraryFileInputRef.current) libraryFileInputRef.current.value = '';
       alert('Document ajouté avec succès !');
     } catch (err) {
+      // If the file upload succeeded but the DB insert failed, clean up the
+      // orphan on disk so /api/files-storage doesn't accumulate dead blobs.
+      if (uploadedFileId) {
+        try {
+          await deleteFile(uploadedFileId);
+        } catch {
+          /* best-effort */
+        }
+      }
       console.error('Error adding document:', err);
-      alert("Erreur lors de l'ajout du document.");
+      const msg = err instanceof Error && err.message ? err.message : "Erreur lors de l'ajout du document.";
+      alert(msg);
     } finally {
       setIsSaving(false);
     }
@@ -914,13 +907,18 @@ export const MemberSpacePage = () => {
 
   const handleDeleteDocument = async (docId: string) => {
     if (!can('library_manage')) return;
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) {
-      try {
-        await deleteDoc(doc(db, 'documents', docId));
-      } catch (err) {
-        console.error('Error deleting document:', err);
-        alert('Erreur lors de la suppression.');
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) return;
+
+    // Best-effort cleanup of the underlying file blob on disk.
+    const docRecord = libraryDocs.find((d) => d.id === docId);
+    try {
+      await deleteDoc(doc(db, 'documents', docId));
+      if (docRecord?.fileId) {
+        await deleteFile(docRecord.fileId);
       }
+    } catch (err) {
+      console.error('Error deleting document:', err);
+      alert('Erreur lors de la suppression.');
     }
   };
 
@@ -2000,6 +1998,19 @@ export const MemberSpacePage = () => {
             </button>
           ))}
         </nav>
+        <div className="mt-6 pt-6 border-t border-aaj-border/60">
+          <button
+            type="button"
+            onClick={() => {
+              setIsContactModalOpen(true);
+              if (!sidebarPinned) setSidebarOpen(false);
+            }}
+            className="w-full flex items-center gap-4 px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] text-aaj-gray hover:bg-aaj-dark hover:text-white border border-aaj-border hover:border-aaj-dark transition-all"
+          >
+            <MessageSquare size={18} className="text-aaj-royal" />
+            Contacter l&apos;administration
+          </button>
+        </div>
         {(() => {
           const adminItems = [
             { id: 'admin-roles', icon: <KeyRound size={18} />, label: 'Rôles & Permissions', perm: 'roles_manage' },
@@ -3057,17 +3068,20 @@ export const MemberSpacePage = () => {
                                   className="text-aaj-gray group-hover:text-aaj-royal shrink-0"
                                 />
                               </button>
-                              {newDoc.fileBase64 && (
+                              {newDoc.file && (
                                 <button
                                   type="button"
-                                  onClick={() =>
+                                  onClick={() => {
                                     setNewDoc({
                                       ...newDoc,
-                                      fileBase64: '',
+                                      file: null,
                                       fileName: '',
                                       fileType: 'pdf',
-                                    })
-                                  }
+                                    });
+                                    if (libraryFileInputRef.current) {
+                                      libraryFileInputRef.current.value = '';
+                                    }
+                                  }}
                                   className="bg-red-50 text-red-500 px-4 rounded hover:bg-red-100 transition-colors"
                                 >
                                   <XCircle size={16} />
@@ -6384,19 +6398,9 @@ export const MemberSpacePage = () => {
           )}
         </AnimatePresence>
 
-        {/* Floating Action Button: Contact Admin — stacks above the chat FAB */}
-        <button
-          onClick={() => setIsContactModalOpen(true)}
-          style={{ bottom: `${fabBottom}px` }}
-          className="fixed right-6 md:right-8 w-14 h-14 bg-aaj-dark text-white rounded-full flex items-center justify-center shadow-2xl hover:bg-aaj-royal hover:scale-110 active:scale-95 transition-all z-40 group border-4 border-white/20"
-        >
-          <MessageSquare size={24} className="group-hover:rotate-12 transition-all" />
-          <div className="absolute right-full mr-4 bg-aaj-dark text-white px-4 py-2 rounded text-[10px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 pointer-events-none transition-all whitespace-nowrap shadow-xl">
-            Contacter l&apos;administration
-          </div>
-        </button>
-
-        {/* Floating chat widget — bottom-right, below the contact-admin FAB */}
+        {/* Floating chat widget — sole bottom-right FAB. The "Contacter
+            l'administration" entry now lives in the sidebar to avoid stacking
+            two near-identical messaging icons. */}
         <ChatFloatingWidget />
 
         {/* Overlay sidebar — portaled to <body> so `position: fixed`
