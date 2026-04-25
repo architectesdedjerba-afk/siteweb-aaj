@@ -97,6 +97,7 @@ import {
   type MemberType,
 } from '../lib/memberConfig';
 import CommissionCalendar from '../components/CommissionCalendar';
+import { PasswordInput } from '../components/PasswordInput';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { ChannelApprovals } from '../components/chat/ChannelApprovals';
 import { ChatFloatingWidget } from '../components/chat/ChatFloatingWidget';
@@ -2115,8 +2116,7 @@ export const MemberSpacePage = () => {
                   <label className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1">
                     Nouveau mot de passe
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={forcePwdForm.password}
                     onChange={(e) => setForcePwdForm({ ...forcePwdForm, password: e.target.value })}
                     minLength={6}
@@ -2130,8 +2130,7 @@ export const MemberSpacePage = () => {
                   <label className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1">
                     Confirmer le mot de passe
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={forcePwdForm.confirm}
                     onChange={(e) => setForcePwdForm({ ...forcePwdForm, confirm: e.target.value })}
                     minLength={6}
@@ -6504,8 +6503,7 @@ export const MemberSpacePage = () => {
               <label className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1">
                 Mot de passe
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-slate-50 border border-aaj-border rounded px-6 py-4 focus:outline-none focus:ring-1 focus:ring-aaj-royal focus:bg-white transition-all text-sm font-medium"
