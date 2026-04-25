@@ -145,8 +145,10 @@ export function UnescoMap({
       .addTo(map);
 
     map.on('click', (e: L.LeafletMouseEvent) => {
-      // Don't fire `onPick` when the click landed on a zone (the zone
-      // handler ran first via propagation).
+      // When `onZoneClick` is set, zone clicks stop propagation so this
+      // handler doesn't fire on top of the zone popup. When it isn't
+      // (e.g. the permit form), zone clicks bubble through and we drop
+      // the pin even if the user clicked inside a coloured polygon.
       if (!pickHandlerRef.current) return;
       pickHandlerRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
     });
@@ -208,6 +210,10 @@ export function UnescoMap({
         }`;
         lyr.bindTooltip(tooltip, { direction: 'top', sticky: true });
         lyr.on('click', (e) => {
+          // No zone-click consumer (e.g. in the permit form): let the
+          // click bubble up so the map's `click` listener can place the
+          // pin even when the user clicked inside a coloured polygon.
+          if (!zoneHandlerRef.current) return;
           // Halt both Leaflet's own event and the underlying DOM event so
           // document-level listeners (e.g. the ZonePopup click-outside
           // handler) don't fire when the user switches from one zone to
@@ -215,7 +221,7 @@ export function UnescoMap({
           L.DomEvent.stopPropagation(e as unknown as Event);
           const oe = (e as unknown as { originalEvent?: MouseEvent }).originalEvent;
           if (oe && typeof oe.stopPropagation === 'function') oe.stopPropagation();
-          zoneHandlerRef.current?.(props);
+          zoneHandlerRef.current(props);
         });
       },
     });
