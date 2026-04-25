@@ -409,6 +409,81 @@ function migration_006_contact_messages_reply_fields(): void
     }
 }
 
+/**
+ * Migration 007 — `jobs` table (offres & demandes d'emploi/stage).
+ * Idempotent: CREATE TABLE IF NOT EXISTS. See api/migrations/007_jobs.sql for
+ * the raw DDL.
+ */
+function migration_007_jobs_table(): void
+{
+    if (table_exists('jobs')) return;
+    db()->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS jobs (
+  id            VARCHAR(64) NOT NULL,
+  kind          VARCHAR(16) NOT NULL DEFAULT 'offer',
+  contract_type VARCHAR(32) NULL,
+  title         VARCHAR(300) NOT NULL,
+  description   TEXT NOT NULL,
+  city          VARCHAR(100) NULL,
+  company       VARCHAR(200) NULL,
+  author_uid    VARCHAR(64) NULL,
+  author_name   VARCHAR(200) NULL,
+  author_role   VARCHAR(100) NULL,
+  author_email  VARCHAR(255) NULL,
+  author_phone  VARCHAR(50)  NULL,
+  source        VARCHAR(16)  NOT NULL DEFAULT 'member',
+  status        VARCHAR(16)  NOT NULL DEFAULT 'pending',
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_jobs_status (status),
+  KEY idx_jobs_kind (kind),
+  KEY idx_jobs_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL);
+}
+
+/**
+ * Migration 008 — backfill jobs permissions on existing system roles.
+ *
+ * Mirrors migration_003 (UNESCO): jobs_view + jobs_create are added to
+ * admin/representative/member; jobs_manage is added to admin only. We only
+ * insert keys that are missing so super-admin overrides survive.
+ */
+function migration_008_jobs_default_perms(): void
+{
+    $pdo = db();
+    $matrix = [
+        'admin'          => ['jobs_view' => true, 'jobs_create' => true, 'jobs_manage' => true],
+        'representative' => ['jobs_view' => true, 'jobs_create' => true],
+        'member'         => ['jobs_view' => true, 'jobs_create' => true],
+    ];
+
+    $stmt   = $pdo->prepare('SELECT id, permissions FROM roles WHERE id = ? LIMIT 1');
+    $update = $pdo->prepare('UPDATE roles SET permissions = :perms WHERE id = :id');
+
+    foreach ($matrix as $roleId => $defaults) {
+        $stmt->execute([$roleId]);
+        $row = $stmt->fetch();
+        if (!$row) continue;
+        $perms = is_string($row['permissions'])
+            ? (json_decode((string)$row['permissions'], true) ?: [])
+            : (array)$row['permissions'];
+        $changed = false;
+        foreach ($defaults as $k => $v) {
+            if (!array_key_exists($k, $perms)) {
+                $perms[$k] = $v;
+                $changed = true;
+            }
+        }
+        if ($changed) {
+            $update->execute([
+                ':perms' => json_encode($perms, JSON_UNESCAPED_UNICODE),
+                ':id'    => $roleId,
+            ]);
+        }
+    }
+}
+
 function run_auto_migrations(): void
 {
     try {
@@ -440,6 +515,16 @@ function run_auto_migrations(): void
     }
     try {
         migration_006_contact_messages_reply_fields();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_007_jobs_table();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_008_jobs_default_perms();
     } catch (Throwable $e) {
         error_log('[migrations] ' . $e->getMessage());
     }

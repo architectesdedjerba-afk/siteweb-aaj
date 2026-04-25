@@ -36,6 +36,7 @@ export const Navbar = () => {
     { name: t("nav.about"), path: "/aaj" },
     { name: t("nav.events"), path: "/evennements" },
     { name: t("nav.partners"), path: "/partenaires" },
+    { name: t("nav.jobs"), path: "/emplois" },
   ];
 
   return (
