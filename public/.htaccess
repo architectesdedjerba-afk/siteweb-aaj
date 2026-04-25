@@ -9,10 +9,15 @@
 </IfModule>
 
 # 2. SPA fallback — toutes les routes non-fichiers servent index.html
+#    SAUF /assets/* : si un asset hashé est manquant (deploy non-atomique),
+#    on veut un vrai 404 — pas du HTML déguisé en CSS/JS qui casse la page
+#    silencieusement. Le self-healing dans index.html détecte le 404 et
+#    force un rechargement.
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
   RewriteRule ^index\.html$ - [L]
+  RewriteRule ^assets/ - [L]
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule . /index.html [L]
