@@ -3668,12 +3668,27 @@ export const MemberSpacePage = () => {
                                   }`}
                                 >
                                   <td className="p-4">
-                                    <p className="text-sm font-black uppercase tracking-tight">
-                                      {member.displayName}
-                                    </p>
-                                    <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest">
-                                      {member.email}
-                                    </p>
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-aaj-gray flex-shrink-0 overflow-hidden">
+                                        {member.photoBase64 ? (
+                                          <img
+                                            src={member.photoBase64}
+                                            alt={member.displayName}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        ) : (
+                                          <UserCircle size={18} />
+                                        )}
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-black uppercase tracking-tight">
+                                          {member.displayName}
+                                        </p>
+                                        <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest">
+                                          {member.email}
+                                        </p>
+                                      </div>
+                                    </div>
                                   </td>
                                   <td className="p-4">
                                     {isArchived ? (
@@ -3968,19 +3983,34 @@ export const MemberSpacePage = () => {
                                   className="hover:bg-slate-50/50 transition-colors"
                                 >
                                   <td className="p-4">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <p className="text-sm font-black uppercase tracking-tight">
-                                        {member.displayName || '—'}
-                                      </p>
-                                      {isSelf && (
-                                        <span className="px-2 py-0.5 rounded-full bg-blue-50 text-aaj-royal text-[8px] font-black uppercase tracking-widest border border-blue-100">
-                                          Vous
-                                        </span>
-                                      )}
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-aaj-gray flex-shrink-0 overflow-hidden">
+                                        {member.photoBase64 ? (
+                                          <img
+                                            src={member.photoBase64}
+                                            alt={member.displayName || ''}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        ) : (
+                                          <UserCircle size={18} />
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <p className="text-sm font-black uppercase tracking-tight">
+                                            {member.displayName || '—'}
+                                          </p>
+                                          {isSelf && (
+                                            <span className="px-2 py-0.5 rounded-full bg-blue-50 text-aaj-royal text-[8px] font-black uppercase tracking-widest border border-blue-100">
+                                              Vous
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest">
+                                          {member.email}
+                                        </p>
+                                      </div>
                                     </div>
-                                    <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest">
-                                      {member.email}
-                                    </p>
                                   </td>
                                   <td className="p-4">
                                     <select
