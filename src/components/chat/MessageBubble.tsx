@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Reply, Smile, Trash2, FileText, Download, MoreVertical } from 'lucide-react';
 import { motion } from 'motion/react';
 import { doc, updateDoc, deleteDoc, db } from '../../lib/firebase';
@@ -21,6 +21,10 @@ interface MessageBubbleProps {
   onReply: (msg: ChatMessage) => void;
   /** Hide avatar/name when this message is part of a streak from same author. */
   groupedWithPrev?: boolean;
+  /** When true, anchor the reaction picker / overflow menu *below* the bubble
+   *  instead of above. Used for the first few messages so popovers don't
+   *  overflow the top of the scroll viewport. */
+  flipMenuBelow?: boolean;
 }
 
 export function MessageBubble({
@@ -31,13 +35,30 @@ export function MessageBubble({
   membersByUid,
   onReply,
   groupedWithPrev = false,
+  flipMenuBelow = false,
 }: MessageBubbleProps) {
   const [showReactions, setShowReactions] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   const isMine = message.senderId === currentUid;
   const sender = membersByUid[message.senderId];
   const time = useMemo(() => formatTime(message.createdAt), [message.createdAt]);
+  const fullTimestamp = useMemo(() => formatFullTimestamp(message.createdAt), [message.createdAt]);
+
+  // Click-outside closes both popovers so they don't get stranded open.
+  useEffect(() => {
+    if (!showReactions && !showMenu) return;
+    const onDown = (e: MouseEvent) => {
+      if (!popoverRef.current) return;
+      if (!popoverRef.current.contains(e.target as Node)) {
+        setShowReactions(false);
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [showReactions, showMenu]);
 
   const toggleReaction = async (emoji: string) => {
     if (!message.id) return;
@@ -77,6 +98,8 @@ export function MessageBubble({
     );
   }
 
+  const canDelete = isMine || isModerator;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -98,17 +121,21 @@ export function MessageBubble({
             <span className="text-[11px] font-bold text-aaj-dark">
               {message.senderName || sender?.displayName || 'Membre'}
             </span>
-            <span className="text-[10px] text-aaj-gray">{time}</span>
+            <span className="text-[10px] text-aaj-gray" title={fullTimestamp}>
+              {time}
+            </span>
           </div>
         )}
 
-        <div className="relative">
+        <div className="relative" ref={popoverRef}>
           <div
-            className={`rounded-2xl px-4 py-2.5 break-words whitespace-pre-wrap ${
+            className={`rounded-2xl px-4 py-2.5 break-words whitespace-pre-wrap shadow-sm ${
               isMine
                 ? 'bg-aaj-royal text-white rounded-tr-sm'
-                : 'bg-slate-100 text-aaj-dark rounded-tl-sm'
+                : 'bg-white border border-aaj-border text-aaj-dark rounded-tl-sm'
             }`}
+            // Tooltip for grouped (no header) messages so users can see the time
+            title={groupedWithPrev ? fullTimestamp : undefined}
           >
             {message.replyTo && (
               <div
@@ -131,7 +158,7 @@ export function MessageBubble({
                 target="_blank"
                 rel="noopener noreferrer"
                 className={`flex items-center gap-2 p-2 mb-2 rounded ${
-                  isMine ? 'bg-white/10 hover:bg-white/20' : 'bg-white hover:bg-slate-50'
+                  isMine ? 'bg-white/10 hover:bg-white/20' : 'bg-aaj-soft hover:bg-slate-100'
                 } transition-colors`}
               >
                 <FileText size={18} />
@@ -142,7 +169,7 @@ export function MessageBubble({
               </a>
             )}
 
-            {message.text && <div className="text-sm">{message.text}</div>}
+            {message.text && <div className="text-sm leading-relaxed">{message.text}</div>}
 
             {message.editedAt && (
               <div className={`text-[9px] mt-1 ${isMine ? 'text-white/60' : 'text-aaj-gray'}`}>
@@ -151,47 +178,76 @@ export function MessageBubble({
             )}
           </div>
 
+          {/* Action toolbar — visible on hover (desktop) and when any popover
+              is open. On touch devices the always-visible mobile button below
+              gives access without hovering. */}
           <div
-            className={`absolute top-0 ${
+            className={`hidden sm:flex absolute top-0 ${
               isMine ? 'right-full mr-2' : 'left-full ml-2'
-            } opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1`}
+            } items-center gap-1 transition-opacity ${
+              showReactions || showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            }`}
           >
-            <button
-              onClick={() => setShowReactions((s) => !s)}
-              className="w-7 h-7 bg-white border border-aaj-border rounded-full flex items-center justify-center hover:bg-aaj-soft text-aaj-gray"
+            <ToolbarButton
+              onClick={() => {
+                setShowMenu(false);
+                setShowReactions((s) => !s);
+              }}
               title="Réagir"
+              ariaLabel="Réagir au message"
             >
               <Smile size={14} />
-            </button>
-            <button
+            </ToolbarButton>
+            <ToolbarButton
               onClick={() => onReply(message)}
-              className="w-7 h-7 bg-white border border-aaj-border rounded-full flex items-center justify-center hover:bg-aaj-soft text-aaj-gray"
               title="Répondre"
+              ariaLabel="Répondre au message"
             >
               <Reply size={14} />
-            </button>
-            {(isMine || isModerator) && (
-              <button
-                onClick={() => setShowMenu((s) => !s)}
-                className="w-7 h-7 bg-white border border-aaj-border rounded-full flex items-center justify-center hover:bg-aaj-soft text-aaj-gray"
-                title="Plus"
+            </ToolbarButton>
+            {canDelete && (
+              <ToolbarButton
+                onClick={() => {
+                  setShowReactions(false);
+                  setShowMenu((s) => !s);
+                }}
+                title="Plus d'actions"
+                ariaLabel="Plus d'actions"
               >
                 <MoreVertical size={14} />
-              </button>
+              </ToolbarButton>
             )}
           </div>
 
+          {/* Mobile-only: a single always-visible toggle next to the bubble
+              that opens the action menu. Hover doesn't work on touch devices,
+              so users need a tap-target. */}
+          <button
+            type="button"
+            onClick={() => {
+              setShowReactions(false);
+              setShowMenu((s) => !s);
+            }}
+            className={`sm:hidden absolute top-1 ${
+              isMine ? 'right-full mr-1' : 'left-full ml-1'
+            } w-7 h-7 bg-white border border-aaj-border rounded-full flex items-center justify-center text-aaj-gray active:bg-aaj-soft`}
+            aria-label="Actions du message"
+          >
+            <MoreVertical size={14} />
+          </button>
+
           {showReactions && (
             <div
-              className={`absolute z-10 ${
-                isMine ? 'right-0' : 'left-0'
-              } -top-12 bg-white border border-aaj-border rounded-full shadow-lg px-2 py-1 flex gap-1`}
+              className={`absolute z-10 ${isMine ? 'right-0' : 'left-0'} ${
+                flipMenuBelow ? 'top-full mt-2' : '-top-12'
+              } bg-white border border-aaj-border rounded-full shadow-lg px-2 py-1 flex gap-1`}
             >
               {REACTIONS.map((e) => (
                 <button
                   key={e}
                   onClick={() => toggleReaction(e)}
                   className="w-8 h-8 rounded-full hover:bg-aaj-soft text-lg flex items-center justify-center transition-transform hover:scale-125"
+                  aria-label={`Réagir avec ${e}`}
                 >
                   {e}
                 </button>
@@ -201,25 +257,47 @@ export function MessageBubble({
 
           {showMenu && (
             <div
-              className={`absolute z-10 ${
-                isMine ? 'right-0' : 'left-0'
-              } top-full mt-1 bg-white border border-aaj-border rounded shadow-lg overflow-hidden`}
+              className={`absolute z-10 ${isMine ? 'right-0' : 'left-0'} ${
+                flipMenuBelow ? 'top-full mt-1' : '-top-2 -translate-y-full'
+              } bg-white border border-aaj-border rounded shadow-lg overflow-hidden min-w-[160px]`}
             >
+              {/* Mobile gets reply + react + delete in the same menu since
+                  there's no hover toolbar */}
               <button
                 onClick={() => {
                   setShowMenu(false);
-                  handleDelete();
+                  onReply(message);
                 }}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-red-50 w-full text-left whitespace-nowrap"
+                className="sm:hidden flex items-center gap-2 px-4 py-2 text-sm text-aaj-dark hover:bg-aaj-soft w-full text-left whitespace-nowrap"
               >
-                <Trash2 size={14} /> Supprimer
+                <Reply size={14} /> Répondre
               </button>
+              <button
+                onClick={() => {
+                  setShowMenu(false);
+                  setShowReactions(true);
+                }}
+                className="sm:hidden flex items-center gap-2 px-4 py-2 text-sm text-aaj-dark hover:bg-aaj-soft w-full text-left whitespace-nowrap"
+              >
+                <Smile size={14} /> Réagir
+              </button>
+              {canDelete && (
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    handleDelete();
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-red-50 w-full text-left whitespace-nowrap"
+                >
+                  <Trash2 size={14} /> Supprimer
+                </button>
+              )}
             </div>
           )}
         </div>
 
         {message.reactions && Object.keys(message.reactions).length > 0 && (
-          <div className={`flex gap-1 mt-1 ${isMine ? 'justify-end' : 'justify-start'}`}>
+          <div className={`flex gap-1 mt-1 flex-wrap ${isMine ? 'justify-end' : 'justify-start'}`}>
             {Object.entries(message.reactions).map(([emoji, uids]) => {
               if (uids.length === 0) return null;
               const reactedByMe = uids.includes(currentUid);
@@ -232,6 +310,7 @@ export function MessageBubble({
                       ? 'bg-aaj-soft border-aaj-royal text-aaj-royal'
                       : 'bg-white border-aaj-border text-aaj-gray hover:bg-slate-50'
                   }`}
+                  aria-label={`${uids.length} réaction${uids.length > 1 ? 's' : ''} ${emoji}`}
                 >
                   <span>{emoji}</span>
                   <span className="font-bold">{uids.length}</span>
@@ -245,19 +324,60 @@ export function MessageBubble({
   );
 }
 
+function ToolbarButton({
+  onClick,
+  title,
+  ariaLabel,
+  children,
+}: {
+  onClick: () => void;
+  title: string;
+  ariaLabel: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-7 h-7 bg-white border border-aaj-border rounded-full flex items-center justify-center hover:bg-aaj-soft hover:text-aaj-royal text-aaj-gray transition-colors shadow-sm"
+      title={title}
+      aria-label={ariaLabel}
+    >
+      {children}
+    </button>
+  );
+}
+
 function toDate(value: ChatMessage['createdAt']): Date | null {
   if (!value) return null;
-  if (typeof value === 'string') return new Date(value);
-  const v = value as any;
-  if (typeof v?.toDate === 'function') return v.toDate();
-  if (typeof v?.seconds === 'number') return new Date(v.seconds * 1000);
-  return null;
+  let d: Date | null = null;
+  if (typeof value === 'string') d = new Date(value);
+  else {
+    const v = value as any;
+    if (typeof v?.toDate === 'function') d = v.toDate();
+    else if (typeof v?.seconds === 'number') d = new Date(v.seconds * 1000);
+  }
+  // Reject Invalid Date so callers don't render "Invalid Date" in the UI.
+  if (!d || isNaN(d.getTime())) return null;
+  return d;
 }
 
 function formatTime(value: ChatMessage['createdAt']): string {
   const d = toDate(value);
   if (!d) return '';
   return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatFullTimestamp(value: ChatMessage['createdAt']): string {
+  const d = toDate(value);
+  if (!d) return '';
+  return d.toLocaleString('fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export function formatDayLabel(value: ChatMessage['createdAt']): string {

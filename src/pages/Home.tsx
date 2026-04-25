@@ -56,16 +56,10 @@ export const HomePage = () => {
 
                 <div className="flex flex-wrap gap-4 mb-8">
                   <Link
-                    to="/demander-adhesion"
+                    to="/aaj"
                     className="inline-flex items-center gap-3 bg-aaj-dark text-white px-7 py-4 text-[10px] font-black uppercase tracking-[3px] hover:bg-aaj-royal transition-all active:scale-[0.98]"
                   >
-                    Demander mon adhésion <ArrowRight size={14} aria-hidden="true" />
-                  </Link>
-                  <Link
-                    to="/aaj"
-                    className="inline-flex items-center gap-3 border border-aaj-dark text-aaj-dark px-7 py-4 text-[10px] font-black uppercase tracking-[3px] hover:bg-aaj-dark hover:text-white transition-all"
-                  >
-                    Découvrir l'AAJ
+                    Découvrir l'AAJ <ArrowRight size={14} aria-hidden="true" />
                   </Link>
                 </div>
 
@@ -203,14 +197,8 @@ export const HomePage = () => {
               </div>
               <div className="md:col-span-4 flex flex-col gap-4">
                 <Link
-                  to="/demander-adhesion"
-                  className="w-full bg-white text-aaj-dark px-6 py-4 text-[10px] font-black uppercase tracking-[3px] hover:bg-aaj-royal hover:text-white transition-all text-center"
-                >
-                  Devenir adhérent
-                </Link>
-                <Link
                   to="/devenir-partenaire"
-                  className="w-full border border-white/30 px-6 py-4 text-[10px] font-black uppercase tracking-[3px] hover:bg-white/10 transition-all text-center"
+                  className="w-full bg-white text-aaj-dark px-6 py-4 text-[10px] font-black uppercase tracking-[3px] hover:bg-aaj-royal hover:text-white transition-all text-center"
                 >
                   Devenir partenaire
                 </Link>

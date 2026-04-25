@@ -219,18 +219,17 @@ function MapTab({
   docsById: Record<string, UnescoDocument>;
 }) {
   const [selected, setSelected] = useState<Record<string, any> | null>(null);
+  const [focusBbox, setFocusBbox] = useState<[number, number, number, number] | null>(null);
   const sources = geojson?.sources ?? [];
-  // `enabledSourceIds` defaults to "all active" and is re-initialised on
-  // every sources-list change. Users toggle individual KMZ files via the
-  // checkbox dropdown; unchecking a file hides its zones on the map.
   const [enabledSourceIds, setEnabledSourceIds] = useState<Set<string>>(
     () => new Set(sources.map((s) => s.id))
   );
   useEffect(() => {
     setEnabledSourceIds(new Set(sources.map((s) => s.id)));
-    // We intentionally re-sync on sources ID set change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sources.map((s) => s.id).join(',')]);
+
+  const activeSourceIds = useMemo(() => new Set(sources.map((s) => s.id)), [sources]);
 
   const filteredGeojson = useMemo<UnescoGeoJson | null>(() => {
     if (!geojson) return null;
@@ -245,77 +244,176 @@ function MapTab({
   }, [geojson, enabledSourceIds, sources.length]);
 
   const visibleZones = useMemo(() => {
-    const kept = zones.filter((z) => z.isVisible !== false);
-    if (sources.length <= 1) return kept;
-    return kept.filter((z) => enabledSourceIds.has(z.kmzSourceId));
-  }, [zones, sources.length, enabledSourceIds]);
+    return zones.filter((z) => {
+      if (z.isVisible === false) return false;
+      if (!activeSourceIds.has(z.kmzSourceId)) return false;
+      if (sources.length > 1 && !enabledSourceIds.has(z.kmzSourceId)) return false;
+      return true;
+    });
+  }, [zones, activeSourceIds, enabledSourceIds, sources.length]);
+
+  // Index features by zoneId so legend clicks can find the matching
+  // geometry → compute bbox + lift the feature's properties into the popup.
+  const featureByZoneId = useMemo(() => {
+    const m: Record<string, (typeof geojson extends UnescoGeoJson ? UnescoGeoJson['features'][number] : any)> = {};
+    if (!filteredGeojson) return m;
+    for (const f of filteredGeojson.features) {
+      const zid = f.properties?.zoneId as string | undefined;
+      if (zid && !m[zid]) m[zid] = f;
+    }
+    return m;
+  }, [filteredGeojson]);
+
+  const handleLegendClick = (zone: UnescoZone) => {
+    const feat = featureByZoneId[zone.id];
+    if (!feat) return;
+    const bbox = geometryBbox(feat.geometry);
+    if (bbox) setFocusBbox(bbox);
+    setSelected(feat.properties);
+  };
 
   const isEmpty = !geojson || geojson.features.length === 0;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-      <div className="lg:col-span-3">
-        {sources.length > 1 && (
-          <div className="mb-4">
-            <KmzMultiSelect
-              sources={sources}
-              enabled={enabledSourceIds}
-              onChange={setEnabledSourceIds}
-            />
-          </div>
-        )}
-        {isEmpty ? (
-          <div className="border border-aaj-border rounded p-8 text-center bg-slate-50">
-            <Info className="mx-auto text-aaj-gray mb-3" size={24} />
-            <p className="text-sm text-aaj-gray">
-              Aucun fichier KMZ n'est publié pour l'instant. L'administrateur peut en déposer depuis{' '}
-              <strong>Paramètres UNESCO</strong>.
-            </p>
-          </div>
-        ) : (
-          <div className="relative">
-            <UnescoMap
-              geojson={filteredGeojson}
-              onZoneClick={(props) => setSelected(props)}
-              height={520}
-              fitKey={Array.from(enabledSourceIds).sort().join(',')}
-            />
-            {selected && (
-              <ZonePopup props={selected} docsById={docsById} onClose={() => setSelected(null)} />
-            )}
-          </div>
-        )}
-      </div>
+    <div className="space-y-4">
+      {sources.length > 1 && (
+        <KmzMultiSelect
+          sources={sources}
+          enabled={enabledSourceIds}
+          onChange={setEnabledSourceIds}
+        />
+      )}
 
-      <aside className="lg:col-span-1">
-        <div className="border border-aaj-border rounded p-4">
-          <h3 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-gray mb-4">
-            Légende des zones
-          </h3>
-          {visibleZones.length === 0 ? (
-            <p className="text-xs text-aaj-gray">Aucune zone publiée.</p>
-          ) : (
-            <ul className="space-y-3">
-              {visibleZones.map((z) => (
-                <li key={z.id} className="flex items-start gap-3">
-                  <span
-                    className="inline-block w-4 h-4 mt-1 rounded-sm border border-black/10 shrink-0"
-                    style={{ background: z.color, opacity: 0.6 }}
-                  />
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold leading-tight">{z.name}</p>
-                    <p className="text-[10px] uppercase tracking-[2px] text-aaj-gray mt-0.5">
-                      {zoneTypeLabel(z.zoneType)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
+      {isEmpty ? (
+        <div className="border border-aaj-border rounded p-8 text-center bg-slate-50">
+          <Info className="mx-auto text-aaj-gray mb-3" size={24} />
+          <p className="text-sm text-aaj-gray">
+            Aucun fichier KMZ n'est publié pour l'instant. L'administrateur peut en déposer depuis{' '}
+            <strong>Paramètres UNESCO</strong>.
+          </p>
+        </div>
+      ) : (
+        <div className="relative">
+          <UnescoMap
+            geojson={filteredGeojson}
+            onZoneClick={(props) => setSelected(props)}
+            height={600}
+            fitKey={Array.from(enabledSourceIds).sort().join(',')}
+            focusBbox={focusBbox}
+          />
+          {selected && (
+            <ZonePopup props={selected} docsById={docsById} onClose={() => setSelected(null)} />
           )}
         </div>
-      </aside>
+      )}
+
+      {visibleZones.length > 0 && (
+        <CompactLegend
+          zones={visibleZones}
+          sources={sources}
+          onSelect={handleLegendClick}
+        />
+      )}
     </div>
   );
+}
+
+/**
+ * Compact legend rendered *below* the map. Groups zones by KMZ source
+ * when more than one source is shown, otherwise renders a single flat
+ * chip row. Each chip click jumps the map to that zone and opens its
+ * regulation popup.
+ */
+function CompactLegend({
+  zones,
+  sources,
+  onSelect,
+}: {
+  zones: UnescoZone[];
+  sources: NonNullable<UnescoGeoJson['sources']>;
+  onSelect: (zone: UnescoZone) => void;
+}) {
+  const groupBySource = sources.length > 1;
+
+  const groups = useMemo(() => {
+    if (!groupBySource) return [{ id: '__all', title: null as string | null, zones }];
+    const map: Record<string, { id: string; title: string | null; zones: UnescoZone[] }> = {};
+    for (const z of zones) {
+      const src = sources.find((s) => s.id === z.kmzSourceId);
+      const key = src?.id ?? z.kmzSourceId;
+      if (!map[key]) map[key] = { id: key, title: src?.title ?? '—', zones: [] };
+      map[key].zones.push(z);
+    }
+    return Object.values(map);
+  }, [zones, sources, groupBySource]);
+
+  return (
+    <section className="border border-aaj-border rounded p-3">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-gray">
+          Légende des zones
+        </h3>
+        <span className="text-[10px] text-aaj-gray">
+          {zones.length} zone{zones.length > 1 ? 's' : ''} · cliquez pour zoomer
+        </span>
+      </div>
+      <div className="space-y-3">
+        {groups.map((g) => (
+          <div key={g.id}>
+            {g.title && (
+              <p className="text-[10px] uppercase tracking-[2px] text-aaj-gray font-black mb-1.5">
+                {g.title}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-1.5">
+              {g.zones.map((z) => (
+                <button
+                  key={z.id}
+                  type="button"
+                  onClick={() => onSelect(z)}
+                  title={`${z.name} — ${zoneTypeLabel(z.zoneType)}`}
+                  className="inline-flex items-center gap-1.5 px-2 py-1 text-xs rounded border border-aaj-border bg-white hover:bg-slate-50 transition-colors max-w-full"
+                >
+                  <span
+                    aria-hidden
+                    className="inline-block w-3 h-3 rounded-sm border border-black/10 shrink-0"
+                    style={{ background: z.color, opacity: 0.7 }}
+                  />
+                  <span className="truncate font-medium text-aaj-dark">{z.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function geometryBbox(geom: any): [number, number, number, number] | null {
+  if (!geom || !geom.coordinates) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const visit = (node: any) => {
+    if (!Array.isArray(node)) return;
+    if (
+      node.length === 2 &&
+      typeof node[0] === 'number' &&
+      typeof node[1] === 'number'
+    ) {
+      if (node[0] < minX) minX = node[0];
+      if (node[1] < minY) minY = node[1];
+      if (node[0] > maxX) maxX = node[0];
+      if (node[1] > maxY) maxY = node[1];
+      return;
+    }
+    for (const child of node) visit(child);
+  };
+  visit(geom.coordinates);
+  if (!Number.isFinite(minX)) return null;
+  return [minX, minY, maxX, maxY];
 }
 
 /**

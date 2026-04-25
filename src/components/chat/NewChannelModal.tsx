@@ -115,15 +115,21 @@ export function NewChannelModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-aaj-dark/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 z-[1200] bg-aaj-dark/70 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={handleClose}
     >
-      <div
-        className="bg-white max-w-2xl w-full rounded shadow-2xl my-8"
+      {/* Promote <form> to the modal wrapper so the submit button can live in
+          the pinned footer (outside the scrollable body) while still triggering
+          submission. max-h-[90vh] + flex column keeps header/footer visible
+          and only the body scrolls when the picker grows tall. */}
+      <form
+        onSubmit={handleSubmit}
         onClick={(e) => e.stopPropagation()}
+        className="bg-white max-w-2xl w-full rounded shadow-2xl flex flex-col max-h-[90vh] min-h-0"
       >
-        <div className="flex items-center justify-between p-6 border-b border-aaj-border">
-          <div>
+        {/* Header — pinned */}
+        <div className="flex items-start justify-between p-6 border-b border-aaj-border flex-shrink-0">
+          <div className="min-w-0 pr-4">
             <span className="text-[10px] uppercase tracking-[3px] text-aaj-royal font-black">
               Nouveau canal
             </span>
@@ -137,15 +143,17 @@ export function NewChannelModal({
             )}
           </div>
           <button
+            type="button"
             onClick={handleClose}
-            className="text-aaj-gray hover:text-red-500 transition-colors"
+            className="text-aaj-gray hover:text-red-500 transition-colors flex-shrink-0"
             aria-label="Fermer"
           >
             <X size={24} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        {/* Scrollable body */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
           <div>
             <label className="text-[10px] font-black uppercase tracking-[2px] text-aaj-gray block mb-2">
               Nom du canal *
@@ -216,27 +224,28 @@ export function NewChannelModal({
           {error && (
             <div className="p-3 bg-aaj-error-soft text-aaj-error rounded text-sm">{error}</div>
           )}
+        </div>
 
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-aaj-border">
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={submitting}
-              className="px-5 py-3 text-[11px] font-black uppercase tracking-[2px] text-aaj-gray hover:text-aaj-dark transition-colors"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="px-6 py-3 bg-aaj-royal text-white text-[11px] font-black uppercase tracking-[2px] rounded hover:bg-aaj-dark transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              {submitting && <Loader2 size={14} className="animate-spin" />}
-              {isModerator ? 'Créer le canal' : 'Demander la création'}
-            </button>
-          </div>
-        </form>
-      </div>
+        {/* Footer — pinned */}
+        <div className="flex items-center justify-end gap-3 p-4 border-t border-aaj-border bg-white flex-shrink-0">
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={submitting}
+            className="px-5 py-3 text-[11px] font-black uppercase tracking-[2px] text-aaj-gray hover:text-aaj-dark transition-colors"
+          >
+            Annuler
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="px-6 py-3 bg-aaj-royal text-white text-[11px] font-black uppercase tracking-[2px] rounded hover:bg-aaj-dark transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            {submitting && <Loader2 size={14} className="animate-spin" />}
+            {isModerator ? 'Créer le canal' : 'Demander la création'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

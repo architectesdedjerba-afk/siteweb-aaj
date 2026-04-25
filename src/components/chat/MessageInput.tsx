@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useRef, useState, KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, KeyboardEvent } from 'react';
 import { Send, Paperclip, X, Loader2, Reply } from 'lucide-react';
 import { addDoc, collection, doc, updateDoc, db } from '../../lib/firebase';
 import { api } from '../../lib/api';
@@ -16,6 +16,10 @@ interface MessageInputProps {
   currentPhoto?: string;
   replyTo: ChatMessage | null;
   onClearReply: () => void;
+  /** When true, focus the textarea after mount and whenever the channel
+   *  changes. Used by the floating widget so the input is ready as soon as
+   *  the popup opens. */
+  autoFocus?: boolean;
 }
 
 export function MessageInput({
@@ -25,12 +29,31 @@ export function MessageInput({
   currentPhoto,
   replyTo,
   onClearReply,
+  autoFocus = false,
 }: MessageInputProps) {
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Focus the textarea when the input mounts in a freshly-opened channel
+  // (only on devices with a fine pointer, so we don't pop the soft keyboard
+  // on mobile).
+  useEffect(() => {
+    if (!autoFocus) return;
+    if (typeof window === 'undefined') return;
+    const fine = window.matchMedia?.('(pointer: fine)').matches;
+    if (!fine) return;
+    const t = setTimeout(() => textareaRef.current?.focus(), 200);
+    return () => clearTimeout(t);
+  }, [autoFocus, channelId]);
+
+  // When the user picks "reply", focus the input so they can type immediately.
+  useEffect(() => {
+    if (replyTo) textareaRef.current?.focus();
+  }, [replyTo]);
 
   const canSend = (text.trim() || file) && !sending;
 
@@ -189,12 +212,14 @@ export function MessageInput({
         />
 
         <textarea
+          ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKey}
           rows={1}
-          placeholder="Écrire un message..."
-          className="flex-1 resize-none px-4 py-2.5 border border-aaj-border rounded-2xl text-sm focus:border-aaj-royal focus:outline-none max-h-32"
+          placeholder="Écrire un message…"
+          title="Entrée pour envoyer · Maj+Entrée pour aller à la ligne"
+          className="flex-1 resize-none px-4 py-2.5 border border-aaj-border rounded-2xl text-sm focus:border-aaj-royal focus:outline-none focus:ring-2 focus:ring-aaj-royal/10 max-h-32"
           style={{ minHeight: '40px' }}
         />
 

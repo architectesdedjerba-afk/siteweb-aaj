@@ -23,6 +23,46 @@ export const DEFAULT_VILLES: string[] = Array.from(new Set(TUNISIAN_DELEGATIONS)
 
 export const VILLES_DOC_PATH = { col: 'config', id: 'villes' } as const;
 export const MEMBER_TYPES_DOC_PATH = { col: 'config', id: 'memberTypes' } as const;
+export const COMMISSION_COLORS_DOC_PATH = { col: 'config', id: 'commissionColors' } as const;
+
+/**
+ * Default colour assignments for the three Djerba town councils whose
+ * commissions feed into the calendar. Falls back to a deterministic palette
+ * for any other town the admin adds later.
+ */
+export const DEFAULT_COMMISSION_COLORS: Record<string, string> = {
+  'Houmt Souk': '#1E40AF',
+  Midoun: '#16A34A',
+  Ajim: '#D97706',
+};
+
+const FALLBACK_PALETTE = [
+  '#1E40AF',
+  '#16A34A',
+  '#D97706',
+  '#7C3AED',
+  '#DB2777',
+  '#0EA5E9',
+  '#DC2626',
+  '#0F766E',
+  '#9333EA',
+  '#CA8A04',
+];
+
+/**
+ * Resolve a colour for a town. Priority:
+ *   1. explicit value in the saved config map (admin-customised),
+ *   2. hardcoded default for known Djerba towns,
+ *   3. deterministic pick from FALLBACK_PALETTE based on the town name.
+ */
+export function colorForTown(town: string, configured: Record<string, string>): string {
+  const direct = configured?.[town];
+  if (direct && /^#[0-9a-fA-F]{6}$/.test(direct)) return direct;
+  if (DEFAULT_COMMISSION_COLORS[town]) return DEFAULT_COMMISSION_COLORS[town];
+  let hash = 0;
+  for (let i = 0; i < town.length; i++) hash = (hash * 31 + town.charCodeAt(i)) >>> 0;
+  return FALLBACK_PALETTE[hash % FALLBACK_PALETTE.length];
+}
 
 export async function loadVilles(): Promise<string[]> {
   try {
@@ -68,6 +108,41 @@ export async function saveMemberTypes(list: MemberType[]): Promise<void> {
   await setDoc(
     doc(db, MEMBER_TYPES_DOC_PATH.col, MEMBER_TYPES_DOC_PATH.id),
     { list, updatedAt: serverTimestamp() },
+    { merge: true }
+  );
+}
+
+export async function loadCommissionColors(): Promise<Record<string, string>> {
+  try {
+    const snap = await getDoc(
+      doc(db, COMMISSION_COLORS_DOC_PATH.col, COMMISSION_COLORS_DOC_PATH.id)
+    );
+    if (snap.exists()) {
+      const data = snap.data() as { colors?: Record<string, string> };
+      if (data.colors && typeof data.colors === 'object') {
+        const cleaned: Record<string, string> = {};
+        for (const [town, hex] of Object.entries(data.colors)) {
+          if (typeof hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(hex)) {
+            cleaned[town] = hex;
+          }
+        }
+        return { ...DEFAULT_COMMISSION_COLORS, ...cleaned };
+      }
+    }
+  } catch (err) {
+    console.warn('loadCommissionColors fallback to defaults:', err);
+  }
+  return { ...DEFAULT_COMMISSION_COLORS };
+}
+
+export async function saveCommissionColors(colors: Record<string, string>): Promise<void> {
+  const cleaned: Record<string, string> = {};
+  for (const [town, hex] of Object.entries(colors)) {
+    if (typeof hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(hex)) cleaned[town] = hex;
+  }
+  await setDoc(
+    doc(db, COMMISSION_COLORS_DOC_PATH.col, COMMISSION_COLORS_DOC_PATH.id),
+    { colors: cleaned, updatedAt: serverTimestamp() },
     { merge: true }
   );
 }

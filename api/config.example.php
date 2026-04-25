@@ -56,7 +56,10 @@ return [
         // Storage path. Default is inside /api (protected by .htaccess).
         // For extra safety, move it above the webroot and set the absolute path here.
         'storage_dir'  => __DIR__ . '/uploads-storage',
-        'max_bytes'    => 10 * 1024 * 1024, // 10 MB
+        // App-level cap for most folders. Set to 0 to disable (PHP ini
+        // limits still apply — see api/.user.ini). Folders listed in
+        // $unlimitedFolders inside files.php bypass this cap regardless.
+        'max_bytes'    => 200 * 1024 * 1024, // 200 MB
         'allowed_mime' => [
             'image/jpeg', 'image/png', 'image/gif', 'image/webp',
             'application/pdf',

@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, FormEvent, useRef, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import {
   UserCircle,
@@ -42,6 +43,9 @@ import {
   Landmark,
   MapPinned,
   FileCheck,
+  Pin,
+  PinOff,
+  PanelLeftOpen,
 } from 'lucide-react';
 import {
   // auth API
@@ -78,16 +82,21 @@ import {
   sanitizeRoleId,
 } from '../lib/permissions';
 import {
+  COMMISSION_COLORS_DOC_PATH,
+  DEFAULT_COMMISSION_COLORS,
   DEFAULT_MEMBER_TYPES,
   DEFAULT_VILLES,
   MEMBER_TYPES_DOC_PATH,
   VILLES_DOC_PATH,
   buildMatricule,
+  colorForTown,
   computeNextIndex,
+  saveCommissionColors,
   saveMemberTypes,
   saveVilles,
   type MemberType,
 } from '../lib/memberConfig';
+import CommissionCalendar from '../components/CommissionCalendar';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { ChannelApprovals } from '../components/chat/ChannelApprovals';
 import { ChatFloatingWidget } from '../components/chat/ChatFloatingWidget';
@@ -185,6 +194,10 @@ export const MemberSpacePage = () => {
   });
   const [villesList, setVillesList] = useState<string[]>(DEFAULT_VILLES);
   const [memberTypesList, setMemberTypesList] = useState<MemberType[]>(DEFAULT_MEMBER_TYPES);
+  const [commissionColors, setCommissionColors] = useState<Record<string, string>>(
+    () => ({ ...DEFAULT_COMMISSION_COLORS })
+  );
+  const [colorDrafts, setColorDrafts] = useState<Record<string, string>>({});
   const [configSaving, setConfigSaving] = useState(false);
   const [newVilleInput, setNewVilleInput] = useState('');
   const [newTypeInput, setNewTypeInput] = useState({ letter: '', label: '' });
@@ -217,6 +230,36 @@ export const MemberSpacePage = () => {
     user?.uid ?? null,
     chatModerator
   );
+
+  // Sidebar preference — pinned (default) or auto-hidden behind an overlay.
+  // Persisted in localStorage so the member's choice survives reloads.
+  const [sidebarPinned, setSidebarPinned] = useState<boolean>(true);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('aaj_sidebar_pinned');
+      if (v === 'false') setSidebarPinned(false);
+    } catch {
+      // ignore
+    }
+  }, []);
+  const toggleSidebarPinned = () => {
+    setSidebarPinned((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem('aaj_sidebar_pinned', String(next));
+      } catch {
+        // ignore
+      }
+      if (!next) setSidebarOpen(false);
+      return next;
+    });
+  };
+  // Pick a tab in the sidebar — auto-closes the overlay when unpinned.
+  const selectTab = (id: string) => {
+    setActiveTab(id);
+    if (!sidebarPinned) setSidebarOpen(false);
+  };
 
   const canReviewUnesco =
     isAdmin ||
@@ -251,13 +294,21 @@ export const MemberSpacePage = () => {
   const pvFileInputRef = useRef<HTMLInputElement>(null);
 
   const [newNews, setNewNews] = useState({ title: '', content: '', fileBase64: '', fileName: '' });
-  const [newPV, setNewPV] = useState({
+  type PVFile = { id: string; url: string; name: string; type: string };
+  const [newPV, setNewPV] = useState<{
+    town: string;
+    date: string;
+    count: string;
+    type: string;
+    files: PVFile[];
+  }>({
     town: 'Houmt Souk',
     date: '',
     count: '0',
-    fileBase64: '',
-    fileName: '',
+    type: '',
+    files: [],
   });
+  const [pvUploading, setPvUploading] = useState(false);
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -321,6 +372,28 @@ export const MemberSpacePage = () => {
       }
     );
 
+    const unsubColors = onSnapshot(
+      doc(db, COMMISSION_COLORS_DOC_PATH.col, COMMISSION_COLORS_DOC_PATH.id),
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as { colors?: Record<string, string> };
+          if (data.colors && typeof data.colors === 'object') {
+            const cleaned: Record<string, string> = {};
+            for (const [town, hex] of Object.entries(data.colors)) {
+              if (typeof hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(hex)) cleaned[town] = hex;
+            }
+            setCommissionColors({ ...DEFAULT_COMMISSION_COLORS, ...cleaned });
+            return;
+          }
+        }
+        setCommissionColors({ ...DEFAULT_COMMISSION_COLORS });
+      },
+      (err) => {
+        console.warn('Commission colors config read blocked, using defaults.', err);
+        setCommissionColors({ ...DEFAULT_COMMISSION_COLORS });
+      }
+    );
+
     const qNews = query(collection(db, 'news'), orderBy('createdAt', 'desc'));
     const unsubscribeNews = onSnapshot(qNews, (snapshot) => {
       const newsData = snapshot.docs.map((doc) => ({
@@ -381,6 +454,7 @@ export const MemberSpacePage = () => {
     return () => {
       unsubVilles();
       unsubTypes();
+      unsubColors();
       unsubscribeNews();
       unsubscribePVs();
       unsubscribeAdminMessages();
@@ -648,7 +722,7 @@ export const MemberSpacePage = () => {
       await setDoc(
         doc(db, 'users', user.uid),
         {
-          photoURL: base64,
+          photoBase64: base64,
         },
         { merge: true }
       );
@@ -885,18 +959,22 @@ export const MemberSpacePage = () => {
   const handleAddPV = async (e: FormEvent) => {
     e.preventDefault();
     if (!can('commissions_create')) return;
-    if (!newPV.fileBase64) {
-      alert('Veuillez sélectionner un fichier PV.');
+    if (newPV.files.length === 0) {
+      alert('Veuillez sélectionner au moins un fichier (image ou PDF).');
       return;
     }
     setIsSaving(true);
     try {
       await addDoc(collection(db, 'commission_pvs'), {
-        ...newPV,
+        town: newPV.town,
+        date: newPV.date,
+        count: newPV.count,
+        type: newPV.type.trim(),
+        files: newPV.files,
         createdAt: serverTimestamp(),
-        fileType: 'pdf',
       });
-      setNewPV({ town: 'Houmt Souk', date: '', count: '0', fileBase64: '', fileName: '' });
+      setNewPV({ town: 'Houmt Souk', date: '', count: '0', type: '', files: [] });
+      if (pvFileInputRef.current) pvFileInputRef.current.value = '';
       alert('Avis publié avec succès !');
     } catch (err) {
       console.error('Error adding PV:', err);
@@ -904,6 +982,29 @@ export const MemberSpacePage = () => {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handlePvFilesSelected = async (list: FileList | null) => {
+    if (!list || list.length === 0) return;
+    setPvUploading(true);
+    try {
+      const uploaded: PVFile[] = [];
+      for (const file of Array.from(list)) {
+        const res = await apiClient.uploadFile(file, 'commission_pvs', 'members');
+        uploaded.push({ id: res.id, url: res.url, name: res.name, type: res.type });
+      }
+      setNewPV((prev) => ({ ...prev, files: [...prev.files, ...uploaded] }));
+    } catch (err: any) {
+      console.error('Error uploading PV files:', err);
+      alert(err?.message || "Erreur lors de l'upload des fichiers.");
+    } finally {
+      setPvUploading(false);
+      if (pvFileInputRef.current) pvFileInputRef.current.value = '';
+    }
+  };
+
+  const removePvFile = (idx: number) => {
+    setNewPV((prev) => ({ ...prev, files: prev.files.filter((_, i) => i !== idx) }));
   };
 
   const getMemberStartYear = (member: any): number => {
@@ -1215,6 +1316,55 @@ export const MemberSpacePage = () => {
       setConfigSaving(false);
     }
   };
+
+  const handleSaveCommissionColors = async () => {
+    setConfigSaving(true);
+    try {
+      // Merge drafts on top of the live colours map.
+      const merged: Record<string, string> = { ...commissionColors };
+      for (const [town, hex] of Object.entries(colorDrafts)) {
+        if (typeof hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(hex)) merged[town] = hex;
+      }
+      await saveCommissionColors(merged);
+      setCommissionColors(merged);
+      setColorDrafts({});
+      setConfigMessage({
+        type: 'success',
+        text: 'Couleurs des commissions enregistrées.',
+      });
+    } catch (err) {
+      console.error('Error saving commission colors:', err);
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, 'Erreur lors de l’enregistrement des couleurs.'),
+      });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleResetCommissionColors = async () => {
+    if (!window.confirm('Réinitialiser les couleurs des commissions par défaut ?')) return;
+    setConfigSaving(true);
+    try {
+      await saveCommissionColors({ ...DEFAULT_COMMISSION_COLORS });
+      setCommissionColors({ ...DEFAULT_COMMISSION_COLORS });
+      setColorDrafts({});
+      setConfigMessage({
+        type: 'success',
+        text: 'Couleurs des commissions réinitialisées.',
+      });
+    } catch (err) {
+      console.error('Error resetting commission colors:', err);
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, 'Erreur lors de la réinitialisation.'),
+      });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
 
   const handleTestMail = async () => {
     if (!can('config_manage')) return;
@@ -1780,6 +1930,155 @@ export const MemberSpacePage = () => {
   }
 
   if (user) {
+    // Sidebar inner content — defined once so it can be rendered either
+    // inline (pinned) or inside a body-portal overlay (auto-hidden). We
+    // portal in the unpinned case because the `fixed` positioning gets
+    // anchored to the nearest transformed ancestor when rendered inside
+    // the normal page flow, which produced a broken half-screen overlay.
+    const sidebarContent = (
+      <>
+        <div className="flex items-center justify-between gap-2 mb-5 px-2">
+          <span className="text-[9px] uppercase tracking-[3px] text-aaj-gray font-black">
+            Navigation
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={toggleSidebarPinned}
+              title={
+                sidebarPinned ? 'Désépingler (masquer automatiquement)' : 'Épingler le menu'
+              }
+              aria-pressed={sidebarPinned}
+              className="p-1.5 text-aaj-gray hover:text-aaj-royal rounded hover:bg-slate-50"
+            >
+              {sidebarPinned ? <PinOff size={14} /> : <Pin size={14} />}
+            </button>
+            {!sidebarPinned && (
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(false)}
+                title="Fermer"
+                className="p-1.5 text-aaj-gray hover:text-aaj-royal rounded hover:bg-slate-50"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+        <nav className="space-y-1">
+          {[
+            { id: 'dashboard', icon: <LayoutDashboard size={18} />, label: "Vue d'ensemble", badge: 0 },
+            { id: 'commissions', icon: <Building2 size={18} />, label: 'Avis Commissions', badge: 0 },
+            { id: 'bibliotheque', icon: <BookOpen size={18} />, label: 'Bibliothèque', badge: 0 },
+            { id: 'documents', icon: <MessageSquare size={18} />, label: 'Messages Admins', badge: 0 },
+            { id: 'member-partners', icon: <Shield size={18} />, label: 'Nos Partenaires', badge: 0 },
+            { id: 'annuaire', icon: <Users size={18} />, label: 'Annuaire des Membres', badge: 0 },
+            ...(can('unesco_view')
+              ? [{ id: 'unesco', icon: <Landmark size={18} />, label: 'Djerba UNESCO', badge: 0 }]
+              : []),
+            { id: 'settings', icon: <Settings size={18} />, label: 'Mon Profil', badge: 0 },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => selectTab(item.id)}
+              className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
+                activeTab === item.id
+                  ? 'bg-aaj-dark text-white shadow-lg'
+                  : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
+              }`}
+            >
+              <div className="flex items-center gap-4">
+                <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>{item.icon}</span>
+                {item.label}
+              </div>
+              {item.badge > 0 && (
+                <span className="min-w-5 h-5 px-1.5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
+        {(() => {
+          const adminItems = [
+            { id: 'admin-roles', icon: <KeyRound size={18} />, label: 'Rôles & Permissions', perm: 'roles_manage' },
+            { id: 'admin-config', icon: <Settings size={18} />, label: 'Paramètres', perm: 'config_manage' },
+            {
+              id: 'admin-members',
+              icon: <Users size={18} />,
+              label: 'Gérer Adhésions',
+              perm: 'members_manage',
+              badge: membershipApplications.filter((a: any) => (a.status || 'pending') === 'pending').length,
+            },
+            { id: 'admin-partners', icon: <Shield size={18} />, label: 'Gérer Partenaires', perm: 'partners_manage' },
+            {
+              id: 'admin-profile-requests',
+              icon: <CheckCircle2 size={18} />,
+              label: 'Validations Profils',
+              perm: 'profileRequests_manage',
+              badge: profileRequests.filter((r) => r.status === 'pending').length,
+            },
+            { id: 'admin-documents', icon: <BookOpen size={18} />, label: 'Gérer Bibliothèque', perm: 'library_manage' },
+            { id: 'admin-commissions', icon: <Building2 size={18} />, label: 'Dépôts des Avis', perm: 'commissions_create' },
+            { id: 'admin-news', icon: <FileText size={18} />, label: 'Actions & Infos', perm: 'news_manage' },
+            {
+              id: 'admin-messages',
+              icon: <Mail size={18} />,
+              label: 'Messages Entrants',
+              perm: 'messages_inbox',
+              badge: adminMessages.filter((m) => m.status === 'unread').length,
+            },
+            {
+              id: 'admin-chat',
+              icon: <MessagesSquare size={18} />,
+              label: 'Modération Discussions',
+              perm: 'chat_manage',
+              badge: chatPendingApprovals,
+            },
+            { id: 'admin-unesco', icon: <MapPinned size={18} />, label: 'Paramètres UNESCO', perm: 'unesco_manage' },
+            {
+              id: 'admin-unesco-permits',
+              icon: <FileCheck size={18} />,
+              label: 'Instruction UNESCO',
+              perm: 'unesco_permits_review',
+              badge: unescoPendingReview,
+            },
+          ].filter((item) => can(item.perm));
+
+          if (adminItems.length === 0) return null;
+
+          return (
+            <div className="mt-12 space-y-1">
+              <h3 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-gray px-6 mb-4 mt-8 flex items-center gap-2">
+                <Shield size={12} className="text-aaj-royal" /> Administration
+              </h3>
+              {adminItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => selectTab(item.id)}
+                  className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
+                    activeTab === item.id
+                      ? 'bg-aaj-dark text-white shadow-lg'
+                      : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>{item.icon}</span>
+                    {item.label}
+                  </div>
+                  {item.badge > 0 && (
+                    <span className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+      </>
+    );
+
     return (
       <div className="pt-16 min-h-screen bg-white">
         {mustChangePassword && (
@@ -1899,203 +2198,41 @@ export const MemberSpacePage = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-            {/* Sidebar Navigation */}
-            <aside className="lg:col-span-3">
-              <nav className="space-y-1">
-                {[
-                  {
-                    id: 'dashboard',
-                    icon: <LayoutDashboard size={18} />,
-                    label: "Vue d'ensemble",
-                    badge: 0,
-                  },
-                  {
-                    id: 'commissions',
-                    icon: <Building2 size={18} />,
-                    label: 'Avis Commissions',
-                    badge: 0,
-                  },
-                  {
-                    id: 'bibliotheque',
-                    icon: <BookOpen size={18} />,
-                    label: 'Bibliothèque',
-                    badge: 0,
-                  },
-                  {
-                    id: 'documents',
-                    icon: <MessageSquare size={18} />,
-                    label: 'Messages Admins',
-                    badge: 0,
-                  },
-                  {
-                    id: 'member-partners',
-                    icon: <Shield size={18} />,
-                    label: 'Nos Partenaires',
-                    badge: 0,
-                  },
-                  {
-                    id: 'annuaire',
-                    icon: <Users size={18} />,
-                    label: 'Annuaire des Membres',
-                    badge: 0,
-                  },
-                  ...(can('unesco_view')
-                    ? [
-                        {
-                          id: 'unesco',
-                          icon: <Landmark size={18} />,
-                          label: 'Djerba UNESCO',
-                          badge: 0,
-                        },
-                      ]
-                    : []),
-                  { id: 'settings', icon: <Settings size={18} />, label: 'Mon Profil', badge: 0 },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveTab(item.id)}
-                    className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
-                      activeTab === item.id
-                        ? 'bg-aaj-dark text-white shadow-lg'
-                        : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>
-                        {item.icon}
-                      </span>
-                      {item.label}
-                    </div>
-                    {item.badge > 0 && (
-                      <span className="min-w-5 h-5 px-1.5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </nav>
+          {/* Floating "open menu" button surfaces when the sidebar is
+              auto-hidden (pin released) and currently closed. */}
+          {!sidebarPinned && !sidebarOpen && (
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Ouvrir le menu"
+              className="mb-6 inline-flex items-center gap-2 px-4 py-2 border border-aaj-border rounded text-[10px] uppercase tracking-[2px] font-black text-aaj-dark bg-white hover:bg-slate-50"
+            >
+              <PanelLeftOpen size={14} /> Menu
+            </button>
+          )}
 
-              {(() => {
-                const adminItems = [
-                  {
-                    id: 'admin-roles',
-                    icon: <KeyRound size={18} />,
-                    label: 'Rôles & Permissions',
-                    perm: 'roles_manage',
-                  },
-                  {
-                    id: 'admin-config',
-                    icon: <Settings size={18} />,
-                    label: 'Paramètres',
-                    perm: 'config_manage',
-                  },
-                  {
-                    id: 'admin-members',
-                    icon: <Users size={18} />,
-                    label: 'Gérer Adhésions',
-                    perm: 'members_manage',
-                    badge: membershipApplications.filter(
-                      (a: any) => (a.status || 'pending') === 'pending'
-                    ).length,
-                  },
-                  {
-                    id: 'admin-partners',
-                    icon: <Shield size={18} />,
-                    label: 'Gérer Partenaires',
-                    perm: 'partners_manage',
-                  },
-                  {
-                    id: 'admin-profile-requests',
-                    icon: <CheckCircle2 size={18} />,
-                    label: 'Validations Profils',
-                    perm: 'profileRequests_manage',
-                    badge: profileRequests.filter((r) => r.status === 'pending').length,
-                  },
-                  {
-                    id: 'admin-documents',
-                    icon: <BookOpen size={18} />,
-                    label: 'Gérer Bibliothèque',
-                    perm: 'library_manage',
-                  },
-                  {
-                    id: 'admin-commissions',
-                    icon: <Building2 size={18} />,
-                    label: 'Dépôts des Avis',
-                    perm: 'commissions_create',
-                  },
-                  {
-                    id: 'admin-news',
-                    icon: <FileText size={18} />,
-                    label: 'Actions & Infos',
-                    perm: 'news_manage',
-                  },
-                  {
-                    id: 'admin-messages',
-                    icon: <Mail size={18} />,
-                    label: 'Messages Entrants',
-                    perm: 'messages_inbox',
-                    badge: adminMessages.filter((m) => m.status === 'unread').length,
-                  },
-                  {
-                    id: 'admin-chat',
-                    icon: <MessagesSquare size={18} />,
-                    label: 'Modération Discussions',
-                    perm: 'chat_manage',
-                    badge: chatPendingApprovals,
-                  },
-                  {
-                    id: 'admin-unesco',
-                    icon: <MapPinned size={18} />,
-                    label: 'Paramètres UNESCO',
-                    perm: 'unesco_manage',
-                  },
-                  {
-                    id: 'admin-unesco-permits',
-                    icon: <FileCheck size={18} />,
-                    label: 'Instruction UNESCO',
-                    perm: 'unesco_permits_review',
-                    badge: unescoPendingReview,
-                  },
-                ].filter((item) => can(item.perm));
-
-                if (adminItems.length === 0) return null;
-
-                return (
-                  <div className="mt-12 space-y-1">
-                    <h3 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-gray px-6 mb-4 mt-8 flex items-center gap-2">
-                      <Shield size={12} className="text-aaj-royal" /> Administration
-                    </h3>
-                    {adminItems.map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() => setActiveTab(item.id)}
-                        className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
-                          activeTab === item.id
-                            ? 'bg-aaj-dark text-white shadow-lg'
-                            : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
-                        }`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>
-                            {item.icon}
-                          </span>
-                          {item.label}
-                        </div>
-                        {item.badge > 0 && (
-                          <span className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
-                            {item.badge}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
-            </aside>
+          <div
+            className={
+              sidebarPinned
+                ? 'flex flex-col lg:flex-row gap-8 lg:gap-12 items-start'
+                : 'block'
+            }
+          >
+            {/* Sidebar Navigation — rendered inline only when pinned. When
+                auto-hidden we move it into a body-portal below to escape
+                any transformed ancestor that would break position: fixed. */}
+            {sidebarPinned && (
+              <aside className="w-full lg:w-72 lg:shrink-0">{sidebarContent}</aside>
+            )}
 
             {/* Main Dashboard Grid */}
-            <main className="lg:col-span-9 space-y-12">
+            <main
+              className={
+                sidebarPinned
+                  ? 'flex-1 min-w-0 space-y-12'
+                  : 'w-full min-w-0 space-y-12'
+              }
+            >
               <AnimatePresence mode="wait">
                 {activeTab === 'dashboard' && (
                   <motion.div
@@ -2188,6 +2325,14 @@ export const MemberSpacePage = () => {
                           (acc, curr) => acc + (parseInt(curr.count) || 0),
                           0
                         );
+                        const townColor = colorForTown(town, commissionColors);
+                        const formattedDate = latestPV?.date
+                          ? new Date(latestPV.date).toLocaleDateString('fr-FR', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                            })
+                          : null;
 
                         return (
                           <div
@@ -2196,26 +2341,41 @@ export const MemberSpacePage = () => {
                               setSelectedCommune(town);
                               setActiveTab('commissions');
                             }}
-                            className="p-6 border border-aaj-border rounded bg-white group hover:border-aaj-royal transition-all cursor-pointer"
+                            className="border border-aaj-border rounded bg-white group hover:border-aaj-royal transition-all cursor-pointer overflow-hidden"
                           >
-                            <span className="text-[9px] font-black text-aaj-royal uppercase tracking-widest mb-2 block">
-                              {town}
-                            </span>
-                            <div className="flex justify-between items-end">
-                              <div>
-                                <p className="text-2xl font-black uppercase tracking-tighter">
-                                  {totalAvis} Avis
-                                </p>
-                                <p className="text-[10px] font-bold text-aaj-gray uppercase mt-1">
-                                  {latestPV
-                                    ? `Dernière : ${new Date(latestPV.date).toLocaleDateString()}`
-                                    : 'Aucun avis'}
-                                </p>
-                              </div>
-                              <div
-                                className={`text-[9px] font-black px-2 py-1 uppercase rounded bg-green-50 text-green-600 group-hover:bg-aaj-royal group-hover:text-white transition-all`}
+                            <div
+                              className="h-1.5"
+                              style={{ backgroundColor: townColor }}
+                              aria-hidden="true"
+                            />
+                            <div className="p-6">
+                              <span
+                                className="text-[9px] font-black uppercase tracking-widest mb-2 block"
+                                style={{ color: townColor }}
                               >
-                                Consulter
+                                {town}
+                              </span>
+                              <div className="flex justify-between items-end">
+                                <div>
+                                  <p className="text-2xl font-black uppercase tracking-tighter">
+                                    {totalAvis} Avis
+                                  </p>
+                                  {latestPV ? (
+                                    <p className="text-[10px] font-bold text-aaj-gray uppercase mt-1">
+                                      Dernière : {formattedDate}
+                                      {latestPV.type ? ` · ${latestPV.type}` : ''}
+                                    </p>
+                                  ) : (
+                                    <p className="text-[10px] font-bold text-aaj-gray uppercase mt-1 italic">
+                                      Aucun avis
+                                    </p>
+                                  )}
+                                </div>
+                                <div
+                                  className={`text-[9px] font-black px-2 py-1 uppercase rounded bg-green-50 text-green-600 group-hover:bg-aaj-royal group-hover:text-white transition-all`}
+                                >
+                                  Consulter
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -2268,8 +2428,16 @@ export const MemberSpacePage = () => {
                               className="p-6 border border-aaj-border rounded bg-white hover:shadow-xl transition-shadow group"
                             >
                               <div className="flex gap-6">
-                                <div className="w-16 h-16 bg-slate-50 border border-aaj-border rounded flex items-center justify-center text-aaj-royal group-hover:bg-aaj-royal group-hover:text-white transition-colors">
-                                  <UserCircle size={32} />
+                                <div className="w-16 h-16 bg-slate-50 border border-aaj-border rounded flex items-center justify-center text-aaj-royal group-hover:bg-aaj-royal group-hover:text-white transition-colors overflow-hidden">
+                                  {member.photoBase64 ? (
+                                    <img
+                                      src={member.photoBase64}
+                                      alt={member.displayName}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <UserCircle size={32} />
+                                  )}
                                 </div>
                                 <div className="flex-1">
                                   <h3 className="text-lg font-black uppercase tracking-tight mb-1">
@@ -2324,8 +2492,16 @@ export const MemberSpacePage = () => {
                                 >
                                   <td className="p-4">
                                     <div className="flex items-center gap-3">
-                                      <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-aaj-gray group-hover:text-aaj-royal transition-colors">
-                                        <UserCircle size={18} />
+                                      <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-aaj-gray group-hover:text-aaj-royal transition-colors overflow-hidden">
+                                        {member.photoBase64 ? (
+                                          <img
+                                            src={member.photoBase64}
+                                            alt={member.displayName}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        ) : (
+                                          <UserCircle size={18} />
+                                        )}
                                       </div>
                                       <div>
                                         <p className="text-sm font-black uppercase tracking-tight">
@@ -2389,15 +2565,29 @@ export const MemberSpacePage = () => {
                       <div className="space-y-4">
                         {commissionPVs
                           .filter((pv) => pv.town === selectedCommune)
-                          .map((pv, idx) => (
+                          .map((pv, idx) => {
+                            const pvFiles: PVFile[] = Array.isArray(pv.files) && pv.files.length > 0
+                              ? pv.files
+                              : pv.fileBase64
+                                ? [{
+                                    id: `legacy-${idx}`,
+                                    url: pv.fileBase64,
+                                    name: pv.fileName || `PV_Commission_${selectedCommune}_${pv.date}.pdf`,
+                                    type: 'application/pdf',
+                                  }]
+                                : [];
+                            return (
                             <div
-                              key={idx}
-                              className="p-6 border border-aaj-border rounded bg-white hover:border-aaj-royal group transition-all"
+                              key={pv.id || idx}
+                              className="p-6 border border-aaj-border rounded bg-white hover:border-aaj-royal group transition-all space-y-4"
                             >
                               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                 <div>
-                                  <div className="flex items-center gap-3 mb-1">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-aaj-royal">
+                                  <div className="flex items-center gap-3 mb-1 flex-wrap">
+                                    <span
+                                      className="text-[10px] font-black uppercase tracking-widest"
+                                      style={{ color: colorForTown(pv.town, commissionColors) }}
+                                    >
                                       Commission du{' '}
                                       {new Date(pv.date).toLocaleDateString('fr-FR', {
                                         day: 'numeric',
@@ -2409,23 +2599,69 @@ export const MemberSpacePage = () => {
                                     <span className="text-[11px] font-black uppercase tracking-tighter">
                                       {pv.count} Dossiers traités
                                     </span>
+                                    {pv.type && (
+                                      <>
+                                        <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                        <span
+                                          className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded border"
+                                          style={{
+                                            color: colorForTown(pv.town, commissionColors),
+                                            borderColor: colorForTown(pv.town, commissionColors) + '40',
+                                          }}
+                                        >
+                                          {pv.type}
+                                        </span>
+                                      </>
+                                    )}
                                   </div>
                                   <p className="text-[9px] font-bold text-aaj-gray uppercase tracking-widest">
-                                    {pv.fileName || 'Procès-verbal de commission'}
+                                    {pvFiles.length} fichier{pvFiles.length > 1 ? 's' : ''} joint{pvFiles.length > 1 ? 's' : ''}
                                   </p>
                                 </div>
-                                <a
-                                  href={pv.fileBase64}
-                                  download={
-                                    pv.fileName || `PV_Commission_${selectedCommune}_${pv.date}.pdf`
-                                  }
-                                  className="bg-slate-100 text-aaj-dark px-6 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal hover:text-white transition-all flex items-center gap-2 border border-transparent hover:border-aaj-royal"
-                                >
-                                  <Download size={14} /> Télécharger le PV
-                                </a>
                               </div>
+                              {pvFiles.length > 0 && (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                  {pvFiles.map((f, fi) => {
+                                    const isImg = (f.type || '').startsWith('image/');
+                                    return (
+                                      <a
+                                        key={f.id || fi}
+                                        href={f.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        download={f.name}
+                                        className="block border border-aaj-border rounded overflow-hidden bg-slate-50 hover:border-aaj-royal transition-all"
+                                        title={f.name}
+                                      >
+                                        {isImg ? (
+                                          <img
+                                            src={f.url}
+                                            alt={f.name}
+                                            className="w-full aspect-square object-cover"
+                                            loading="lazy"
+                                          />
+                                        ) : (
+                                          <div className="w-full aspect-square flex flex-col items-center justify-center gap-2 bg-white">
+                                            <FileText size={28} className="text-aaj-royal" />
+                                            <span className="text-[9px] font-black uppercase tracking-widest text-aaj-gray">
+                                              PDF
+                                            </span>
+                                          </div>
+                                        )}
+                                        <div className="px-2 py-1.5 bg-white border-t border-aaj-border flex items-center gap-1">
+                                          <Download size={10} className="shrink-0 text-aaj-gray" />
+                                          <span className="text-[9px] font-bold truncate text-aaj-dark">
+                                            {f.name}
+                                          </span>
+                                        </div>
+                                      </a>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
-                          ))}
+                            );
+                          })}
                         {commissionPVs.filter((pv) => pv.town === selectedCommune).length === 0 && (
                           <div className="p-12 border border-dashed border-aaj-border rounded text-center opacity-50">
                             <p className="text-xs font-black uppercase tracking-widest text-aaj-gray">
@@ -2435,32 +2671,83 @@ export const MemberSpacePage = () => {
                         )}
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        {['Houmt Souk', 'Midoun', 'Ajim'].map((town) => {
-                          const townPVs = commissionPVs.filter((pv) => pv.town === town);
-                          return (
-                            <div
-                              key={town}
-                              className="p-8 border border-aaj-border rounded bg-white text-center flex flex-col justify-between hover:border-aaj-royal transition-all group"
-                            >
-                              <div>
-                                <Building2 size={32} className="mx-auto text-aaj-royal mb-4" />
-                                <h3 className="text-xl font-black uppercase tracking-tighter mb-2">
-                                  {town}
-                                </h3>
-                                <p className="text-[10px] font-black text-aaj-gray uppercase tracking-widest mb-6">
-                                  Total PVs : {townPVs.length}
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => setSelectedCommune(town)}
-                                className="w-full bg-aaj-dark text-white py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all group-hover:scale-[1.02]"
+                      <div className="space-y-8">
+                        <CommissionCalendar
+                          events={commissionPVs.map((pv) => ({
+                            date: pv.date,
+                            town: pv.town,
+                            type: pv.type || '',
+                            count: parseInt(pv.count) || 0,
+                          }))}
+                          colors={commissionColors}
+                          onDayClick={(_date, evs) => {
+                            // If all events on that day belong to the same town, jump to it.
+                            const towns = Array.from(new Set(evs.map((e) => e.town)));
+                            if (towns.length === 1) setSelectedCommune(towns[0]);
+                          }}
+                        />
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                          {['Houmt Souk', 'Midoun', 'Ajim'].map((town) => {
+                            const townPVs = commissionPVs.filter((pv) => pv.town === town);
+                            const latestPV = townPVs[0];
+                            const townColor = colorForTown(town, commissionColors);
+                            const formattedDate = latestPV?.date
+                              ? new Date(latestPV.date).toLocaleDateString('fr-FR', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                })
+                              : null;
+                            return (
+                              <div
+                                key={town}
+                                className="border border-aaj-border rounded bg-white flex flex-col justify-between hover:border-aaj-royal transition-all group overflow-hidden"
                               >
-                                Consulter les PV
-                              </button>
-                            </div>
-                          );
-                        })}
+                                <div
+                                  className="h-1.5"
+                                  style={{ backgroundColor: townColor }}
+                                  aria-hidden="true"
+                                />
+                                <div className="p-8 text-center flex-1 flex flex-col justify-between">
+                                  <div>
+                                    <Building2
+                                      size={32}
+                                      className="mx-auto mb-4"
+                                      style={{ color: townColor }}
+                                    />
+                                    <h3 className="text-xl font-black uppercase tracking-tighter mb-2">
+                                      {town}
+                                    </h3>
+                                    <p className="text-[10px] font-black text-aaj-gray uppercase tracking-widest mb-2">
+                                      Total PVs : {townPVs.length}
+                                    </p>
+                                    {latestPV ? (
+                                      <div className="text-[10px] font-bold text-aaj-dark uppercase tracking-wider mb-6 space-y-0.5">
+                                        <p>Dernière : {formattedDate}</p>
+                                        <p className="text-aaj-gray">
+                                          {latestPV.type
+                                            ? `Type : ${latestPV.type}`
+                                            : 'Type non renseigné'}
+                                        </p>
+                                      </div>
+                                    ) : (
+                                      <p className="text-[10px] font-bold text-aaj-gray uppercase tracking-wider mb-6 italic">
+                                        Aucun avis publié
+                                      </p>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={() => setSelectedCommune(town)}
+                                    className="w-full bg-aaj-dark text-white py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all group-hover:scale-[1.02]"
+                                  >
+                                    Consulter les PV
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                   </motion.div>
@@ -3111,9 +3398,9 @@ export const MemberSpacePage = () => {
                             className="hidden"
                           />
                           <div className="w-48 h-48 rounded bg-slate-100 border-2 border-aaj-border flex items-center justify-center overflow-hidden">
-                            {userProfile?.photoURL ? (
+                            {userProfile?.photoBase64 ? (
                               <img
-                                src={userProfile.photoURL}
+                                src={userProfile.photoBase64}
                                 alt="Profile"
                                 className="w-full h-full object-cover"
                                 referrerPolicy="no-referrer"
@@ -3382,12 +3669,27 @@ export const MemberSpacePage = () => {
                                   }`}
                                 >
                                   <td className="p-4">
-                                    <p className="text-sm font-black uppercase tracking-tight">
-                                      {member.displayName}
-                                    </p>
-                                    <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest">
-                                      {member.email}
-                                    </p>
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-aaj-gray flex-shrink-0 overflow-hidden">
+                                        {member.photoBase64 ? (
+                                          <img
+                                            src={member.photoBase64}
+                                            alt={member.displayName}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        ) : (
+                                          <UserCircle size={18} />
+                                        )}
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-black uppercase tracking-tight">
+                                          {member.displayName}
+                                        </p>
+                                        <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest">
+                                          {member.email}
+                                        </p>
+                                      </div>
+                                    </div>
                                   </td>
                                   <td className="p-4">
                                     {isArchived ? (
@@ -3682,19 +3984,34 @@ export const MemberSpacePage = () => {
                                   className="hover:bg-slate-50/50 transition-colors"
                                 >
                                   <td className="p-4">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <p className="text-sm font-black uppercase tracking-tight">
-                                        {member.displayName || '—'}
-                                      </p>
-                                      {isSelf && (
-                                        <span className="px-2 py-0.5 rounded-full bg-blue-50 text-aaj-royal text-[8px] font-black uppercase tracking-widest border border-blue-100">
-                                          Vous
-                                        </span>
-                                      )}
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-aaj-gray flex-shrink-0 overflow-hidden">
+                                        {member.photoBase64 ? (
+                                          <img
+                                            src={member.photoBase64}
+                                            alt={member.displayName || ''}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        ) : (
+                                          <UserCircle size={18} />
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <p className="text-sm font-black uppercase tracking-tight">
+                                            {member.displayName || '—'}
+                                          </p>
+                                          {isSelf && (
+                                            <span className="px-2 py-0.5 rounded-full bg-blue-50 text-aaj-royal text-[8px] font-black uppercase tracking-widest border border-blue-100">
+                                              Vous
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest">
+                                          {member.email}
+                                        </p>
+                                      </div>
                                     </div>
-                                    <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest">
-                                      {member.email}
-                                    </p>
                                   </td>
                                   <td className="p-4">
                                     <select
@@ -4078,6 +4395,79 @@ export const MemberSpacePage = () => {
                         )}
                       </div>
                     </section>
+
+                    {/* Couleurs des commissions */}
+                    <section className="border border-aaj-border rounded overflow-hidden">
+                      <div className="p-5 bg-slate-50 border-b border-aaj-border flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-black uppercase tracking-widest text-aaj-dark">
+                            Couleurs des commissions
+                          </h3>
+                          <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-wider mt-1">
+                            Couleur affichée sur le calendrier et les cartes de commune
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleResetCommissionColors}
+                            disabled={configSaving}
+                            className="text-[10px] font-black uppercase tracking-widest text-aaj-gray hover:text-aaj-dark border border-aaj-border px-4 py-2 rounded"
+                          >
+                            Réinitialiser
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveCommissionColors}
+                            disabled={configSaving || Object.keys(colorDrafts).length === 0}
+                            className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          >
+                            <Save size={12} /> Enregistrer
+                          </button>
+                        </div>
+                      </div>
+                      <div className="divide-y divide-aaj-border">
+                        {['Houmt Souk', 'Midoun', 'Ajim'].map((town) => {
+                          const current =
+                            colorDrafts[town] ?? colorForTown(town, commissionColors);
+                          const isDirty = colorDrafts[town] !== undefined;
+                          return (
+                            <div
+                              key={town}
+                              className="flex items-center justify-between px-5 py-3 gap-4"
+                            >
+                              <div className="flex items-center gap-3 flex-1">
+                                <span
+                                  className="w-8 h-8 rounded border border-aaj-border flex-shrink-0"
+                                  style={{ backgroundColor: current }}
+                                />
+                                <div>
+                                  <span className="text-xs font-black uppercase tracking-widest text-aaj-dark block">
+                                    {town}
+                                  </span>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-aaj-gray">
+                                    {current}
+                                    {isDirty && (
+                                      <span className="ml-2 text-amber-600">· Non enregistré</span>
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
+                              <input
+                                type="color"
+                                value={current}
+                                onChange={(e) =>
+                                  setColorDrafts((d) => ({ ...d, [town]: e.target.value }))
+                                }
+                                disabled={configSaving}
+                                className="h-9 w-16 cursor-pointer rounded border border-aaj-border bg-white"
+                                aria-label={`Couleur pour ${town}`}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
                   </motion.div>
                 )}
 
@@ -4329,41 +4719,103 @@ export const MemberSpacePage = () => {
 
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                          Fichier PV (PDF)
+                          Fichiers PV (images ou PDF)
                         </label>
                         <div className="border border-aaj-border rounded bg-white p-8 text-center relative group overflow-hidden">
                           <input
+                            ref={pvFileInputRef}
                             type="file"
-                            required
-                            accept="application/pdf"
-                            onChange={async (e) => {
-                              if (e.target.files?.[0]) {
-                                const file = e.target.files[0];
-                                const base64 = await fileToBase64(file);
-                                setNewPV({ ...newPV, fileBase64: base64, fileName: file.name });
-                              }
-                            }}
-                            className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                            multiple
+                            accept="image/*,application/pdf"
+                            disabled={pvUploading}
+                            onChange={(e) => handlePvFilesSelected(e.target.files)}
+                            className="absolute inset-0 opacity-0 cursor-pointer z-10 disabled:cursor-not-allowed"
                           />
-                          <Upload size={24} className="mx-auto text-aaj-royal mb-2" />
+                          {pvUploading ? (
+                            <Loader2 size={24} className="mx-auto text-aaj-royal mb-2 animate-spin" />
+                          ) : (
+                            <Upload size={24} className="mx-auto text-aaj-royal mb-2" />
+                          )}
                           <p className="text-[10px] font-black uppercase tracking-widest group-hover:text-aaj-royal transition-colors">
-                            {newPV.fileName || 'Sélectionner le document officiel'}
+                            {pvUploading
+                              ? 'Envoi en cours…'
+                              : newPV.files.length > 0
+                                ? `Ajouter d'autres fichiers (${newPV.files.length} sélectionné${newPV.files.length > 1 ? 's' : ''})`
+                                : 'Sélectionner une ou plusieurs images / PDF'}
                           </p>
                         </div>
+                        {newPV.files.length > 0 && (
+                          <ul className="mt-4 space-y-2">
+                            {newPV.files.map((f, idx) => {
+                              const isImg = (f.type || '').startsWith('image/');
+                              return (
+                                <li
+                                  key={f.id}
+                                  className="flex items-center gap-3 p-2 border border-aaj-border rounded bg-white"
+                                >
+                                  {isImg ? (
+                                    <img
+                                      src={f.url}
+                                      alt={f.name}
+                                      className="w-10 h-10 object-cover rounded border border-aaj-border"
+                                    />
+                                  ) : (
+                                    <div className="w-10 h-10 flex items-center justify-center rounded border border-aaj-border bg-slate-50">
+                                      <FileText size={16} className="text-aaj-royal" />
+                                    </div>
+                                  )}
+                                  <span className="flex-1 text-[11px] font-bold truncate text-aaj-dark">
+                                    {f.name}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removePvFile(idx)}
+                                    className="text-aaj-gray hover:text-red-600 transition-colors"
+                                    aria-label="Retirer ce fichier"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
                       </div>
 
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                          Nombre de dossiers
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          placeholder="Ex: 15"
-                          value={newPV.count}
-                          onChange={(e) => setNewPV({ ...newPV, count: e.target.value })}
-                          className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold"
-                        />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                            Nombre de dossiers
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            placeholder="Ex: 15"
+                            value={newPV.count}
+                            onChange={(e) => setNewPV({ ...newPV, count: e.target.value })}
+                            className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                            Type de commission
+                          </label>
+                          <input
+                            type="text"
+                            list="commission-types"
+                            placeholder="Ex: Ordinaire, Extraordinaire…"
+                            value={newPV.type}
+                            onChange={(e) => setNewPV({ ...newPV, type: e.target.value })}
+                            className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold"
+                          />
+                          <datalist id="commission-types">
+                            <option value="Ordinaire" />
+                            <option value="Extraordinaire" />
+                            <option value="Consultative" />
+                            <option value="Spéciale" />
+                          </datalist>
+                        </div>
                       </div>
 
                       <button
@@ -5947,6 +6399,45 @@ export const MemberSpacePage = () => {
 
         {/* Floating chat widget — bottom-right, below the contact-admin FAB */}
         <ChatFloatingWidget />
+
+        {/* Overlay sidebar — portaled to <body> so `position: fixed`
+            anchors to the viewport regardless of any transform / filter /
+            backdrop-filter on an ancestor inside the normal page flow. */}
+        {!sidebarPinned &&
+          typeof document !== 'undefined' &&
+          createPortal(
+            <>
+              {/* Invisible hover strip on the viewport's left edge. Opens
+                  the sidebar as soon as the pointer brushes it, giving
+                  auto-hide mode a "push to show" feel without having to
+                  aim for the Menu button. Rendered only while the sidebar
+                  is closed so it can't swallow clicks meant for the
+                  backdrop. */}
+              {!sidebarOpen && (
+                <div
+                  onMouseEnter={() => setSidebarOpen(true)}
+                  aria-hidden="true"
+                  className="fixed top-0 left-0 bottom-0 w-3 z-[9997]"
+                />
+              )}
+              <div
+                onClick={() => setSidebarOpen(false)}
+                aria-hidden="true"
+                className={`fixed inset-0 z-[9998] bg-black/50 transition-opacity duration-200 ${
+                  sidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}
+              />
+              <aside
+                className={`fixed top-0 left-0 z-[9999] h-screen w-80 max-w-[85vw] bg-white shadow-2xl overflow-y-auto p-6 transition-transform duration-200 ${
+                  sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                }`}
+                aria-hidden={!sidebarOpen}
+              >
+                {sidebarContent}
+              </aside>
+            </>,
+            document.body
+          )}
       </div>
     );
   }
