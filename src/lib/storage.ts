@@ -20,7 +20,8 @@ export async function uploadFile(
   _userId?: string
 ): Promise<UploadResult> {
   if (!file) throw new Error('Aucun fichier fourni.');
-  if (file.size > 10 * 1024 * 1024) throw new Error('Fichier trop volumineux (max 10 Mo).');
+  // No client-side size limit — the PHP /api/files endpoint enforces the
+  // server's max_bytes (api/config.php) and php.ini upload_max_filesize.
   const res = await api.uploadFile(file, folder);
   return { url: res.url, path: res.id };
 }
