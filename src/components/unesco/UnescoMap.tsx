@@ -89,6 +89,10 @@ export function UnescoMap({
   const markerRef = useRef<L.Marker | null>(null);
   const pickHandlerRef = useRef<UnescoMapProps['onPick']>(onPick);
   const zoneHandlerRef = useRef<UnescoMapProps['onZoneClick']>(onZoneClick);
+  // Snapshot of every rendered feature's geometry + properties, kept in
+  // sync with the GeoJSON layer. Used to detect overlapping zones at a
+  // click point so the user can disambiguate from a popup menu.
+  const featuresRef = useRef<Array<{ properties: Record<string, any>; geometry: { type: string; coordinates: any } }>>([]);
 
   pickHandlerRef.current = onPick;
   zoneHandlerRef.current = onZoneClick;
@@ -123,12 +127,15 @@ export function UnescoMap({
     // CartoDB's `voyager_only_labels` and found both essentially empty
     // over Djerba at the zoom levels members actually use (the label
     // rasters return ~200-byte blank tiles). OSM's standard tile set has
-    // the dense labelling we need (roads, villages, neighbourhoods). We
-    // overlay it at 45% opacity on top of imagery so the satellite still
-    // reads through while every place name remains legible.
+    // the dense labelling we need (roads, villages, neighbourhoods). The
+    // earlier 45% opacity approach washed every label out; we now layer
+    // OSM at full opacity with `mix-blend-mode: multiply` (CSS class
+    // `unesco-hybrid-osm` in index.css). Multiply keeps the satellite
+    // intact under light OSM regions and darkens it under labels/roads,
+    // so place names remain crisp without dimming the imagery.
     const hybridOsm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      opacity: 0.45,
+      className: 'unesco-hybrid-osm',
       attribution: '&copy; OpenStreetMap contributors',
     });
     const hybrid = L.layerGroup([imagery, hybridOsm]);
@@ -170,6 +177,11 @@ export function UnescoMap({
       map.removeLayer(geoLayerRef.current);
       geoLayerRef.current = null;
     }
+
+    featuresRef.current = features.map((f) => ({
+      properties: (f.properties ?? {}) as Record<string, any>,
+      geometry: f.geometry,
+    }));
 
     if (features.length === 0) return;
 
@@ -215,7 +227,21 @@ export function UnescoMap({
           L.DomEvent.stopPropagation(e as unknown as Event);
           const oe = (e as unknown as { originalEvent?: MouseEvent }).originalEvent;
           if (oe && typeof oe.stopPropagation === 'function') oe.stopPropagation();
-          zoneHandlerRef.current?.(props);
+
+          // Leaflet only fires the click on the topmost feature, but
+          // zones genuinely overlap (e.g. a buffer zone inscribed in a
+          // protected zone). Hit-test every feature at the click point
+          // — when more than one matches, show a disambiguation popup
+          // so the user can pick the layer they meant.
+          const me = e as L.LeafletMouseEvent;
+          const hits = collectOverlapping(me.latlng, props, featuresRef.current);
+          if (hits.length > 1) {
+            openOverlapPopup(map, me.latlng, hits, (chosen) => {
+              zoneHandlerRef.current?.(chosen);
+            });
+          } else {
+            zoneHandlerRef.current?.(props);
+          }
         });
       },
     });
@@ -288,4 +314,127 @@ function escapeHtml(s: string): string {
 }
 function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s;
+}
+
+// --- Overlap detection --------------------------------------------------
+// Used when a zone is clicked: returns every feature whose geometry
+// contains the click point, deduped by zoneId. The clicked feature is
+// always included first so point-only features (which the polygon hit
+// test can't match) still appear.
+function collectOverlapping(
+  latlng: L.LatLng,
+  clickedProps: Record<string, any>,
+  pool: Array<{ properties: Record<string, any>; geometry: { type: string; coordinates: any } }>
+): Record<string, any>[] {
+  const lng = latlng.lng;
+  const lat = latlng.lat;
+  const out: Record<string, any>[] = [];
+  const seen = new Set<string>();
+  const keyOf = (p: Record<string, any>): string | null => {
+    if (typeof p.zoneId === 'string' && p.zoneId) return `z:${p.zoneId}`;
+    if (typeof p.featureKey === 'string' && p.featureKey) return `f:${p.featureKey}`;
+    return null;
+  };
+  const push = (p: Record<string, any>) => {
+    const k = keyOf(p);
+    if (k && seen.has(k)) return;
+    if (k) seen.add(k);
+    out.push(p);
+  };
+  push(clickedProps);
+  for (const f of pool) {
+    if (pointInGeometry(lng, lat, f.geometry)) push(f.properties);
+  }
+  return out;
+}
+
+function pointInGeometry(lng: number, lat: number, geom: { type: string; coordinates: any } | null | undefined): boolean {
+  if (!geom) return false;
+  if (geom.type === 'Polygon') return pointInRings(lng, lat, geom.coordinates as number[][][]);
+  if (geom.type === 'MultiPolygon') {
+    for (const poly of geom.coordinates as number[][][][]) {
+      if (pointInRings(lng, lat, poly)) return true;
+    }
+  }
+  return false;
+}
+
+function pointInRings(lng: number, lat: number, rings: number[][][]): boolean {
+  if (!Array.isArray(rings) || rings.length === 0) return false;
+  if (!pointInRing(lng, lat, rings[0])) return false;
+  for (let i = 1; i < rings.length; i++) {
+    if (pointInRing(lng, lat, rings[i])) return false;
+  }
+  return true;
+}
+
+function pointInRing(lng: number, lat: number, ring: number[][]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0];
+    const yi = ring[i][1];
+    const xj = ring[j][0];
+    const yj = ring[j][1];
+    const intersect =
+      yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi || 1e-12) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+// --- Disambiguation popup ----------------------------------------------
+// Renders a small list of overlapping zones at the click point. Picking
+// one closes the popup and forwards the choice to `onZoneClick`. Built
+// with raw DOM to stay consistent with the rest of this component (no
+// react-leaflet dependency).
+function openOverlapPopup(
+  map: L.Map,
+  latlng: L.LatLng,
+  hits: Record<string, any>[],
+  onPick: (props: Record<string, any>) => void
+) {
+  const root = document.createElement('div');
+  root.className = 'unesco-overlap-menu';
+
+  const title = document.createElement('p');
+  title.className = 'unesco-overlap-title';
+  title.textContent = `${hits.length} zones ici`;
+  root.appendChild(title);
+
+  const list = document.createElement('div');
+  list.className = 'unesco-overlap-list';
+  for (const props of hits) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'unesco-overlap-item';
+
+    const swatch = document.createElement('span');
+    swatch.className = 'unesco-overlap-swatch';
+    swatch.style.background = typeof props.color === 'string' ? props.color : '#2563EB';
+    btn.appendChild(swatch);
+
+    const label = document.createElement('span');
+    label.className = 'unesco-overlap-label';
+    label.textContent = typeof props.name === 'string' && props.name ? props.name : 'Zone';
+    btn.appendChild(label);
+
+    L.DomEvent.on(btn, 'click', (ev) => {
+      L.DomEvent.stopPropagation(ev);
+      L.DomEvent.preventDefault(ev);
+      map.closePopup();
+      onPick(props);
+    });
+    list.appendChild(btn);
+  }
+  root.appendChild(list);
+
+  L.popup({
+    closeButton: true,
+    autoClose: true,
+    maxWidth: 280,
+    className: 'unesco-overlap-popup',
+  })
+    .setLatLng(latlng)
+    .setContent(root)
+    .openOn(map);
 }
