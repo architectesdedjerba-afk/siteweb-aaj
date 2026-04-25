@@ -268,6 +268,38 @@ export const api = {
     statusCounts: () =>
       http<{ counts: Record<string, number>; pendingReview: number }>('/unesco/status-counts'),
   },
+
+  // ---- notifications ----
+  notifications: {
+    unreadCount: () =>
+      http<{ unread: number; active: number; total: number }>('/notifications/unread-count'),
+    broadcast: (payload: {
+      scope?: 'all' | 'active' | 'admins' | 'representatives' | 'members';
+      uids?: string[];
+      type?: string;
+      title: string;
+      body?: string;
+      link?: string;
+      icon?: string;
+      priority?: 'low' | 'normal' | 'high';
+      data?: Record<string, any>;
+    }) =>
+      http<{ ok: true; sent: number; targeted: number; scope: string }>('/notifications/broadcast', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    markAllRead: () =>
+      http<{ ok: true; updated: number }>('/notifications/mark-all-read', { method: 'POST' }),
+    archiveAllRead: () =>
+      http<{ ok: true; updated: number }>('/notifications/archive-all-read', { method: 'POST' }),
+    bulk: (action: 'read' | 'unread' | 'archive' | 'unarchive' | 'delete', ids: string[]) =>
+      http<{ ok: true; affected: number; action: string }>('/notifications/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ action, ids }),
+      }),
+    clearArchived: () =>
+      http<{ ok: true; deleted: number }>('/notifications/clear-archived', { method: 'DELETE' }),
+  },
 };
 
 // ---- UNESCO types ----

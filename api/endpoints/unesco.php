@@ -1200,6 +1200,17 @@ function unesco_permit_notify_reviewers(string $permitId): void
             if (!in_array($r['role'], ['admin', 'super-admin'], true)) continue;
             @send_mail((string)$r['email'], (string)($r['display_name'] ?? ''), $subject, $html);
         }
+
+        // In-app notification : tous les admins/super-admins.
+        push_notifications_to_users(admin_recipient_uids(), [
+            'type'     => 'unesco_permit_submitted',
+            'title'    => 'Nouvelle demande UNESCO',
+            'body'     => $title,
+            'link'     => '/espace-adherents',
+            'icon'     => 'file-check',
+            'priority' => 'high',
+            'data'     => ['permitId' => $permitId],
+        ]);
     } catch (Throwable $e) {
         error_log('[unesco] notify reviewers failed: ' . $e->getMessage());
     }
@@ -1238,6 +1249,19 @@ function unesco_permit_notify_applicant(string $permitId, string $toStatus, stri
         $html .= '<p>Connectez-vous à l\'espace adhérents pour consulter le détail.</p>';
 
         @send_mail((string)$row['applicant_email'], (string)($row['applicant_name'] ?? ''), $subject, $html);
+
+        // In-app notification au demandeur.
+        $priority = in_array($toStatus, ['approved', 'rejected'], true) ? 'high' : 'normal';
+        $icon = $toStatus === 'approved' ? 'check-circle' : ($toStatus === 'rejected' ? 'x-circle' : 'file-check');
+        create_notification((string)$row['applicant_uid'], [
+            'type'     => 'unesco_permit_status',
+            'title'    => $label,
+            'body'     => (string)$row['title'] . ($message !== '' ? ' — ' . $message : ''),
+            'link'     => '/espace-adherents',
+            'icon'     => $icon,
+            'priority' => $priority,
+            'data'     => ['permitId' => $permitId, 'status' => $toStatus],
+        ]);
     } catch (Throwable $e) {
         error_log('[unesco] notify applicant failed: ' . $e->getMessage());
     }

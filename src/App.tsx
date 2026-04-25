@@ -21,6 +21,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { CookieBanner } from "./components/CookieBanner";
 import { AuthProvider } from "./lib/AuthContext";
+import { NotificationProvider } from "./lib/NotificationContext";
 import { ToastProvider } from "./lib/toast";
 import { I18nProvider } from "./lib/i18n";
 import { ArrowUp } from "lucide-react";
@@ -53,6 +54,7 @@ export default function App() {
       <I18nProvider>
         <ToastProvider>
           <AuthProvider>
+            <NotificationProvider>
             <BrowserRouter>
             <ScrollToTop />
             <a
@@ -93,6 +95,7 @@ export default function App() {
               </button>
             </div>
             </BrowserRouter>
+            </NotificationProvider>
           </AuthProvider>
         </ToastProvider>
       </I18nProvider>

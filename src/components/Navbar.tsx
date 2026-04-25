@@ -8,13 +8,17 @@ import { UserCircle, Menu, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useI18n } from "../lib/i18n";
+import { useAuth } from "../lib/AuthContext";
 import { LanguageSwitcher } from "./LanguageSwitcher";
+import { NotificationBell } from "./notifications/NotificationBell";
 
 export const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
   const { t } = useI18n();
+  const { user, profile } = useAuth();
+  const isAuthed = Boolean(user && profile);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -66,6 +70,7 @@ export const Navbar = () => {
               );
             })}
             <LanguageSwitcher />
+            {isAuthed && <NotificationBell />}
             <Link
               to="/espace-adherents"
               className="flex items-center gap-2 bg-aaj-dark text-white px-5 py-2.5 rounded text-[13px] font-bold uppercase tracking-widest hover:bg-aaj-royal transition-all"
@@ -113,6 +118,11 @@ export const Navbar = () => {
               <div className="pt-2">
                 <LanguageSwitcher />
               </div>
+              {isAuthed && (
+                <div className="pt-2 border-t border-slate-100">
+                  <NotificationBell variant="mobile" />
+                </div>
+              )}
               <Link
                 to="/espace-adherents"
                 onClick={() => setIsOpen(false)}
