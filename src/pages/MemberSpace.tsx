@@ -46,6 +46,9 @@ import {
   Pin,
   PinOff,
   PanelLeftOpen,
+  Eye,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react';
 import {
   // auth API
@@ -97,6 +100,8 @@ import {
   type MemberType,
 } from '../lib/memberConfig';
 import CommissionCalendar from '../components/CommissionCalendar';
+import FilePreview, { type PreviewFile } from '../components/FilePreview';
+import { imagesToPdfBlob } from '../lib/imagesToPdf';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { ChannelApprovals } from '../components/chat/ChannelApprovals';
 import { ChatFloatingWidget } from '../components/chat/ChatFloatingWidget';
@@ -309,6 +314,27 @@ export const MemberSpacePage = () => {
     files: [],
   });
   const [pvUploading, setPvUploading] = useState(false);
+
+  // Preview modal state — used when a member clicks an attachment in the
+  // Avis Commissions list. Holds the file list to navigate through and the
+  // initial index to focus.
+  const [previewState, setPreviewState] = useState<{
+    files: PreviewFile[];
+    index: number;
+  } | null>(null);
+
+  // Whether to show archived avis in the per-commune list. Off by default so
+  // archived items don't clutter the day-to-day view.
+  const [showArchivedPVs, setShowArchivedPVs] = useState(false);
+
+  // Edit mode state for a single existing PV (admin / representative only).
+  const [editingPVId, setEditingPVId] = useState<string | null>(null);
+  const [editPVForm, setEditPVForm] = useState<{
+    date: string;
+    count: string;
+    type: string;
+  }>({ date: '', count: '0', type: '' });
+  const [pvActionInFlight, setPvActionInFlight] = useState<string | null>(null);
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -965,12 +991,39 @@ export const MemberSpacePage = () => {
     }
     setIsSaving(true);
     try {
+      let filesToSave: PVFile[] = newPV.files;
+
+      // Auto-convert: if the user uploaded ≥2 images (and only images),
+      // bundle them into a single PDF so members get a clean PV instead of a
+      // sprawl of loose photos. Mixed selections (image+PDF) keep the raw
+      // files — merging a PDF into a PDF is out of scope here.
+      const allImages =
+        newPV.files.length >= 2 &&
+        newPV.files.every((f) => (f.type || '').startsWith('image/'));
+
+      if (allImages) {
+        try {
+          const blob = await imagesToPdfBlob(
+            newPV.files.map((f) => ({ src: f.url, name: f.name, type: f.type }))
+          );
+          const datePart = newPV.date || new Date().toISOString().slice(0, 10);
+          const safeTown = (newPV.town || 'commission').replace(/[^a-zA-Z0-9_-]+/g, '_');
+          const pdfName = `PV_${safeTown}_${datePart}.pdf`;
+          const pdfFile = new File([blob], pdfName, { type: 'application/pdf' });
+          const res = await apiClient.uploadFile(pdfFile, 'commission_pvs', 'members');
+          filesToSave = [{ id: res.id, url: res.url, name: res.name, type: res.type }];
+        } catch (convErr) {
+          console.error('Auto-PDF conversion failed, falling back to raw images:', convErr);
+          // Fall through with the original images — non-fatal.
+        }
+      }
+
       await addDoc(collection(db, 'commission_pvs'), {
         town: newPV.town,
         date: newPV.date,
         count: newPV.count,
         type: newPV.type.trim(),
-        files: newPV.files,
+        files: filesToSave,
         createdAt: serverTimestamp(),
       });
       setNewPV({ town: 'Houmt Souk', date: '', count: '0', type: '', files: [] });
@@ -1005,6 +1058,97 @@ export const MemberSpacePage = () => {
 
   const removePvFile = (idx: number) => {
     setNewPV((prev) => ({ ...prev, files: prev.files.filter((_, i) => i !== idx) }));
+  };
+
+  // Open the FilePreview modal on a specific file. Used everywhere we
+  // previously had `<a download>` links so members can review the attachment
+  // before grabbing it.
+  const openFilePreview = (files: PreviewFile[], index: number) => {
+    if (!Array.isArray(files) || files.length === 0) return;
+    setPreviewState({ files, index: Math.max(0, Math.min(index, files.length - 1)) });
+  };
+
+  // ---- PV management (delete / archive / edit) ---------------------------
+
+  const handleDeletePV = async (pv: any) => {
+    if (!can('commissions_create')) return;
+    if (!pv?.id) return;
+    if (!window.confirm("Supprimer définitivement cet avis ? Cette action est irréversible.")) {
+      return;
+    }
+    setPvActionInFlight(pv.id);
+    try {
+      await deleteDoc(doc(db, 'commission_pvs', pv.id));
+    } catch (err) {
+      console.error('Error deleting PV:', err);
+      alert("Erreur lors de la suppression de l'avis.");
+    } finally {
+      setPvActionInFlight(null);
+    }
+  };
+
+  const handleArchivePV = async (pv: any) => {
+    if (!can('commissions_create')) return;
+    if (!pv?.id) return;
+    const archiving = !pv.archivedAt;
+    if (
+      archiving &&
+      !window.confirm(
+        "Archiver cet avis ? Il restera accessible via la bascule « Voir les archives »."
+      )
+    ) {
+      return;
+    }
+    setPvActionInFlight(pv.id);
+    try {
+      await updateDoc(doc(db, 'commission_pvs', pv.id), {
+        archivedAt: archiving ? serverTimestamp() : null,
+      });
+    } catch (err) {
+      console.error('Error archiving PV:', err);
+      alert("Erreur lors de l'archivage.");
+    } finally {
+      setPvActionInFlight(null);
+    }
+  };
+
+  const handleStartEditPV = (pv: any) => {
+    if (!can('commissions_create')) return;
+    if (!pv?.id) return;
+    setEditingPVId(pv.id);
+    setEditPVForm({
+      date: pv.date || '',
+      count: String(pv.count ?? '0'),
+      type: pv.type || '',
+    });
+  };
+
+  const handleCancelEditPV = () => {
+    setEditingPVId(null);
+    setEditPVForm({ date: '', count: '0', type: '' });
+  };
+
+  const handleSaveEditPV = async (pvId: string) => {
+    if (!can('commissions_create')) return;
+    if (!pvId) return;
+    if (!editPVForm.date) {
+      alert('La date est requise.');
+      return;
+    }
+    setPvActionInFlight(pvId);
+    try {
+      await updateDoc(doc(db, 'commission_pvs', pvId), {
+        date: editPVForm.date,
+        count: editPVForm.count,
+        type: editPVForm.type.trim(),
+      });
+      handleCancelEditPV();
+    } catch (err) {
+      console.error('Error updating PV:', err);
+      alert("Erreur lors de la modification de l'avis.");
+    } finally {
+      setPvActionInFlight(null);
+    }
   };
 
   const getMemberStartYear = (member: any): number => {
@@ -2164,18 +2308,18 @@ export const MemberSpacePage = () => {
             </motion.div>
           </div>
         )}
-        <div className="max-w-7xl mx-auto px-6 py-12">
+        <div className="max-w-7xl mx-auto px-6 py-6">
           {/* Header Dashboard */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 pb-8 border-b border-aaj-border">
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 pb-4 border-b border-aaj-border">
             <div>
-              <span className="text-[10px] uppercase tracking-[3px] text-aaj-royal font-black mb-4 block">
+              <span className="text-[10px] uppercase tracking-[3px] text-aaj-royal font-black mb-1 block">
                 Espace Privé
               </span>
-              <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tighter leading-none">
-                Bienvenue, <br /> {userProfile?.displayName || 'Cher Confrère'}
+              <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tighter leading-none">
+                Bienvenue, {userProfile?.displayName || 'Cher Confrère'}
               </h1>
             </div>
-            <div className="mt-8 md:mt-0 flex items-center gap-6">
+            <div className="mt-4 md:mt-0 flex items-center gap-4">
               <div className="text-right">
                 <span className="block text-[10px] uppercase font-black tracking-widest text-aaj-gray">
                   Statut Adhérent
@@ -2190,9 +2334,9 @@ export const MemberSpacePage = () => {
               </div>
               <button
                 onClick={handleLogout}
-                className="w-12 h-12 border border-aaj-border flex items-center justify-center text-red-500 hover:bg-red-50 transition-colors rounded"
+                className="w-10 h-10 border border-aaj-border flex items-center justify-center text-red-500 hover:bg-red-50 transition-colors rounded"
               >
-                <LogOut size={20} />
+                <LogOut size={18} />
               </button>
             </div>
           </div>
@@ -2562,8 +2706,38 @@ export const MemberSpacePage = () => {
 
                     {selectedCommune ? (
                       <div className="space-y-4">
+                        {can('commissions_create') && (() => {
+                          const archivedCount = commissionPVs.filter(
+                            (pv) => pv.town === selectedCommune && pv.archivedAt
+                          ).length;
+                          if (archivedCount === 0 && !showArchivedPVs) return null;
+                          return (
+                            <div className="flex items-center justify-end">
+                              <button
+                                type="button"
+                                onClick={() => setShowArchivedPVs((v) => !v)}
+                                className={[
+                                  'inline-flex items-center gap-2 px-3 py-2 rounded text-[10px] font-black uppercase tracking-widest border transition-colors',
+                                  showArchivedPVs
+                                    ? 'bg-aaj-dark text-white border-aaj-dark'
+                                    : 'bg-white text-aaj-dark border-aaj-border hover:border-aaj-royal',
+                                ].join(' ')}
+                              >
+                                {showArchivedPVs ? (
+                                  <ArchiveRestore size={12} />
+                                ) : (
+                                  <Archive size={12} />
+                                )}
+                                {showArchivedPVs
+                                  ? 'Masquer les archives'
+                                  : `Voir les archives (${archivedCount})`}
+                              </button>
+                            </div>
+                          );
+                        })()}
                         {commissionPVs
                           .filter((pv) => pv.town === selectedCommune)
+                          .filter((pv) => (showArchivedPVs ? true : !pv.archivedAt))
                           .map((pv, idx) => {
                             const pvFiles: PVFile[] = Array.isArray(pv.files) && pv.files.length > 0
                               ? pv.files
@@ -2575,13 +2749,21 @@ export const MemberSpacePage = () => {
                                     type: 'application/pdf',
                                   }]
                                 : [];
+                            const isEditing = editingPVId === pv.id;
+                            const isArchived = !!pv.archivedAt;
+                            const inFlight = pvActionInFlight === pv.id;
                             return (
                             <div
                               key={pv.id || idx}
-                              className="p-6 border border-aaj-border rounded bg-white hover:border-aaj-royal group transition-all space-y-4"
+                              className={[
+                                'p-6 border rounded bg-white hover:border-aaj-royal group transition-all space-y-4',
+                                isArchived
+                                  ? 'border-amber-300 bg-amber-50/40'
+                                  : 'border-aaj-border',
+                              ].join(' ')}
                             >
                               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                                <div>
+                                <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-3 mb-1 flex-wrap">
                                     <span
                                       className="text-[10px] font-black uppercase tracking-widest"
@@ -2612,25 +2794,142 @@ export const MemberSpacePage = () => {
                                         </span>
                                       </>
                                     )}
+                                    {isArchived && (
+                                      <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 flex items-center gap-1">
+                                        <Archive size={10} /> Archivé
+                                      </span>
+                                    )}
                                   </div>
                                   <p className="text-[9px] font-bold text-aaj-gray uppercase tracking-widest">
                                     {pvFiles.length} fichier{pvFiles.length > 1 ? 's' : ''} joint{pvFiles.length > 1 ? 's' : ''}
                                   </p>
                                 </div>
+                                {can('commissions_create') && !isEditing && (
+                                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartEditPV(pv)}
+                                      disabled={inFlight}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-aaj-border bg-white text-[10px] font-black uppercase tracking-widest text-aaj-dark hover:border-aaj-royal hover:text-aaj-royal transition-colors disabled:opacity-50"
+                                      title="Modifier"
+                                    >
+                                      <Pencil size={12} /> Modifier
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleArchivePV(pv)}
+                                      disabled={inFlight}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-aaj-border bg-white text-[10px] font-black uppercase tracking-widest text-aaj-dark hover:border-amber-500 hover:text-amber-600 transition-colors disabled:opacity-50"
+                                      title={isArchived ? 'Désarchiver' : 'Archiver'}
+                                    >
+                                      {isArchived ? (
+                                        <>
+                                          <ArchiveRestore size={12} /> Désarchiver
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Archive size={12} /> Archiver
+                                        </>
+                                      )}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeletePV(pv)}
+                                      disabled={inFlight}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-aaj-border bg-white text-[10px] font-black uppercase tracking-widest text-aaj-dark hover:border-red-500 hover:text-red-600 transition-colors disabled:opacity-50"
+                                      title="Supprimer"
+                                    >
+                                      <Trash2 size={12} /> Supprimer
+                                    </button>
+                                  </div>
+                                )}
                               </div>
+                              {isEditing && (
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 border border-aaj-border rounded bg-slate-50">
+                                  <div>
+                                    <label className="block text-[9px] font-black uppercase tracking-widest text-aaj-gray mb-1">
+                                      Date
+                                    </label>
+                                    <input
+                                      type="date"
+                                      value={editPVForm.date}
+                                      onChange={(e) =>
+                                        setEditPVForm({ ...editPVForm, date: e.target.value })
+                                      }
+                                      className="w-full bg-white border border-aaj-border rounded px-3 py-2 text-xs"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[9px] font-black uppercase tracking-widest text-aaj-gray mb-1">
+                                      Dossiers
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={editPVForm.count}
+                                      onChange={(e) =>
+                                        setEditPVForm({ ...editPVForm, count: e.target.value })
+                                      }
+                                      className="w-full bg-white border border-aaj-border rounded px-3 py-2 text-xs"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[9px] font-black uppercase tracking-widest text-aaj-gray mb-1">
+                                      Type
+                                    </label>
+                                    <input
+                                      type="text"
+                                      list="commission-types-edit"
+                                      value={editPVForm.type}
+                                      onChange={(e) =>
+                                        setEditPVForm({ ...editPVForm, type: e.target.value })
+                                      }
+                                      placeholder="Ordinaire, Extraordinaire..."
+                                      className="w-full bg-white border border-aaj-border rounded px-3 py-2 text-xs"
+                                    />
+                                    <datalist id="commission-types-edit">
+                                      <option value="Ordinaire" />
+                                      <option value="Extraordinaire" />
+                                      <option value="Consultative" />
+                                      <option value="Spéciale" />
+                                    </datalist>
+                                  </div>
+                                  <div className="sm:col-span-3 flex items-center justify-end gap-2 pt-2">
+                                    <button
+                                      type="button"
+                                      onClick={handleCancelEditPV}
+                                      disabled={inFlight}
+                                      className="px-4 py-2 rounded border border-aaj-border bg-white text-[10px] font-black uppercase tracking-widest text-aaj-gray hover:text-aaj-dark transition-colors disabled:opacity-50"
+                                    >
+                                      Annuler
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => pv.id && handleSaveEditPV(pv.id)}
+                                      disabled={inFlight}
+                                      className="inline-flex items-center gap-2 px-4 py-2 rounded bg-aaj-royal text-white text-[10px] font-black uppercase tracking-widest hover:bg-aaj-dark transition-colors disabled:opacity-50"
+                                    >
+                                      {inFlight ? (
+                                        <Loader2 size={12} className="animate-spin" />
+                                      ) : (
+                                        <Save size={12} />
+                                      )}
+                                      Enregistrer
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                               {pvFiles.length > 0 && (
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                                   {pvFiles.map((f, fi) => {
                                     const isImg = (f.type || '').startsWith('image/');
                                     return (
-                                      <a
+                                      <button
                                         key={f.id || fi}
-                                        href={f.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        download={f.name}
-                                        className="block border border-aaj-border rounded overflow-hidden bg-slate-50 hover:border-aaj-royal transition-all"
-                                        title={f.name}
+                                        type="button"
+                                        onClick={() => openFilePreview(pvFiles, fi)}
+                                        className="text-left block border border-aaj-border rounded overflow-hidden bg-slate-50 hover:border-aaj-royal transition-all w-full"
+                                        title={`Aperçu : ${f.name}`}
                                       >
                                         {isImg ? (
                                           <img
@@ -2648,12 +2947,12 @@ export const MemberSpacePage = () => {
                                           </div>
                                         )}
                                         <div className="px-2 py-1.5 bg-white border-t border-aaj-border flex items-center gap-1">
-                                          <Download size={10} className="shrink-0 text-aaj-gray" />
+                                          <Eye size={10} className="shrink-0 text-aaj-gray" />
                                           <span className="text-[9px] font-bold truncate text-aaj-dark">
                                             {f.name}
                                           </span>
                                         </div>
-                                      </a>
+                                      </button>
                                     );
                                   })}
                                 </div>
@@ -2671,21 +2970,6 @@ export const MemberSpacePage = () => {
                       </div>
                     ) : (
                       <div className="space-y-8">
-                        <CommissionCalendar
-                          events={commissionPVs.map((pv) => ({
-                            date: pv.date,
-                            town: pv.town,
-                            type: pv.type || '',
-                            count: parseInt(pv.count) || 0,
-                          }))}
-                          colors={commissionColors}
-                          onDayClick={(_date, evs) => {
-                            // If all events on that day belong to the same town, jump to it.
-                            const towns = Array.from(new Set(evs.map((e) => e.town)));
-                            if (towns.length === 1) setSelectedCommune(towns[0]);
-                          }}
-                        />
-
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                           {['Houmt Souk', 'Midoun', 'Ajim'].map((town) => {
                             const townPVs = commissionPVs.filter((pv) => pv.town === town);
@@ -2747,6 +3031,21 @@ export const MemberSpacePage = () => {
                             );
                           })}
                         </div>
+
+                        <CommissionCalendar
+                          events={commissionPVs.map((pv) => ({
+                            date: pv.date,
+                            town: pv.town,
+                            type: pv.type || '',
+                            count: parseInt(pv.count) || 0,
+                          }))}
+                          colors={commissionColors}
+                          onDayClick={(_date, evs) => {
+                            // If all events on that day belong to the same town, jump to it.
+                            const towns = Array.from(new Set(evs.map((e) => e.town)));
+                            if (towns.length === 1) setSelectedCommune(towns[0]);
+                          }}
+                        />
                       </div>
                     )}
                   </motion.div>
@@ -6437,6 +6736,13 @@ export const MemberSpacePage = () => {
             </>,
             document.body
           )}
+        {previewState && (
+          <FilePreview
+            files={previewState.files}
+            initialIndex={previewState.index}
+            onClose={() => setPreviewState(null)}
+          />
+        )}
       </div>
     );
   }

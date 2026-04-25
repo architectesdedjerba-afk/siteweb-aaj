@@ -197,6 +197,7 @@ function build_specs(): array
     // ---------------- commission_pvs ----------------
     ensure_column('commission_pvs', 'files', 'JSON NULL');
     ensure_column('commission_pvs', 'type', 'VARCHAR(100) NULL');
+    ensure_column('commission_pvs', 'archived_at', 'DATETIME NULL');
     $specs['commission_pvs'] = [
         'table' => 'commission_pvs',
         'idColumn' => 'id',
@@ -217,6 +218,7 @@ function build_specs(): array
                 // Backward-compat for rows created before the multi-file migration.
                 'fileBase64' => $r['file_url'] ?? '',
                 'fileName' => $r['file_name'] ?? '',
+                'archivedAt' => isset($r['archived_at']) ? iso_datetime($r['archived_at']) : null,
                 'createdAt' => iso_datetime($r['created_at']),
             ];
         },
@@ -231,6 +233,20 @@ function build_specs(): array
                 $row['files'] = is_array($p['files'])
                     ? json_encode(array_values($p['files']), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
                     : null;
+            }
+            // Archive flag: client sends `archivedAt` as either a serverTimestamp
+            // marker (truthy → archive now), an ISO string, or null (unarchive).
+            if (array_key_exists('archivedAt', $p)) {
+                $val = $p['archivedAt'];
+                if ($val === null || $val === '' || $val === false) {
+                    $row['archived_at'] = null;
+                } else if (is_string($val) && preg_match('/^\d{4}-\d{2}-\d{2}/', $val)) {
+                    // Accept ISO datetime as-is (MySQL DATETIME tolerant).
+                    $row['archived_at'] = $val;
+                } else {
+                    // Truthy non-ISO marker (e.g. serverTimestamp shim) → stamp now.
+                    $row['archived_at'] = gmdate('Y-m-d H:i:s');
+                }
             }
             return $row;
         },
