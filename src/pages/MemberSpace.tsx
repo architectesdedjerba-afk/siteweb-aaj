@@ -141,6 +141,16 @@ export const MemberSpacePage = () => {
   const [libraryDocs, setLibraryDocs] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [showArchivedMembers, setShowArchivedMembers] = useState(false);
+  // Filtres "Gestion des Adhésions"
+  const [adminMembersSearch, setAdminMembersSearch] = useState('');
+  const [adminMembersStatusFilter, setAdminMembersStatusFilter] = useState<
+    'all' | 'active' | 'suspended'
+  >('all');
+  const [adminMembersCotisationFilter, setAdminMembersCotisationFilter] = useState<
+    'all' | 'paid' | 'unpaid'
+  >('all');
+  const [adminMembersCategoryFilter, setAdminMembersCategoryFilter] = useState<string>('all');
+  const [adminMembersCityFilter, setAdminMembersCityFilter] = useState<string>('all');
   const [profileRequests, setProfileRequests] = useState<any[]>([]);
   const [membershipApplications, setMembershipApplications] = useState<any[]>([]);
   const [approvingApplicationId, setApprovingApplicationId] = useState<string | null>(null);
@@ -3704,151 +3714,349 @@ export const MemberSpacePage = () => {
                       );
                     })()}
 
-                    <div className="border border-aaj-border rounded overflow-hidden">
-                      <table className="w-full text-left border-collapse">
-                        <thead className="bg-slate-50 border-b border-aaj-border">
-                          <tr>
-                            <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
-                              Architecte
-                            </th>
-                            <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
-                              Statut
-                            </th>
-                            <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
-                              Cotisation
-                            </th>
-                            <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray text-right">
-                              Actions
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-aaj-border">
-                          {allUsers
-                            .filter((m) =>
-                              showArchivedMembers
-                                ? m.status === 'archived'
-                                : m.status !== 'archived'
-                            )
-                            .map((member) => {
-                              const currentYearPaid =
-                                !!member.cotisations?.[currentYearLabel]?.paid;
-                              const isArchived = member.status === 'archived';
-                              return (
-                                <tr
-                                  key={member.uid}
-                                  onClick={() => openMemberEditor(member)}
-                                  className={`transition-colors cursor-pointer ${
-                                    isArchived
-                                      ? 'bg-slate-50/30 opacity-70 hover:opacity-100 hover:bg-slate-100/50'
-                                      : 'hover:bg-slate-50/50'
-                                  }`}
-                                >
-                                  <td className="p-4">
-                                    <div className="flex items-center gap-3">
-                                      <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-aaj-gray flex-shrink-0 overflow-hidden">
-                                        {member.photoBase64 ? (
-                                          <img
-                                            src={member.photoBase64}
-                                            alt={member.displayName}
-                                            className="w-full h-full object-cover"
-                                          />
-                                        ) : (
-                                          <UserCircle size={18} />
-                                        )}
-                                      </div>
-                                      <div>
-                                        <p className="text-sm font-black uppercase tracking-tight">
-                                          {member.displayName}
-                                        </p>
-                                        <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest">
-                                          {member.email}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </td>
-                                  <td className="p-4">
-                                    {isArchived ? (
-                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-widest border border-slate-200">
-                                        <Trash2 size={10} /> Archivé
-                                      </span>
-                                    ) : member.status === 'suspended' ? (
-                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-700 text-[9px] font-black uppercase tracking-widest border border-red-100">
-                                        <XCircle size={10} /> Suspendu
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-[9px] font-black uppercase tracking-widest border border-green-100">
-                                        <CheckCircle2 size={10} /> Actif
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="p-4">
-                                    <div className="flex items-center gap-2">
-                                      <p className="text-xs font-bold text-aaj-dark">
-                                        {currentYearLabel}
-                                      </p>
-                                      {currentYearPaid ? (
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[9px] font-black uppercase tracking-widest border border-green-100">
-                                          <CheckCircle2 size={9} /> Payée
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[9px] font-black uppercase tracking-widest border border-amber-100">
-                                          <XCircle size={9} /> Non payée
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td
-                                    className="p-4 text-right"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <button
-                                      onClick={() => openMemberEditor(member)}
-                                      className="text-[10px] font-black text-aaj-royal uppercase tracking-widest hover:underline px-3"
-                                    >
-                                      Éditer
-                                    </button>
-                                    {isArchived ? (
-                                      <>
-                                        <button
-                                          onClick={() => handleRestoreMember(member)}
-                                          className="text-[10px] font-black text-green-600 uppercase tracking-widest hover:underline px-3"
-                                        >
-                                          Restaurer
-                                        </button>
-                                        <button
-                                          onClick={() => handleDeleteMember(member)}
-                                          className="text-[10px] font-black text-red-600 uppercase tracking-widest hover:underline px-3 inline-flex items-center gap-1"
-                                          title="Supprimer définitivement — irréversible"
-                                        >
-                                          <Trash2 size={11} /> Supprimer
-                                        </button>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <button
-                                          onClick={() => handleToggleSuspense(member)}
-                                          className={`text-[10px] font-black uppercase tracking-widest hover:underline px-3 ${member.status === 'suspended' ? 'text-green-600' : 'text-red-500'}`}
-                                        >
-                                          {member.status === 'suspended'
-                                            ? 'Reprendre'
-                                            : 'Suspendre'}
-                                        </button>
-                                        <button
-                                          onClick={() => handleArchiveMember(member)}
-                                          className="text-[10px] font-black text-slate-600 uppercase tracking-widest hover:underline px-3 inline-flex items-center gap-1"
-                                          title="Archiver — conserve toutes les données"
-                                        >
-                                          Archiver
-                                        </button>
-                                      </>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                        </tbody>
-                      </table>
+                    {/* Recherche & filtres */}
+                    <div className="border border-aaj-border rounded p-4 bg-slate-50/50 space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                        {/* Barre de recherche */}
+                        <div className="md:col-span-4 relative">
+                          <Search
+                            size={14}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 text-aaj-gray pointer-events-none"
+                          />
+                          <input
+                            type="text"
+                            value={adminMembersSearch}
+                            onChange={(e) => setAdminMembersSearch(e.target.value)}
+                            placeholder="Nom, email, matricule, téléphone…"
+                            className="w-full pl-9 pr-9 py-2.5 border border-aaj-border rounded text-xs font-bold tracking-wide bg-white focus:outline-none focus:ring-2 focus:ring-aaj-royal/30 focus:border-aaj-royal placeholder:text-aaj-gray/70"
+                          />
+                          {adminMembersSearch && (
+                            <button
+                              onClick={() => setAdminMembersSearch('')}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-aaj-gray hover:text-aaj-dark"
+                              title="Effacer la recherche"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Filtre statut */}
+                        <div className="md:col-span-2">
+                          <select
+                            value={adminMembersStatusFilter}
+                            onChange={(e) =>
+                              setAdminMembersStatusFilter(
+                                e.target.value as 'all' | 'active' | 'suspended'
+                              )
+                            }
+                            className="w-full px-3 py-2.5 border border-aaj-border rounded text-[10px] font-black uppercase tracking-widest bg-white focus:outline-none focus:ring-2 focus:ring-aaj-royal/30 focus:border-aaj-royal"
+                          >
+                            <option value="all">Statut : Tous</option>
+                            <option value="active">Actifs</option>
+                            <option value="suspended">Suspendus</option>
+                          </select>
+                        </div>
+
+                        {/* Filtre cotisation */}
+                        <div className="md:col-span-2">
+                          <select
+                            value={adminMembersCotisationFilter}
+                            onChange={(e) =>
+                              setAdminMembersCotisationFilter(
+                                e.target.value as 'all' | 'paid' | 'unpaid'
+                              )
+                            }
+                            className="w-full px-3 py-2.5 border border-aaj-border rounded text-[10px] font-black uppercase tracking-widest bg-white focus:outline-none focus:ring-2 focus:ring-aaj-royal/30 focus:border-aaj-royal"
+                          >
+                            <option value="all">Cotisation : Toutes</option>
+                            <option value="paid">Payée ({currentYearLabel})</option>
+                            <option value="unpaid">Non payée ({currentYearLabel})</option>
+                          </select>
+                        </div>
+
+                        {/* Filtre catégorie */}
+                        <div className="md:col-span-2">
+                          <select
+                            value={adminMembersCategoryFilter}
+                            onChange={(e) => setAdminMembersCategoryFilter(e.target.value)}
+                            className="w-full px-3 py-2.5 border border-aaj-border rounded text-[10px] font-black uppercase tracking-widest bg-white focus:outline-none focus:ring-2 focus:ring-aaj-royal/30 focus:border-aaj-royal"
+                          >
+                            <option value="all">Catégorie : Toutes</option>
+                            {memberTypesList.map((t) => (
+                              <option key={t.letter} value={t.label}>
+                                {t.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Filtre ville */}
+                        <div className="md:col-span-2">
+                          <select
+                            value={adminMembersCityFilter}
+                            onChange={(e) => setAdminMembersCityFilter(e.target.value)}
+                            className="w-full px-3 py-2.5 border border-aaj-border rounded text-[10px] font-black uppercase tracking-widest bg-white focus:outline-none focus:ring-2 focus:ring-aaj-royal/30 focus:border-aaj-royal"
+                          >
+                            <option value="all">Ville : Toutes</option>
+                            {villesList.map((v) => (
+                              <option key={v} value={v}>
+                                {v}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Lien réinitialiser (visible si au moins un filtre actif) */}
+                      {(adminMembersSearch ||
+                        adminMembersStatusFilter !== 'all' ||
+                        adminMembersCotisationFilter !== 'all' ||
+                        adminMembersCategoryFilter !== 'all' ||
+                        adminMembersCityFilter !== 'all') && (
+                        <div className="flex items-center justify-end">
+                          <button
+                            onClick={() => {
+                              setAdminMembersSearch('');
+                              setAdminMembersStatusFilter('all');
+                              setAdminMembersCotisationFilter('all');
+                              setAdminMembersCategoryFilter('all');
+                              setAdminMembersCityFilter('all');
+                            }}
+                            className="text-[10px] font-black uppercase tracking-widest text-aaj-royal hover:underline flex items-center gap-1"
+                          >
+                            <X size={12} /> Réinitialiser les filtres
+                          </button>
+                        </div>
+                      )}
                     </div>
+
+                    {(() => {
+                      const searchQuery = adminMembersSearch.trim().toLowerCase();
+                      const filteredMembers = allUsers.filter((m) => {
+                        // Archivés vs actifs (toggle existant)
+                        if (showArchivedMembers) {
+                          if (m.status !== 'archived') return false;
+                        } else {
+                          if (m.status === 'archived') return false;
+                        }
+
+                        // Statut (uniquement quand on regarde les membres actifs)
+                        if (!showArchivedMembers && adminMembersStatusFilter !== 'all') {
+                          if (adminMembersStatusFilter === 'suspended') {
+                            if (m.status !== 'suspended') return false;
+                          } else if (adminMembersStatusFilter === 'active') {
+                            if (m.status === 'suspended') return false;
+                          }
+                        }
+
+                        // Cotisation année en cours
+                        if (adminMembersCotisationFilter !== 'all') {
+                          const paid = !!m.cotisations?.[currentYearLabel]?.paid;
+                          if (adminMembersCotisationFilter === 'paid' && !paid) return false;
+                          if (adminMembersCotisationFilter === 'unpaid' && paid) return false;
+                        }
+
+                        // Catégorie
+                        if (adminMembersCategoryFilter !== 'all') {
+                          if ((m.category || '') !== adminMembersCategoryFilter) return false;
+                        }
+
+                        // Ville
+                        if (adminMembersCityFilter !== 'all') {
+                          if ((m.city || '') !== adminMembersCityFilter) return false;
+                        }
+
+                        // Recherche texte
+                        if (searchQuery) {
+                          const haystack = [
+                            m.displayName,
+                            m.firstName,
+                            m.lastName,
+                            m.email,
+                            m.matricule,
+                            m.licenseNumber,
+                            m.mobile,
+                            m.phone,
+                            m.city,
+                            m.category,
+                          ]
+                            .filter(Boolean)
+                            .join(' ')
+                            .toLowerCase();
+                          if (!haystack.includes(searchQuery)) return false;
+                        }
+
+                        return true;
+                      });
+
+                      const totalForView = allUsers.filter((m) =>
+                        showArchivedMembers
+                          ? m.status === 'archived'
+                          : m.status !== 'archived'
+                      ).length;
+
+                      return (
+                        <>
+                          <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-aaj-gray px-1">
+                            <span>
+                              {filteredMembers.length} / {totalForView}{' '}
+                              {showArchivedMembers ? 'membre(s) archivé(s)' : 'membre(s)'}
+                            </span>
+                          </div>
+                          <div className="border border-aaj-border rounded overflow-hidden">
+                            <table className="w-full text-left border-collapse">
+                              <thead className="bg-slate-50 border-b border-aaj-border">
+                                <tr>
+                                  <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
+                                    Architecte
+                                  </th>
+                                  <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
+                                    Statut
+                                  </th>
+                                  <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
+                                    Cotisation
+                                  </th>
+                                  <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray text-right">
+                                    Actions
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-aaj-border">
+                                {filteredMembers.length === 0 ? (
+                                  <tr>
+                                    <td
+                                      colSpan={4}
+                                      className="p-10 text-center text-[11px] font-black uppercase tracking-widest text-aaj-gray"
+                                    >
+                                      Aucun membre ne correspond aux filtres.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  filteredMembers.map((member) => {
+                                    const currentYearPaid =
+                                      !!member.cotisations?.[currentYearLabel]?.paid;
+                                    const isArchived = member.status === 'archived';
+                                    return (
+                                      <tr
+                                        key={member.uid}
+                                        onClick={() => openMemberEditor(member)}
+                                        className={`transition-colors cursor-pointer ${
+                                          isArchived
+                                            ? 'bg-slate-50/30 opacity-70 hover:opacity-100 hover:bg-slate-100/50'
+                                            : 'hover:bg-slate-50/50'
+                                        }`}
+                                      >
+                                        <td className="p-4">
+                                          <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-aaj-gray flex-shrink-0 overflow-hidden">
+                                              {member.photoBase64 ? (
+                                                <img
+                                                  src={member.photoBase64}
+                                                  alt={member.displayName}
+                                                  className="w-full h-full object-cover"
+                                                />
+                                              ) : (
+                                                <UserCircle size={18} />
+                                              )}
+                                            </div>
+                                            <div>
+                                              <p className="text-sm font-black uppercase tracking-tight">
+                                                {member.displayName}
+                                              </p>
+                                              <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest">
+                                                {member.email}
+                                              </p>
+                                            </div>
+                                          </div>
+                                        </td>
+                                        <td className="p-4">
+                                          {isArchived ? (
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-widest border border-slate-200">
+                                              <Trash2 size={10} /> Archivé
+                                            </span>
+                                          ) : member.status === 'suspended' ? (
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-700 text-[9px] font-black uppercase tracking-widest border border-red-100">
+                                              <XCircle size={10} /> Suspendu
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-[9px] font-black uppercase tracking-widest border border-green-100">
+                                              <CheckCircle2 size={10} /> Actif
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="p-4">
+                                          <div className="flex items-center gap-2">
+                                            <p className="text-xs font-bold text-aaj-dark">
+                                              {currentYearLabel}
+                                            </p>
+                                            {currentYearPaid ? (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[9px] font-black uppercase tracking-widest border border-green-100">
+                                                <CheckCircle2 size={9} /> Payée
+                                              </span>
+                                            ) : (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[9px] font-black uppercase tracking-widest border border-amber-100">
+                                                <XCircle size={9} /> Non payée
+                                              </span>
+                                            )}
+                                          </div>
+                                        </td>
+                                        <td
+                                          className="p-4 text-right"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <button
+                                            onClick={() => openMemberEditor(member)}
+                                            className="text-[10px] font-black text-aaj-royal uppercase tracking-widest hover:underline px-3"
+                                          >
+                                            Éditer
+                                          </button>
+                                          {isArchived ? (
+                                            <>
+                                              <button
+                                                onClick={() => handleRestoreMember(member)}
+                                                className="text-[10px] font-black text-green-600 uppercase tracking-widest hover:underline px-3"
+                                              >
+                                                Restaurer
+                                              </button>
+                                              <button
+                                                onClick={() => handleDeleteMember(member)}
+                                                className="text-[10px] font-black text-red-600 uppercase tracking-widest hover:underline px-3 inline-flex items-center gap-1"
+                                                title="Supprimer définitivement — irréversible"
+                                              >
+                                                <Trash2 size={11} /> Supprimer
+                                              </button>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <button
+                                                onClick={() => handleToggleSuspense(member)}
+                                                className={`text-[10px] font-black uppercase tracking-widest hover:underline px-3 ${member.status === 'suspended' ? 'text-green-600' : 'text-red-500'}`}
+                                              >
+                                                {member.status === 'suspended'
+                                                  ? 'Reprendre'
+                                                  : 'Suspendre'}
+                                              </button>
+                                              <button
+                                                onClick={() => handleArchiveMember(member)}
+                                                className="text-[10px] font-black text-slate-600 uppercase tracking-widest hover:underline px-3 inline-flex items-center gap-1"
+                                                title="Archiver — conserve toutes les données"
+                                              >
+                                                Archiver
+                                              </button>
+                                            </>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </motion.div>
                 )}
 
