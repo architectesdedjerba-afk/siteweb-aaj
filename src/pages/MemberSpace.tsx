@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, FormEvent, useRef, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import {
   UserCircle,
@@ -149,6 +150,33 @@ export const MemberSpacePage = () => {
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [contactForm, setContactForm] = useState({ subject: '', message: '' });
   const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
+  const [createdCredentials, setCreatedCredentials] = useState<null | {
+    matricule: string;
+    email: string;
+    tempPassword?: string;
+    emailSent: boolean;
+    mode: 'created' | 'approved';
+  }>(null);
+  const [credentialsCopied, setCredentialsCopied] = useState<'all' | 'pwd' | null>(null);
+  const [mailTest, setMailTest] = useState<{
+    to: string;
+    sending: boolean;
+    result: null | {
+      ok: boolean;
+      tcpOk: boolean | null;
+      elapsedMs: number;
+      smtp: {
+        host: string;
+        port: number;
+        encryption: string;
+        from_email: string;
+        from_name: string;
+        has_password: boolean;
+      };
+      log: string[];
+    };
+    error: string | null;
+  }>({ to: '', sending: false, result: null, error: null });
   const [adminMessages, setAdminMessages] = useState<any[]>([]);
   const [userMessages, setUserMessages] = useState<any[]>([]);
   const [newContactFile, setNewContactFile] = useState({ base64: '', name: '' });
@@ -1337,6 +1365,34 @@ export const MemberSpacePage = () => {
     }
   };
 
+  const handleTestMail = async () => {
+    if (!can('config_manage')) return;
+    setMailTest((s) => ({ ...s, sending: true, result: null, error: null }));
+    try {
+      const target = mailTest.to.trim() || user?.email || '';
+      const result = await apiClient.testMail(target || undefined);
+      setMailTest({
+        to: result.to,
+        sending: false,
+        result: {
+          ok: result.ok,
+          tcpOk: result.tcpOk,
+          elapsedMs: result.elapsedMs,
+          smtp: result.smtp,
+          log: result.log,
+        },
+        error: null,
+      });
+    } catch (err: any) {
+      setMailTest((s) => ({
+        ...s,
+        sending: false,
+        error: err?.message || String(err),
+        result: null,
+      }));
+    }
+  };
+
   const handleAddMember = async (e: FormEvent) => {
     e.preventDefault();
     if (!can('members_manage')) return;
@@ -1376,12 +1432,13 @@ export const MemberSpacePage = () => {
         role: 'member',
         status: 'active',
       });
-      const pwdLine = tempPassword ? `\nMot de passe temporaire : ${tempPassword}` : '';
-      alert(
-        emailSent
-          ? `Membre ajouté avec succès !\nMatricule : ${matricule}\nEmail : ${newMember.email}${pwdLine}\n\nUn email avec ces identifiants a été envoyé (pensez à vérifier les spams).`
-          : `Membre ajouté avec succès !\nMatricule : ${matricule}\nEmail : ${newMember.email}${pwdLine}\n\nATTENTION : l'email de bienvenue n'a pas pu être envoyé — transmettez manuellement les identifiants ci-dessus au nouvel adhérent.`
-      );
+      setCreatedCredentials({
+        matricule,
+        email: newMember.email,
+        tempPassword,
+        emailSent,
+        mode: 'created',
+      });
       setIsAddMemberModalOpen(false);
       setNewMember({
         firstName: '',
@@ -1452,12 +1509,13 @@ export const MemberSpacePage = () => {
         licenseNumber: matricule,
       });
 
-      const pwdLine = tempPassword ? `\nMot de passe temporaire : ${tempPassword}` : '';
-      alert(
-        emailSent
-          ? `Demande validée !\nMatricule : ${matricule}\nEmail : ${app.email}${pwdLine}\n\nUn email avec ces identifiants a été envoyé (pensez à vérifier les spams).`
-          : `Demande validée !\nMatricule : ${matricule}\nEmail : ${app.email}${pwdLine}\n\nATTENTION : l'email de bienvenue n'a pas pu être envoyé — transmettez manuellement les identifiants ci-dessus à l'adhérent.`
-      );
+      setCreatedCredentials({
+        matricule,
+        email: app.email,
+        tempPassword,
+        emailSent,
+        mode: 'approved',
+      });
     } catch (err) {
       console.error('Error approving application:', err);
       alert('Erreur lors de la validation de la demande.');
@@ -1680,13 +1738,29 @@ export const MemberSpacePage = () => {
     if (!can('roles_manage')) return;
     if (role.isAllAccess) return;
     setSavingRoleId(role.id);
+    // Optimistic update so the checkbox flips immediately, even while the
+    // request is in flight.
+    setRolesList((prev) =>
+      prev.map((r) =>
+        r.id === role.id
+          ? { ...r, permissions: { ...(r.permissions ?? {}), [permKey]: value } }
+          : r
+      )
+    );
     try {
-      await updateDoc(doc(db, 'roles', role.id), {
-        [`permissions.${permKey}`]: value,
-      });
+      const nextPermissions = { ...(role.permissions ?? {}), [permKey]: value };
+      await updateDoc(doc(db, 'roles', role.id), { permissions: nextPermissions });
     } catch (err) {
       console.error('Error toggling permission:', err);
       alert('Erreur lors de la mise à jour de la permission.');
+      // Roll back optimistic change on failure.
+      setRolesList((prev) =>
+        prev.map((r) =>
+          r.id === role.id
+            ? { ...r, permissions: { ...(r.permissions ?? {}), [permKey]: !value } }
+            : r
+        )
+      );
     } finally {
       setSavingRoleId(null);
     }
@@ -1855,6 +1929,155 @@ export const MemberSpacePage = () => {
   }
 
   if (user) {
+    // Sidebar inner content — defined once so it can be rendered either
+    // inline (pinned) or inside a body-portal overlay (auto-hidden). We
+    // portal in the unpinned case because the `fixed` positioning gets
+    // anchored to the nearest transformed ancestor when rendered inside
+    // the normal page flow, which produced a broken half-screen overlay.
+    const sidebarContent = (
+      <>
+        <div className="flex items-center justify-between gap-2 mb-5 px-2">
+          <span className="text-[9px] uppercase tracking-[3px] text-aaj-gray font-black">
+            Navigation
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={toggleSidebarPinned}
+              title={
+                sidebarPinned ? 'Désépingler (masquer automatiquement)' : 'Épingler le menu'
+              }
+              aria-pressed={sidebarPinned}
+              className="p-1.5 text-aaj-gray hover:text-aaj-royal rounded hover:bg-slate-50"
+            >
+              {sidebarPinned ? <PinOff size={14} /> : <Pin size={14} />}
+            </button>
+            {!sidebarPinned && (
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(false)}
+                title="Fermer"
+                className="p-1.5 text-aaj-gray hover:text-aaj-royal rounded hover:bg-slate-50"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+        <nav className="space-y-1">
+          {[
+            { id: 'dashboard', icon: <LayoutDashboard size={18} />, label: "Vue d'ensemble", badge: 0 },
+            { id: 'commissions', icon: <Building2 size={18} />, label: 'Avis Commissions', badge: 0 },
+            { id: 'bibliotheque', icon: <BookOpen size={18} />, label: 'Bibliothèque', badge: 0 },
+            { id: 'documents', icon: <MessageSquare size={18} />, label: 'Messages Admins', badge: 0 },
+            { id: 'member-partners', icon: <Shield size={18} />, label: 'Nos Partenaires', badge: 0 },
+            { id: 'annuaire', icon: <Users size={18} />, label: 'Annuaire des Membres', badge: 0 },
+            ...(can('unesco_view')
+              ? [{ id: 'unesco', icon: <Landmark size={18} />, label: 'Djerba UNESCO', badge: 0 }]
+              : []),
+            { id: 'settings', icon: <Settings size={18} />, label: 'Mon Profil', badge: 0 },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => selectTab(item.id)}
+              className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
+                activeTab === item.id
+                  ? 'bg-aaj-dark text-white shadow-lg'
+                  : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
+              }`}
+            >
+              <div className="flex items-center gap-4">
+                <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>{item.icon}</span>
+                {item.label}
+              </div>
+              {item.badge > 0 && (
+                <span className="min-w-5 h-5 px-1.5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
+        {(() => {
+          const adminItems = [
+            { id: 'admin-roles', icon: <KeyRound size={18} />, label: 'Rôles & Permissions', perm: 'roles_manage' },
+            { id: 'admin-config', icon: <Settings size={18} />, label: 'Paramètres', perm: 'config_manage' },
+            {
+              id: 'admin-members',
+              icon: <Users size={18} />,
+              label: 'Gérer Adhésions',
+              perm: 'members_manage',
+              badge: membershipApplications.filter((a: any) => (a.status || 'pending') === 'pending').length,
+            },
+            { id: 'admin-partners', icon: <Shield size={18} />, label: 'Gérer Partenaires', perm: 'partners_manage' },
+            {
+              id: 'admin-profile-requests',
+              icon: <CheckCircle2 size={18} />,
+              label: 'Validations Profils',
+              perm: 'profileRequests_manage',
+              badge: profileRequests.filter((r) => r.status === 'pending').length,
+            },
+            { id: 'admin-documents', icon: <BookOpen size={18} />, label: 'Gérer Bibliothèque', perm: 'library_manage' },
+            { id: 'admin-commissions', icon: <Building2 size={18} />, label: 'Dépôts des Avis', perm: 'commissions_create' },
+            { id: 'admin-news', icon: <FileText size={18} />, label: 'Actions & Infos', perm: 'news_manage' },
+            {
+              id: 'admin-messages',
+              icon: <Mail size={18} />,
+              label: 'Messages Entrants',
+              perm: 'messages_inbox',
+              badge: adminMessages.filter((m) => m.status === 'unread').length,
+            },
+            {
+              id: 'admin-chat',
+              icon: <MessagesSquare size={18} />,
+              label: 'Modération Discussions',
+              perm: 'chat_manage',
+              badge: chatPendingApprovals,
+            },
+            { id: 'admin-unesco', icon: <MapPinned size={18} />, label: 'Paramètres UNESCO', perm: 'unesco_manage' },
+            {
+              id: 'admin-unesco-permits',
+              icon: <FileCheck size={18} />,
+              label: 'Instruction UNESCO',
+              perm: 'unesco_permits_review',
+              badge: unescoPendingReview,
+            },
+          ].filter((item) => can(item.perm));
+
+          if (adminItems.length === 0) return null;
+
+          return (
+            <div className="mt-12 space-y-1">
+              <h3 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-gray px-6 mb-4 mt-8 flex items-center gap-2">
+                <Shield size={12} className="text-aaj-royal" /> Administration
+              </h3>
+              {adminItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => selectTab(item.id)}
+                  className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
+                    activeTab === item.id
+                      ? 'bg-aaj-dark text-white shadow-lg'
+                      : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>{item.icon}</span>
+                    {item.label}
+                  </div>
+                  {item.badge > 0 && (
+                    <span className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+      </>
+    );
+
     return (
       <div className="pt-16 min-h-screen bg-white">
         {mustChangePassword && (
@@ -1986,14 +2209,6 @@ export const MemberSpacePage = () => {
               <PanelLeftOpen size={14} /> Menu
             </button>
           )}
-          {/* Backdrop behind the sliding sidebar when overlaying content. */}
-          {!sidebarPinned && sidebarOpen && (
-            <div
-              onClick={() => setSidebarOpen(false)}
-              className="fixed inset-0 z-40 bg-black/40"
-              aria-hidden="true"
-            />
-          )}
 
           <div
             className={
@@ -2002,237 +2217,12 @@ export const MemberSpacePage = () => {
                 : 'block'
             }
           >
-            {/* Sidebar Navigation */}
-            <aside
-              className={
-                sidebarPinned
-                  ? 'w-full lg:w-72 lg:shrink-0'
-                  : `fixed top-0 left-0 z-50 h-full w-80 max-w-[85vw] bg-white shadow-2xl overflow-y-auto p-6 transition-transform duration-200 ${
-                      sidebarOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
-                    }`
-              }
-            >
-              <div className="flex items-center justify-between gap-2 mb-5 px-2">
-                <span className="text-[9px] uppercase tracking-[3px] text-aaj-gray font-black">
-                  Navigation
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={toggleSidebarPinned}
-                    title={
-                      sidebarPinned
-                        ? 'Désépingler (masquer automatiquement)'
-                        : 'Épingler le menu'
-                    }
-                    aria-pressed={sidebarPinned}
-                    className="p-1.5 text-aaj-gray hover:text-aaj-royal rounded hover:bg-slate-50"
-                  >
-                    {sidebarPinned ? <PinOff size={14} /> : <Pin size={14} />}
-                  </button>
-                  {!sidebarPinned && (
-                    <button
-                      type="button"
-                      onClick={() => setSidebarOpen(false)}
-                      title="Fermer"
-                      className="p-1.5 text-aaj-gray hover:text-aaj-royal rounded hover:bg-slate-50"
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <nav className="space-y-1">
-                {[
-                  {
-                    id: 'dashboard',
-                    icon: <LayoutDashboard size={18} />,
-                    label: "Vue d'ensemble",
-                    badge: 0,
-                  },
-                  {
-                    id: 'commissions',
-                    icon: <Building2 size={18} />,
-                    label: 'Avis Commissions',
-                    badge: 0,
-                  },
-                  {
-                    id: 'bibliotheque',
-                    icon: <BookOpen size={18} />,
-                    label: 'Bibliothèque',
-                    badge: 0,
-                  },
-                  {
-                    id: 'documents',
-                    icon: <MessageSquare size={18} />,
-                    label: 'Messages Admins',
-                    badge: 0,
-                  },
-                  {
-                    id: 'member-partners',
-                    icon: <Shield size={18} />,
-                    label: 'Nos Partenaires',
-                    badge: 0,
-                  },
-                  {
-                    id: 'annuaire',
-                    icon: <Users size={18} />,
-                    label: 'Annuaire des Membres',
-                    badge: 0,
-                  },
-                  ...(can('unesco_view')
-                    ? [
-                        {
-                          id: 'unesco',
-                          icon: <Landmark size={18} />,
-                          label: 'Djerba UNESCO',
-                          badge: 0,
-                        },
-                      ]
-                    : []),
-                  { id: 'settings', icon: <Settings size={18} />, label: 'Mon Profil', badge: 0 },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => selectTab(item.id)}
-                    className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
-                      activeTab === item.id
-                        ? 'bg-aaj-dark text-white shadow-lg'
-                        : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>
-                        {item.icon}
-                      </span>
-                      {item.label}
-                    </div>
-                    {item.badge > 0 && (
-                      <span className="min-w-5 h-5 px-1.5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </nav>
-
-              {(() => {
-                const adminItems = [
-                  {
-                    id: 'admin-roles',
-                    icon: <KeyRound size={18} />,
-                    label: 'Rôles & Permissions',
-                    perm: 'roles_manage',
-                  },
-                  {
-                    id: 'admin-config',
-                    icon: <Settings size={18} />,
-                    label: 'Paramètres',
-                    perm: 'config_manage',
-                  },
-                  {
-                    id: 'admin-members',
-                    icon: <Users size={18} />,
-                    label: 'Gérer Adhésions',
-                    perm: 'members_manage',
-                    badge: membershipApplications.filter(
-                      (a: any) => (a.status || 'pending') === 'pending'
-                    ).length,
-                  },
-                  {
-                    id: 'admin-partners',
-                    icon: <Shield size={18} />,
-                    label: 'Gérer Partenaires',
-                    perm: 'partners_manage',
-                  },
-                  {
-                    id: 'admin-profile-requests',
-                    icon: <CheckCircle2 size={18} />,
-                    label: 'Validations Profils',
-                    perm: 'profileRequests_manage',
-                    badge: profileRequests.filter((r) => r.status === 'pending').length,
-                  },
-                  {
-                    id: 'admin-documents',
-                    icon: <BookOpen size={18} />,
-                    label: 'Gérer Bibliothèque',
-                    perm: 'library_manage',
-                  },
-                  {
-                    id: 'admin-commissions',
-                    icon: <Building2 size={18} />,
-                    label: 'Dépôts des Avis',
-                    perm: 'commissions_create',
-                  },
-                  {
-                    id: 'admin-news',
-                    icon: <FileText size={18} />,
-                    label: 'Actions & Infos',
-                    perm: 'news_manage',
-                  },
-                  {
-                    id: 'admin-messages',
-                    icon: <Mail size={18} />,
-                    label: 'Messages Entrants',
-                    perm: 'messages_inbox',
-                    badge: adminMessages.filter((m) => m.status === 'unread').length,
-                  },
-                  {
-                    id: 'admin-chat',
-                    icon: <MessagesSquare size={18} />,
-                    label: 'Modération Discussions',
-                    perm: 'chat_manage',
-                    badge: chatPendingApprovals,
-                  },
-                  {
-                    id: 'admin-unesco',
-                    icon: <MapPinned size={18} />,
-                    label: 'Paramètres UNESCO',
-                    perm: 'unesco_manage',
-                  },
-                  {
-                    id: 'admin-unesco-permits',
-                    icon: <FileCheck size={18} />,
-                    label: 'Instruction UNESCO',
-                    perm: 'unesco_permits_review',
-                    badge: unescoPendingReview,
-                  },
-                ].filter((item) => can(item.perm));
-
-                if (adminItems.length === 0) return null;
-
-                return (
-                  <div className="mt-12 space-y-1">
-                    <h3 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-gray px-6 mb-4 mt-8 flex items-center gap-2">
-                      <Shield size={12} className="text-aaj-royal" /> Administration
-                    </h3>
-                    {adminItems.map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() => setActiveTab(item.id)}
-                        className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
-                          activeTab === item.id
-                            ? 'bg-aaj-dark text-white shadow-lg'
-                            : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
-                        }`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>
-                            {item.icon}
-                          </span>
-                          {item.label}
-                        </div>
-                        {item.badge > 0 && (
-                          <span className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
-                            {item.badge}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
-            </aside>
+            {/* Sidebar Navigation — rendered inline only when pinned. When
+                auto-hidden we move it into a body-portal below to escape
+                any transformed ancestor that would break position: fixed. */}
+            {sidebarPinned && (
+              <aside className="w-full lg:w-72 lg:shrink-0">{sidebarContent}</aside>
+            )}
 
             {/* Main Dashboard Grid */}
             <main
@@ -2437,8 +2427,16 @@ export const MemberSpacePage = () => {
                               className="p-6 border border-aaj-border rounded bg-white hover:shadow-xl transition-shadow group"
                             >
                               <div className="flex gap-6">
-                                <div className="w-16 h-16 bg-slate-50 border border-aaj-border rounded flex items-center justify-center text-aaj-royal group-hover:bg-aaj-royal group-hover:text-white transition-colors">
-                                  <UserCircle size={32} />
+                                <div className="w-16 h-16 bg-slate-50 border border-aaj-border rounded flex items-center justify-center text-aaj-royal group-hover:bg-aaj-royal group-hover:text-white transition-colors overflow-hidden">
+                                  {member.photoBase64 ? (
+                                    <img
+                                      src={member.photoBase64}
+                                      alt={member.displayName}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <UserCircle size={32} />
+                                  )}
                                 </div>
                                 <div className="flex-1">
                                   <h3 className="text-lg font-black uppercase tracking-tight mb-1">
@@ -2493,8 +2491,16 @@ export const MemberSpacePage = () => {
                                 >
                                   <td className="p-4">
                                     <div className="flex items-center gap-3">
-                                      <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-aaj-gray group-hover:text-aaj-royal transition-colors">
-                                        <UserCircle size={18} />
+                                      <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-aaj-gray group-hover:text-aaj-royal transition-colors overflow-hidden">
+                                        {member.photoBase64 ? (
+                                          <img
+                                            src={member.photoBase64}
+                                            alt={member.displayName}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        ) : (
+                                          <UserCircle size={18} />
+                                        )}
                                       </div>
                                       <div>
                                         <p className="text-sm font-black uppercase tracking-tight">
@@ -4066,6 +4072,90 @@ export const MemberSpacePage = () => {
                         {configMessage.text}
                       </div>
                     )}
+
+                    {/* SMTP diagnostic */}
+                    <section className="border border-aaj-border rounded overflow-hidden">
+                      <div className="p-5 bg-slate-50 border-b border-aaj-border">
+                        <h3 className="text-sm font-black uppercase tracking-widest text-aaj-dark">
+                          Diagnostic SMTP
+                        </h3>
+                        <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-wider mt-1">
+                          Tester l&apos;envoi d&apos;email (adhésion, mot de passe oublié, compte
+                          créé)
+                        </p>
+                      </div>
+                      <div className="p-5 space-y-3">
+                        <div className="flex flex-col md:flex-row gap-3">
+                          <input
+                            type="email"
+                            value={mailTest.to}
+                            onChange={(e) =>
+                              setMailTest((s) => ({ ...s, to: e.target.value }))
+                            }
+                            placeholder={user?.email || 'destinataire@exemple.com'}
+                            className="flex-1 bg-white border border-aaj-border rounded px-4 py-2 text-xs font-medium focus:outline-none focus:border-aaj-royal"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleTestMail}
+                            disabled={mailTest.sending}
+                            className="bg-aaj-dark text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                          >
+                            {mailTest.sending ? (
+                              <Loader2 className="animate-spin" size={12} />
+                            ) : (
+                              <Send size={12} />
+                            )}
+                            Envoyer un email de test
+                          </button>
+                        </div>
+
+                        {mailTest.error && (
+                          <div className="p-3 rounded border bg-red-50 border-red-200 text-red-700 text-[11px] font-bold uppercase tracking-widest">
+                            {mailTest.error}
+                          </div>
+                        )}
+
+                        {mailTest.result && (
+                          <div
+                            className={`p-3 rounded border text-[11px] ${
+                              mailTest.result.ok
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                : 'bg-red-50 border-red-200 text-red-800'
+                            }`}
+                          >
+                            <div className="font-black uppercase tracking-widest mb-2">
+                              {mailTest.result.ok
+                                ? `Email envoyé en ${mailTest.result.elapsedMs} ms`
+                                : `Échec d'envoi après ${mailTest.result.elapsedMs} ms`}
+                            </div>
+                            <div className="font-mono text-[10px] leading-relaxed">
+                              host : {mailTest.result.smtp.host}:
+                              {mailTest.result.smtp.port} ({mailTest.result.smtp.encryption ||
+                                'plain'})
+                              <br />
+                              from : {mailTest.result.smtp.from_email} (
+                              {mailTest.result.smtp.from_name})
+                              <br />
+                              password :{' '}
+                              {mailTest.result.smtp.has_password ? 'configuré' : 'VIDE ⚠'}
+                              <br />
+                              tcp :{' '}
+                              {mailTest.result.tcpOk === null
+                                ? 'non testé'
+                                : mailTest.result.tcpOk
+                                  ? 'port ouvert ✓'
+                                  : 'port injoignable ✗'}
+                            </div>
+                            {mailTest.result.log.length > 0 && (
+                              <pre className="mt-2 p-2 bg-white/60 rounded border border-slate-200 text-[10px] overflow-x-auto whitespace-pre-wrap break-all">
+                                {mailTest.result.log.join('\n')}
+                              </pre>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </section>
 
                     {/* Member Types */}
                     <section className="border border-aaj-border rounded overflow-hidden">
@@ -6129,6 +6219,141 @@ export const MemberSpacePage = () => {
           )}
         </AnimatePresence>
 
+        {/* Credentials modal — shown after admin creates/approves a member account */}
+        <AnimatePresence>
+          {createdCredentials && (
+            <div
+              className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+              onClick={() => {
+                setCreatedCredentials(null);
+                setCredentialsCopied(null);
+              }}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                className="bg-white max-w-lg w-full p-8 border border-aaj-border rounded"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between mb-6">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2">
+                      {createdCredentials.emailSent ? (
+                        <CheckCircle2 size={22} className="text-green-600" />
+                      ) : (
+                        <XCircle size={22} className="text-red-500" />
+                      )}
+                      <h3 className="text-xl font-black uppercase tracking-tight text-aaj-dark">
+                        {createdCredentials.mode === 'approved'
+                          ? 'Demande validée'
+                          : 'Membre ajouté'}
+                      </h3>
+                    </div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-aaj-gray">
+                      {createdCredentials.emailSent
+                        ? "Un email a été envoyé au membre (vérifier les spams)"
+                        : "L'email n'a pas pu partir — transmettez ces identifiants manuellement"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setCreatedCredentials(null);
+                      setCredentialsCopied(null);
+                    }}
+                    className="text-aaj-gray hover:text-aaj-dark transition-colors"
+                    aria-label="Fermer"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="space-y-3 mb-6">
+                  <div>
+                    <div className="text-[9px] font-black uppercase tracking-[2px] text-aaj-gray mb-1">
+                      Matricule
+                    </div>
+                    <div className="font-mono text-sm bg-slate-50 border border-aaj-border rounded px-3 py-2 select-all">
+                      {createdCredentials.matricule}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] font-black uppercase tracking-[2px] text-aaj-gray mb-1">
+                      Email
+                    </div>
+                    <div className="font-mono text-sm bg-slate-50 border border-aaj-border rounded px-3 py-2 select-all break-all">
+                      {createdCredentials.email}
+                    </div>
+                  </div>
+                  {createdCredentials.tempPassword && (
+                    <div>
+                      <div className="text-[9px] font-black uppercase tracking-[2px] text-aaj-gray mb-1">
+                        Mot de passe temporaire
+                      </div>
+                      <div className="flex gap-2">
+                        <div className="flex-1 font-mono text-sm bg-amber-50 border border-amber-200 rounded px-3 py-2 select-all">
+                          {createdCredentials.tempPassword}
+                        </div>
+                        <button
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(
+                                createdCredentials.tempPassword ?? ''
+                              );
+                              setCredentialsCopied('pwd');
+                              setTimeout(() => setCredentialsCopied(null), 2000);
+                            } catch {
+                              /* clipboard blocked */
+                            }
+                          }}
+                          className="px-3 rounded border border-aaj-border text-[10px] font-black uppercase tracking-widest text-aaj-dark hover:bg-slate-50 transition-all"
+                        >
+                          {credentialsCopied === 'pwd' ? 'Copié !' : 'Copier'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={async () => {
+                      const lines = [
+                        `Matricule : ${createdCredentials.matricule}`,
+                        `Email : ${createdCredentials.email}`,
+                      ];
+                      if (createdCredentials.tempPassword) {
+                        lines.push(
+                          `Mot de passe temporaire : ${createdCredentials.tempPassword}`
+                        );
+                      }
+                      try {
+                        await navigator.clipboard.writeText(lines.join('\n'));
+                        setCredentialsCopied('all');
+                        setTimeout(() => setCredentialsCopied(null), 2000);
+                      } catch {
+                        /* clipboard blocked */
+                      }
+                    }}
+                    className="flex-1 bg-aaj-dark text-white py-3 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all"
+                  >
+                    {credentialsCopied === 'all' ? 'Copié !' : 'Copier tout'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCreatedCredentials(null);
+                      setCredentialsCopied(null);
+                    }}
+                    className="px-6 border border-aaj-border rounded font-black uppercase tracking-widest text-[11px] text-aaj-gray hover:bg-slate-50 transition-all"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
         {/* Floating Action Button: Contact Admin — stacks above the chat FAB */}
         <button
           onClick={() => setIsContactModalOpen(true)}
@@ -6143,6 +6368,45 @@ export const MemberSpacePage = () => {
 
         {/* Floating chat widget — bottom-right, below the contact-admin FAB */}
         <ChatFloatingWidget />
+
+        {/* Overlay sidebar — portaled to <body> so `position: fixed`
+            anchors to the viewport regardless of any transform / filter /
+            backdrop-filter on an ancestor inside the normal page flow. */}
+        {!sidebarPinned &&
+          typeof document !== 'undefined' &&
+          createPortal(
+            <>
+              {/* Invisible hover strip on the viewport's left edge. Opens
+                  the sidebar as soon as the pointer brushes it, giving
+                  auto-hide mode a "push to show" feel without having to
+                  aim for the Menu button. Rendered only while the sidebar
+                  is closed so it can't swallow clicks meant for the
+                  backdrop. */}
+              {!sidebarOpen && (
+                <div
+                  onMouseEnter={() => setSidebarOpen(true)}
+                  aria-hidden="true"
+                  className="fixed top-0 left-0 bottom-0 w-3 z-[9997]"
+                />
+              )}
+              <div
+                onClick={() => setSidebarOpen(false)}
+                aria-hidden="true"
+                className={`fixed inset-0 z-[9998] bg-black/50 transition-opacity duration-200 ${
+                  sidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}
+              />
+              <aside
+                className={`fixed top-0 left-0 z-[9999] h-screen w-80 max-w-[85vw] bg-white shadow-2xl overflow-y-auto p-6 transition-transform duration-200 ${
+                  sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                }`}
+                aria-hidden={!sidebarOpen}
+              >
+                {sidebarContent}
+              </aside>
+            </>,
+            document.body
+          )}
       </div>
     );
   }
