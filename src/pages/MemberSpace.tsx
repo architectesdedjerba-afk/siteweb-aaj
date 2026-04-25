@@ -81,16 +81,21 @@ import {
   sanitizeRoleId,
 } from '../lib/permissions';
 import {
+  COMMISSION_COLORS_DOC_PATH,
+  DEFAULT_COMMISSION_COLORS,
   DEFAULT_MEMBER_TYPES,
   DEFAULT_VILLES,
   MEMBER_TYPES_DOC_PATH,
   VILLES_DOC_PATH,
   buildMatricule,
+  colorForTown,
   computeNextIndex,
+  saveCommissionColors,
   saveMemberTypes,
   saveVilles,
   type MemberType,
 } from '../lib/memberConfig';
+import CommissionCalendar from '../components/CommissionCalendar';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { ChannelApprovals } from '../components/chat/ChannelApprovals';
 import { ChatFloatingWidget } from '../components/chat/ChatFloatingWidget';
@@ -161,6 +166,10 @@ export const MemberSpacePage = () => {
   });
   const [villesList, setVillesList] = useState<string[]>(DEFAULT_VILLES);
   const [memberTypesList, setMemberTypesList] = useState<MemberType[]>(DEFAULT_MEMBER_TYPES);
+  const [commissionColors, setCommissionColors] = useState<Record<string, string>>(
+    () => ({ ...DEFAULT_COMMISSION_COLORS })
+  );
+  const [colorDrafts, setColorDrafts] = useState<Record<string, string>>({});
   const [configSaving, setConfigSaving] = useState(false);
   const [newVilleInput, setNewVilleInput] = useState('');
   const [newTypeInput, setNewTypeInput] = useState({ letter: '', label: '' });
@@ -262,11 +271,13 @@ export const MemberSpacePage = () => {
     town: string;
     date: string;
     count: string;
+    type: string;
     files: PVFile[];
   }>({
     town: 'Houmt Souk',
     date: '',
     count: '0',
+    type: '',
     files: [],
   });
   const [pvUploading, setPvUploading] = useState(false);
@@ -333,6 +344,28 @@ export const MemberSpacePage = () => {
       }
     );
 
+    const unsubColors = onSnapshot(
+      doc(db, COMMISSION_COLORS_DOC_PATH.col, COMMISSION_COLORS_DOC_PATH.id),
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as { colors?: Record<string, string> };
+          if (data.colors && typeof data.colors === 'object') {
+            const cleaned: Record<string, string> = {};
+            for (const [town, hex] of Object.entries(data.colors)) {
+              if (typeof hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(hex)) cleaned[town] = hex;
+            }
+            setCommissionColors({ ...DEFAULT_COMMISSION_COLORS, ...cleaned });
+            return;
+          }
+        }
+        setCommissionColors({ ...DEFAULT_COMMISSION_COLORS });
+      },
+      (err) => {
+        console.warn('Commission colors config read blocked, using defaults.', err);
+        setCommissionColors({ ...DEFAULT_COMMISSION_COLORS });
+      }
+    );
+
     const qNews = query(collection(db, 'news'), orderBy('createdAt', 'desc'));
     const unsubscribeNews = onSnapshot(qNews, (snapshot) => {
       const newsData = snapshot.docs.map((doc) => ({
@@ -393,6 +426,7 @@ export const MemberSpacePage = () => {
     return () => {
       unsubVilles();
       unsubTypes();
+      unsubColors();
       unsubscribeNews();
       unsubscribePVs();
       unsubscribeAdminMessages();
@@ -907,10 +941,11 @@ export const MemberSpacePage = () => {
         town: newPV.town,
         date: newPV.date,
         count: newPV.count,
+        type: newPV.type.trim(),
         files: newPV.files,
         createdAt: serverTimestamp(),
       });
-      setNewPV({ town: 'Houmt Souk', date: '', count: '0', files: [] });
+      setNewPV({ town: 'Houmt Souk', date: '', count: '0', type: '', files: [] });
       if (pvFileInputRef.current) pvFileInputRef.current.value = '';
       alert('Avis publié avec succès !');
     } catch (err) {
@@ -1245,6 +1280,54 @@ export const MemberSpacePage = () => {
       setConfigMessage({ type: 'success', text: 'Types de membres réinitialisés.' });
     } catch (err) {
       console.error('Error resetting member types:', err);
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, 'Erreur lors de la réinitialisation.'),
+      });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleSaveCommissionColors = async () => {
+    setConfigSaving(true);
+    try {
+      // Merge drafts on top of the live colours map.
+      const merged: Record<string, string> = { ...commissionColors };
+      for (const [town, hex] of Object.entries(colorDrafts)) {
+        if (typeof hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(hex)) merged[town] = hex;
+      }
+      await saveCommissionColors(merged);
+      setCommissionColors(merged);
+      setColorDrafts({});
+      setConfigMessage({
+        type: 'success',
+        text: 'Couleurs des commissions enregistrées.',
+      });
+    } catch (err) {
+      console.error('Error saving commission colors:', err);
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, 'Erreur lors de l’enregistrement des couleurs.'),
+      });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleResetCommissionColors = async () => {
+    if (!window.confirm('Réinitialiser les couleurs des commissions par défaut ?')) return;
+    setConfigSaving(true);
+    try {
+      await saveCommissionColors({ ...DEFAULT_COMMISSION_COLORS });
+      setCommissionColors({ ...DEFAULT_COMMISSION_COLORS });
+      setColorDrafts({});
+      setConfigMessage({
+        type: 'success',
+        text: 'Couleurs des commissions réinitialisées.',
+      });
+    } catch (err) {
+      console.error('Error resetting commission colors:', err);
       setConfigMessage({
         type: 'error',
         text: describeFirestoreError(err, 'Erreur lors de la réinitialisation.'),
@@ -2251,6 +2334,14 @@ export const MemberSpacePage = () => {
                           (acc, curr) => acc + (parseInt(curr.count) || 0),
                           0
                         );
+                        const townColor = colorForTown(town, commissionColors);
+                        const formattedDate = latestPV?.date
+                          ? new Date(latestPV.date).toLocaleDateString('fr-FR', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                            })
+                          : null;
 
                         return (
                           <div
@@ -2259,26 +2350,41 @@ export const MemberSpacePage = () => {
                               setSelectedCommune(town);
                               setActiveTab('commissions');
                             }}
-                            className="p-6 border border-aaj-border rounded bg-white group hover:border-aaj-royal transition-all cursor-pointer"
+                            className="border border-aaj-border rounded bg-white group hover:border-aaj-royal transition-all cursor-pointer overflow-hidden"
                           >
-                            <span className="text-[9px] font-black text-aaj-royal uppercase tracking-widest mb-2 block">
-                              {town}
-                            </span>
-                            <div className="flex justify-between items-end">
-                              <div>
-                                <p className="text-2xl font-black uppercase tracking-tighter">
-                                  {totalAvis} Avis
-                                </p>
-                                <p className="text-[10px] font-bold text-aaj-gray uppercase mt-1">
-                                  {latestPV
-                                    ? `Dernière : ${new Date(latestPV.date).toLocaleDateString()}`
-                                    : 'Aucun avis'}
-                                </p>
-                              </div>
-                              <div
-                                className={`text-[9px] font-black px-2 py-1 uppercase rounded bg-green-50 text-green-600 group-hover:bg-aaj-royal group-hover:text-white transition-all`}
+                            <div
+                              className="h-1.5"
+                              style={{ backgroundColor: townColor }}
+                              aria-hidden="true"
+                            />
+                            <div className="p-6">
+                              <span
+                                className="text-[9px] font-black uppercase tracking-widest mb-2 block"
+                                style={{ color: townColor }}
                               >
-                                Consulter
+                                {town}
+                              </span>
+                              <div className="flex justify-between items-end">
+                                <div>
+                                  <p className="text-2xl font-black uppercase tracking-tighter">
+                                    {totalAvis} Avis
+                                  </p>
+                                  {latestPV ? (
+                                    <p className="text-[10px] font-bold text-aaj-gray uppercase mt-1">
+                                      Dernière : {formattedDate}
+                                      {latestPV.type ? ` · ${latestPV.type}` : ''}
+                                    </p>
+                                  ) : (
+                                    <p className="text-[10px] font-bold text-aaj-gray uppercase mt-1 italic">
+                                      Aucun avis
+                                    </p>
+                                  )}
+                                </div>
+                                <div
+                                  className={`text-[9px] font-black px-2 py-1 uppercase rounded bg-green-50 text-green-600 group-hover:bg-aaj-royal group-hover:text-white transition-all`}
+                                >
+                                  Consulter
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -2470,8 +2576,11 @@ export const MemberSpacePage = () => {
                             >
                               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                 <div>
-                                  <div className="flex items-center gap-3 mb-1">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-aaj-royal">
+                                  <div className="flex items-center gap-3 mb-1 flex-wrap">
+                                    <span
+                                      className="text-[10px] font-black uppercase tracking-widest"
+                                      style={{ color: colorForTown(pv.town, commissionColors) }}
+                                    >
                                       Commission du{' '}
                                       {new Date(pv.date).toLocaleDateString('fr-FR', {
                                         day: 'numeric',
@@ -2483,6 +2592,20 @@ export const MemberSpacePage = () => {
                                     <span className="text-[11px] font-black uppercase tracking-tighter">
                                       {pv.count} Dossiers traités
                                     </span>
+                                    {pv.type && (
+                                      <>
+                                        <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                        <span
+                                          className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded border"
+                                          style={{
+                                            color: colorForTown(pv.town, commissionColors),
+                                            borderColor: colorForTown(pv.town, commissionColors) + '40',
+                                          }}
+                                        >
+                                          {pv.type}
+                                        </span>
+                                      </>
+                                    )}
                                   </div>
                                   <p className="text-[9px] font-bold text-aaj-gray uppercase tracking-widest">
                                     {pvFiles.length} fichier{pvFiles.length > 1 ? 's' : ''} joint{pvFiles.length > 1 ? 's' : ''}
@@ -2541,32 +2664,83 @@ export const MemberSpacePage = () => {
                         )}
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        {['Houmt Souk', 'Midoun', 'Ajim'].map((town) => {
-                          const townPVs = commissionPVs.filter((pv) => pv.town === town);
-                          return (
-                            <div
-                              key={town}
-                              className="p-8 border border-aaj-border rounded bg-white text-center flex flex-col justify-between hover:border-aaj-royal transition-all group"
-                            >
-                              <div>
-                                <Building2 size={32} className="mx-auto text-aaj-royal mb-4" />
-                                <h3 className="text-xl font-black uppercase tracking-tighter mb-2">
-                                  {town}
-                                </h3>
-                                <p className="text-[10px] font-black text-aaj-gray uppercase tracking-widest mb-6">
-                                  Total PVs : {townPVs.length}
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => setSelectedCommune(town)}
-                                className="w-full bg-aaj-dark text-white py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all group-hover:scale-[1.02]"
+                      <div className="space-y-8">
+                        <CommissionCalendar
+                          events={commissionPVs.map((pv) => ({
+                            date: pv.date,
+                            town: pv.town,
+                            type: pv.type || '',
+                            count: parseInt(pv.count) || 0,
+                          }))}
+                          colors={commissionColors}
+                          onDayClick={(_date, evs) => {
+                            // If all events on that day belong to the same town, jump to it.
+                            const towns = Array.from(new Set(evs.map((e) => e.town)));
+                            if (towns.length === 1) setSelectedCommune(towns[0]);
+                          }}
+                        />
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                          {['Houmt Souk', 'Midoun', 'Ajim'].map((town) => {
+                            const townPVs = commissionPVs.filter((pv) => pv.town === town);
+                            const latestPV = townPVs[0];
+                            const townColor = colorForTown(town, commissionColors);
+                            const formattedDate = latestPV?.date
+                              ? new Date(latestPV.date).toLocaleDateString('fr-FR', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                })
+                              : null;
+                            return (
+                              <div
+                                key={town}
+                                className="border border-aaj-border rounded bg-white flex flex-col justify-between hover:border-aaj-royal transition-all group overflow-hidden"
                               >
-                                Consulter les PV
-                              </button>
-                            </div>
-                          );
-                        })}
+                                <div
+                                  className="h-1.5"
+                                  style={{ backgroundColor: townColor }}
+                                  aria-hidden="true"
+                                />
+                                <div className="p-8 text-center flex-1 flex flex-col justify-between">
+                                  <div>
+                                    <Building2
+                                      size={32}
+                                      className="mx-auto mb-4"
+                                      style={{ color: townColor }}
+                                    />
+                                    <h3 className="text-xl font-black uppercase tracking-tighter mb-2">
+                                      {town}
+                                    </h3>
+                                    <p className="text-[10px] font-black text-aaj-gray uppercase tracking-widest mb-2">
+                                      Total PVs : {townPVs.length}
+                                    </p>
+                                    {latestPV ? (
+                                      <div className="text-[10px] font-bold text-aaj-dark uppercase tracking-wider mb-6 space-y-0.5">
+                                        <p>Dernière : {formattedDate}</p>
+                                        <p className="text-aaj-gray">
+                                          {latestPV.type
+                                            ? `Type : ${latestPV.type}`
+                                            : 'Type non renseigné'}
+                                        </p>
+                                      </div>
+                                    ) : (
+                                      <p className="text-[10px] font-bold text-aaj-gray uppercase tracking-wider mb-6 italic">
+                                        Aucun avis publié
+                                      </p>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={() => setSelectedCommune(town)}
+                                    className="w-full bg-aaj-dark text-white py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all group-hover:scale-[1.02]"
+                                  >
+                                    Consulter les PV
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                   </motion.div>
@@ -4100,6 +4274,79 @@ export const MemberSpacePage = () => {
                         )}
                       </div>
                     </section>
+
+                    {/* Couleurs des commissions */}
+                    <section className="border border-aaj-border rounded overflow-hidden">
+                      <div className="p-5 bg-slate-50 border-b border-aaj-border flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-black uppercase tracking-widest text-aaj-dark">
+                            Couleurs des commissions
+                          </h3>
+                          <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-wider mt-1">
+                            Couleur affichée sur le calendrier et les cartes de commune
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleResetCommissionColors}
+                            disabled={configSaving}
+                            className="text-[10px] font-black uppercase tracking-widest text-aaj-gray hover:text-aaj-dark border border-aaj-border px-4 py-2 rounded"
+                          >
+                            Réinitialiser
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveCommissionColors}
+                            disabled={configSaving || Object.keys(colorDrafts).length === 0}
+                            className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          >
+                            <Save size={12} /> Enregistrer
+                          </button>
+                        </div>
+                      </div>
+                      <div className="divide-y divide-aaj-border">
+                        {['Houmt Souk', 'Midoun', 'Ajim'].map((town) => {
+                          const current =
+                            colorDrafts[town] ?? colorForTown(town, commissionColors);
+                          const isDirty = colorDrafts[town] !== undefined;
+                          return (
+                            <div
+                              key={town}
+                              className="flex items-center justify-between px-5 py-3 gap-4"
+                            >
+                              <div className="flex items-center gap-3 flex-1">
+                                <span
+                                  className="w-8 h-8 rounded border border-aaj-border flex-shrink-0"
+                                  style={{ backgroundColor: current }}
+                                />
+                                <div>
+                                  <span className="text-xs font-black uppercase tracking-widest text-aaj-dark block">
+                                    {town}
+                                  </span>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-aaj-gray">
+                                    {current}
+                                    {isDirty && (
+                                      <span className="ml-2 text-amber-600">· Non enregistré</span>
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
+                              <input
+                                type="color"
+                                value={current}
+                                onChange={(e) =>
+                                  setColorDrafts((d) => ({ ...d, [town]: e.target.value }))
+                                }
+                                disabled={configSaving}
+                                className="h-9 w-16 cursor-pointer rounded border border-aaj-border bg-white"
+                                aria-label={`Couleur pour ${town}`}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
                   </motion.div>
                 )}
 
@@ -4414,18 +4661,40 @@ export const MemberSpacePage = () => {
                         )}
                       </div>
 
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
-                          Nombre de dossiers
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          placeholder="Ex: 15"
-                          value={newPV.count}
-                          onChange={(e) => setNewPV({ ...newPV, count: e.target.value })}
-                          className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold"
-                        />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                            Nombre de dossiers
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            placeholder="Ex: 15"
+                            value={newPV.count}
+                            onChange={(e) => setNewPV({ ...newPV, count: e.target.value })}
+                            className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                            Type de commission
+                          </label>
+                          <input
+                            type="text"
+                            list="commission-types"
+                            placeholder="Ex: Ordinaire, Extraordinaire…"
+                            value={newPV.type}
+                            onChange={(e) => setNewPV({ ...newPV, type: e.target.value })}
+                            className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold"
+                          />
+                          <datalist id="commission-types">
+                            <option value="Ordinaire" />
+                            <option value="Extraordinaire" />
+                            <option value="Consultative" />
+                            <option value="Spéciale" />
+                          </datalist>
+                        </div>
                       </div>
 
                       <button
