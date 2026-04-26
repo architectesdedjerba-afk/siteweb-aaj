@@ -277,6 +277,99 @@ function build_specs(): array
         'canDelete' => fn(array $u, array $r) => is_admin($u) || user_has_permission($u, 'commissions_create'),
     ];
 
+    // ---------------- jobs ----------------
+    // Offres & demandes d'emploi/stage. Les offres sont publiées par les
+    // adhérents (source=member, status=approved). Les demandes sont déposées
+    // via le formulaire public (source=public, status=pending) puis validées
+    // par un modérateur (perm jobs_manage).
+    $specs['jobs'] = [
+        'table' => 'jobs',
+        'idColumn' => 'id',
+        'orderBy' => ['created_at', 'DESC'],
+        'toView' => fn(array $r) => [
+            'id' => $r['id'],
+            'kind' => $r['kind'],
+            'contractType' => $r['contract_type'],
+            'title' => $r['title'],
+            'description' => $r['description'],
+            'city' => $r['city'],
+            'company' => $r['company'],
+            'authorUid' => $r['author_uid'],
+            'authorName' => $r['author_name'],
+            'authorRole' => $r['author_role'],
+            'authorEmail' => $r['author_email'],
+            'authorPhone' => $r['author_phone'],
+            'source' => $r['source'],
+            'status' => $r['status'],
+            'createdAt' => iso_datetime($r['created_at']),
+        ],
+        'toRow' => function (array $p) {
+            $row = [];
+            if (array_key_exists('kind', $p))         $row['kind'] = (string)$p['kind'];
+            if (array_key_exists('contractType', $p)) $row['contract_type'] = $p['contractType'];
+            if (array_key_exists('title', $p))        $row['title'] = (string)$p['title'];
+            if (array_key_exists('description', $p)) $row['description'] = (string)$p['description'];
+            if (array_key_exists('city', $p))         $row['city'] = $p['city'];
+            if (array_key_exists('company', $p))      $row['company'] = $p['company'];
+            if (array_key_exists('authorUid', $p))    $row['author_uid'] = $p['authorUid'];
+            if (array_key_exists('authorName', $p))   $row['author_name'] = $p['authorName'];
+            if (array_key_exists('authorRole', $p))   $row['author_role'] = $p['authorRole'];
+            if (array_key_exists('authorEmail', $p))  $row['author_email'] = $p['authorEmail'];
+            if (array_key_exists('authorPhone', $p))  $row['author_phone'] = $p['authorPhone'];
+            if (array_key_exists('source', $p))       $row['source'] = (string)$p['source'];
+            if (array_key_exists('status', $p))       $row['status'] = (string)$p['status'];
+            return $row;
+        },
+        'validateCreate' => function (array $p): void {
+            foreach (['kind', 'title', 'description'] as $k) {
+                if (empty($p[$k]) || !is_string($p[$k])) json_error('invalid_input', "Champ requis : $k", 400);
+            }
+            if (!in_array($p['kind'], ['offer', 'request'], true)) json_error('invalid_input', 'kind invalide.', 400);
+            if (!empty($p['authorEmail']) && !filter_var($p['authorEmail'], FILTER_VALIDATE_EMAIL)) {
+                json_error('invalid_email', 'Email invalide.', 400);
+            }
+        },
+        'beforeInsert' => function (array $p): array {
+            // Lock down server-trusted fields based on the caller context.
+            $user = current_user();
+            if ($p['kind'] === 'request') {
+                // Public requests cannot self-approve.
+                $p['source'] = 'public';
+                $p['status'] = 'pending';
+                $p['authorUid'] = $user['uid'] ?? null;
+            } else {
+                // Offer — must be authored by a member; auto-approved.
+                $p['source'] = 'member';
+                $p['status'] = $p['status'] ?? 'approved';
+                if ($user) $p['authorUid'] = $user['uid'];
+            }
+            return $p;
+        },
+        // Non-moderators see only approved entries (pending/rejected contain
+        // submitter contact info from the public form). Anonymous users hit
+        // the per-row canGet check below instead — listFilter only fires for
+        // authenticated callers in list_collection().
+        'listFilter' => function (array $u, array $qs): array {
+            if (is_admin($u) || user_has_permission($u, 'jobs_manage')) return [];
+            return [['status', '=', 'approved']];
+        },
+        'canList' => fn(?array $u) => true, // public viewer needs the approved feed
+        'canGet'  => function (?array $u, array $r): bool {
+            if ($r['status'] === 'approved') return true;
+            return $u && (is_admin($u) || user_has_permission($u, 'jobs_manage'));
+        },
+        'canCreate' => function (?array $u, array $p): bool {
+            $kind = $p['kind'] ?? null;
+            if ($kind === 'request') return true; // public form
+            if ($kind === 'offer') {
+                return $u && (is_admin($u) || user_has_permission($u, 'jobs_create') || user_has_permission($u, 'jobs_manage'));
+            }
+            return false;
+        },
+        'canUpdate' => fn(array $u, array $r, array $patch) => is_admin($u) || user_has_permission($u, 'jobs_manage'),
+        'canDelete' => fn(array $u, array $r) => is_admin($u) || user_has_permission($u, 'jobs_manage'),
+    ];
+
     // ---------------- contact_messages ----------------
     $specs['contact_messages'] = [
         'table' => 'contact_messages',

@@ -18,6 +18,7 @@ export const translations: Translations = {
   'nav.about': { fr: 'À Propos', ar: 'حول', en: 'About' },
   'nav.events': { fr: 'Évènements', ar: 'الأحداث', en: 'Events' },
   'nav.partners': { fr: 'Partenaires', ar: 'الشركاء', en: 'Partners' },
+  'nav.jobs': { fr: 'Emplois', ar: 'وظائف', en: 'Jobs' },
   'nav.members': { fr: 'Connexion', ar: 'تسجيل الدخول', en: 'Login' },
   'nav.legal': { fr: 'Mentions légales', ar: 'الإشعار القانوني', en: 'Legal Notice' },
   'nav.notifications': { fr: 'Notifications', ar: 'الإشعارات', en: 'Notifications' },

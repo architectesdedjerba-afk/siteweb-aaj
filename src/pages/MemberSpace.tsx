@@ -48,6 +48,9 @@ import {
   PanelLeftOpen,
   Bell,
   SlidersHorizontal,
+  Briefcase,
+  GraduationCap,
+  Clock,
 } from 'lucide-react';
 import {
   // auth API
@@ -186,6 +189,26 @@ export const MemberSpacePage = () => {
   const [pendingUserRequests, setPendingUserRequests] = useState<any[]>([]);
   const [newsItems, setNewsItems] = useState<any[]>([]);
   const [commissionPVs, setCommissionPVs] = useState<any[]>([]);
+  const [jobItems, setJobItems] = useState<any[]>([]);
+  const [jobsTabFilter, setJobsTabFilter] = useState<'all' | 'offer' | 'request'>('all');
+  const [jobDetail, setJobDetail] = useState<any | null>(null);
+  const [newJob, setNewJob] = useState<{
+    contractType: string;
+    title: string;
+    description: string;
+    city: string;
+    company: string;
+    contactEmail: string;
+    contactPhone: string;
+  }>({
+    contractType: 'CDI',
+    title: '',
+    description: '',
+    city: 'Houmt Souk',
+    company: '',
+    contactEmail: '',
+    contactPhone: '',
+  });
   const [selectedCommune, setSelectedCommune] = useState<string | null>(null);
   const [libraryFilterCommune, setLibraryFilterCommune] = useState<string>('Toutes');
   const [libraryFilterLegal, setLibraryFilterLegal] = useState<string>('Tous');
@@ -508,6 +531,17 @@ export const MemberSpacePage = () => {
       setCommissionPVs(pvsData);
     });
 
+    const qJobs = query(collection(db, 'jobs'), orderBy('createdAt', 'desc'));
+    const unsubscribeJobs = onSnapshot(
+      qJobs,
+      (snapshot) => {
+        setJobItems(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      (err) => {
+        console.warn('Jobs subscription error:', err);
+      }
+    );
+
     const qAllMessages = query(collection(db, 'contact_messages'), orderBy('createdAt', 'desc'));
     let unsubscribeAdminMessages = () => {};
     if (isAdmin) {
@@ -554,6 +588,7 @@ export const MemberSpacePage = () => {
       unsubNewsCategories();
       unsubscribeNews();
       unsubscribePVs();
+      unsubscribeJobs();
       unsubscribeAdminMessages();
       unsubscribeUserMessages();
       unsubscribePartners();
@@ -1180,6 +1215,85 @@ export const MemberSpacePage = () => {
 
   const removePvFile = (idx: number) => {
     setNewPV((prev) => ({ ...prev, files: prev.files.filter((_, i) => i !== idx) }));
+  };
+
+  const handlePublishJobOffer = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!can('jobs_create')) return;
+    if (!newJob.title.trim() || !newJob.description.trim() || !newJob.contactEmail.trim()) {
+      alert('Veuillez remplir le titre, la description et un email de contact.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const authorName = [userProfile?.firstName, userProfile?.lastName]
+        .filter(Boolean)
+        .join(' ')
+        .trim() || userProfile?.displayName || user?.email || 'Adhérent AAJ';
+      await addDoc(collection(db, 'jobs'), {
+        kind: 'offer',
+        contractType: newJob.contractType,
+        title: newJob.title.trim(),
+        description: newJob.description.trim(),
+        city: newJob.city,
+        company: newJob.company.trim(),
+        authorUid: user?.uid || null,
+        authorName,
+        authorRole: userProfile?.category || '',
+        authorEmail: newJob.contactEmail.trim(),
+        authorPhone: newJob.contactPhone.trim(),
+        source: 'member',
+        status: 'approved',
+        createdAt: serverTimestamp(),
+      });
+      setNewJob({
+        contractType: 'CDI',
+        title: '',
+        description: '',
+        city: 'Houmt Souk',
+        company: '',
+        contactEmail: userProfile?.email || user?.email || '',
+        contactPhone: userProfile?.mobile || '',
+      });
+      alert('Offre publiée avec succès.');
+    } catch (err) {
+      console.error('Error publishing job offer:', err);
+      alert("Erreur lors de la publication de l'offre.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleApproveJob = async (id: string) => {
+    if (!can('jobs_manage')) return;
+    try {
+      await updateDoc(doc(db, 'jobs', id), { status: 'approved' });
+    } catch (err) {
+      console.error('Error approving job:', err);
+      alert('Erreur lors de la validation.');
+    }
+  };
+
+  const handleRejectJob = async (id: string) => {
+    if (!can('jobs_manage')) return;
+    if (!window.confirm('Rejeter cette annonce ?')) return;
+    try {
+      await updateDoc(doc(db, 'jobs', id), { status: 'rejected' });
+    } catch (err) {
+      console.error('Error rejecting job:', err);
+      alert('Erreur lors du rejet.');
+    }
+  };
+
+  const handleDeleteJob = async (id: string) => {
+    if (!can('jobs_manage')) return;
+    if (!window.confirm('Supprimer définitivement cette annonce ?')) return;
+    try {
+      await deleteDoc(doc(db, 'jobs', id));
+    } catch (err) {
+      console.error('Error deleting job:', err);
+      alert('Erreur lors de la suppression.');
+    }
   };
 
   const getMemberStartYear = (member: any): number => {
@@ -2180,6 +2294,7 @@ export const MemberSpacePage = () => {
             { id: 'documents', icon: <MessageSquare size={18} />, label: 'Messages Admins', badge: 0 },
             { id: 'member-partners', icon: <Shield size={18} />, label: 'Nos Partenaires', badge: 0 },
             { id: 'annuaire', icon: <Users size={18} />, label: 'Annuaire des Membres', badge: 0 },
+            { id: 'jobs', icon: <Briefcase size={18} />, label: 'Emplois & Stages', badge: 0 },
             ...(can('unesco_view')
               ? [{ id: 'unesco', icon: <Landmark size={18} />, label: 'Djerba UNESCO', badge: 0 }]
               : []),
@@ -2242,6 +2357,19 @@ export const MemberSpacePage = () => {
             },
             { id: 'admin-documents', icon: <BookOpen size={18} />, label: 'Gérer Bibliothèque', perm: 'library_manage' },
             { id: 'admin-commissions', icon: <Building2 size={18} />, label: 'Dépôts des Avis', perm: 'commissions_create' },
+            {
+              id: 'publish-job',
+              icon: <Briefcase size={18} />,
+              label: 'Publier une offre',
+              perm: 'jobs_create',
+            },
+            {
+              id: 'admin-jobs',
+              icon: <GraduationCap size={18} />,
+              label: 'Modérer Emplois',
+              perm: 'jobs_manage',
+              badge: jobItems.filter((j) => (j.status || 'pending') === 'pending').length,
+            },
             { id: 'admin-news', icon: <FileText size={18} />, label: 'Actions & Infos', perm: 'news_manage' },
             {
               id: 'admin-messages',
@@ -5415,6 +5543,511 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
+                {activeTab === 'jobs' && can('jobs_view') && (
+                  <motion.div
+                    key="jobs"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="space-y-8"
+                  >
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-aaj-border">
+                      <div>
+                        <h2 className="text-2xl font-black uppercase tracking-tighter">
+                          Emplois & Stages
+                        </h2>
+                        <p className="text-[11px] font-bold text-aaj-gray uppercase tracking-widest mt-2">
+                          Offres déposées par les adhérents · Demandes émises par les candidats
+                        </p>
+                      </div>
+                      {can('jobs_create') && (
+                        <button
+                          type="button"
+                          onClick={() => selectTab('publish-job')}
+                          className="inline-flex items-center gap-2 bg-aaj-dark text-white px-5 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all"
+                        >
+                          <Plus size={14} /> Publier une offre
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {([
+                        { key: 'all', label: 'Tous' },
+                        { key: 'offer', label: 'Offres' },
+                        { key: 'request', label: 'Demandes' },
+                      ] as { key: 'all' | 'offer' | 'request'; label: string }[]).map((f) => {
+                        const active = jobsTabFilter === f.key;
+                        const count = jobItems.filter((j) => {
+                          if ((j.status || 'pending') !== 'approved') return false;
+                          if (f.key === 'all') return true;
+                          return j.kind === f.key;
+                        }).length;
+                        return (
+                          <button
+                            key={f.key}
+                            type="button"
+                            onClick={() => setJobsTabFilter(f.key)}
+                            className={`inline-flex items-center gap-2 px-5 py-2.5 text-[10px] font-black uppercase tracking-[2px] rounded transition-all ${
+                              active
+                                ? 'bg-aaj-dark text-white'
+                                : 'border border-aaj-border text-aaj-gray hover:border-aaj-dark hover:text-aaj-dark'
+                            }`}
+                          >
+                            {f.label}
+                            <span className={`text-[9px] ${active ? 'text-white/70' : 'text-aaj-gray'}`}>
+                              ({count})
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {(() => {
+                      const visible = jobItems.filter(
+                        (j) =>
+                          (j.status || 'pending') === 'approved' &&
+                          (jobsTabFilter === 'all' || j.kind === jobsTabFilter)
+                      );
+                      if (visible.length === 0) {
+                        return (
+                          <div className="p-12 border border-dashed border-aaj-border rounded text-center bg-slate-50/50">
+                            <Briefcase size={40} className="mx-auto text-aaj-gray/40 mb-4" />
+                            <p className="text-sm font-black uppercase tracking-widest text-aaj-gray">
+                              Aucune annonce pour le moment.
+                            </p>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                          {visible.map((it) => {
+                            const isOffer = it.kind === 'offer';
+                            const date = it.createdAt?.toDate?.()?.toLocaleDateString('fr-FR', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                            });
+                            return (
+                              <button
+                                key={it.id}
+                                type="button"
+                                onClick={() => setJobDetail(it)}
+                                className="text-left border border-aaj-border rounded bg-white p-6 hover:border-aaj-royal hover:shadow-md transition-all flex flex-col h-full"
+                              >
+                                <div className="flex items-center justify-between mb-3">
+                                  <span
+                                    className={`inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[2px] px-2.5 py-1 rounded border ${
+                                      isOffer
+                                        ? 'bg-aaj-soft text-aaj-royal border-aaj-royal/20'
+                                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    }`}
+                                  >
+                                    {isOffer ? 'Offre' : 'Demande'}
+                                  </span>
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-aaj-gray border border-aaj-border px-2 py-0.5 rounded">
+                                    {it.contractType || '—'}
+                                  </span>
+                                </div>
+                                <h3 className="text-base font-black uppercase tracking-tight text-aaj-dark mb-2 line-clamp-2">
+                                  {it.title}
+                                </h3>
+                                <p className="text-[12px] text-aaj-gray font-medium leading-relaxed mb-4 line-clamp-3 flex-1">
+                                  {it.description}
+                                </p>
+                                <div className="space-y-1.5 text-[10px] font-bold text-aaj-gray uppercase tracking-tight">
+                                  {it.company && (
+                                    <div className="flex items-center gap-2">
+                                      <Building2 size={11} className="text-aaj-royal" />
+                                      <span className="truncate">{it.company}</span>
+                                    </div>
+                                  )}
+                                  {!it.company && it.authorName && (
+                                    <div className="flex items-center gap-2">
+                                      <UserCircle size={11} className="text-aaj-royal" />
+                                      <span className="truncate">{it.authorName}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex items-center gap-2">
+                                    <MapPin size={11} className="text-aaj-royal" />
+                                    <span>{it.city}</span>
+                                  </div>
+                                  {date && (
+                                    <div className="flex items-center gap-2">
+                                      <FileText size={11} className="text-aaj-royal" />
+                                      <span>{date}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </motion.div>
+                )}
+
+                {activeTab === 'publish-job' && can('jobs_create') && (
+                  <motion.div
+                    key="publish-job"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="space-y-8"
+                  >
+                    <div className="flex justify-between items-center pb-4 border-b border-aaj-border">
+                      <h2 className="text-2xl font-black uppercase tracking-tighter">
+                        Publier une offre d&apos;emploi ou de stage
+                      </h2>
+                      <button
+                        type="button"
+                        onClick={() => selectTab('jobs')}
+                        className="text-[10px] font-black uppercase tracking-widest text-aaj-gray hover:text-aaj-royal flex items-center gap-2 border border-aaj-border px-4 py-2 rounded"
+                      >
+                        <Briefcase size={14} /> Voir le tableau
+                      </button>
+                    </div>
+
+                    <form
+                      onSubmit={handlePublishJobOffer}
+                      className="max-w-3xl bg-slate-50/50 p-10 border border-aaj-border rounded space-y-8"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                            Type de contrat
+                          </label>
+                          <select
+                            value={newJob.contractType}
+                            onChange={(e) =>
+                              setNewJob({ ...newJob, contractType: e.target.value })
+                            }
+                            className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold uppercase tracking-widest"
+                          >
+                            <option>CDI</option>
+                            <option>CDD</option>
+                            <option>Stage</option>
+                            <option>Apprentissage</option>
+                            <option>Freelance</option>
+                            <option>Autre</option>
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                            Ville
+                          </label>
+                          <select
+                            value={newJob.city}
+                            onChange={(e) => setNewJob({ ...newJob, city: e.target.value })}
+                            className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold uppercase tracking-widest"
+                          >
+                            {villesList.map((v) => (
+                              <option key={v} value={v}>
+                                {v}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Intitulé du poste
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={newJob.title}
+                          onChange={(e) => setNewJob({ ...newJob, title: e.target.value })}
+                          placeholder="Ex: Architecte de projet senior"
+                          className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold focus:ring-1 focus:ring-aaj-royal outline-none transition-all"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Cabinet / Entreprise
+                        </label>
+                        <input
+                          type="text"
+                          value={newJob.company}
+                          onChange={(e) => setNewJob({ ...newJob, company: e.target.value })}
+                          placeholder="Nom du cabinet ou de la structure"
+                          className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold focus:ring-1 focus:ring-aaj-royal outline-none transition-all"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                          Description du poste
+                        </label>
+                        <textarea
+                          required
+                          rows={6}
+                          value={newJob.description}
+                          onChange={(e) =>
+                            setNewJob({ ...newJob, description: e.target.value })
+                          }
+                          placeholder="Missions, profil recherché, compétences attendues, modalités…"
+                          className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-medium focus:ring-1 focus:ring-aaj-royal outline-none transition-all"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                            Email de contact
+                          </label>
+                          <input
+                            type="email"
+                            required
+                            value={newJob.contactEmail}
+                            onChange={(e) =>
+                              setNewJob({ ...newJob, contactEmail: e.target.value })
+                            }
+                            placeholder="contact@cabinet.com"
+                            className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold focus:ring-1 focus:ring-aaj-royal outline-none transition-all"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-aaj-gray ml-1">
+                            Téléphone (optionnel)
+                          </label>
+                          <input
+                            type="tel"
+                            value={newJob.contactPhone}
+                            onChange={(e) =>
+                              setNewJob({ ...newJob, contactPhone: e.target.value })
+                            }
+                            placeholder="+216 ..."
+                            className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-medium focus:ring-1 focus:ring-aaj-royal outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isSaving}
+                        className="w-full bg-aaj-royal text-white py-4 rounded font-black uppercase tracking-widest text-[11px] shadow-lg shadow-aaj-royal/20 active:scale-95 transition-all flex justify-center items-center gap-2"
+                      >
+                        {isSaving ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <CheckCircle2 size={16} />
+                        )}
+                        Publier l&apos;offre
+                      </button>
+                    </form>
+                  </motion.div>
+                )}
+
+                {activeTab === 'admin-jobs' && can('jobs_manage') && (
+                  <motion.div
+                    key="admin-jobs"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="space-y-8"
+                  >
+                    <div className="pb-4 border-b border-aaj-border">
+                      <h2 className="text-2xl font-black uppercase tracking-tighter">
+                        Modération des Emplois & Stages
+                      </h2>
+                      <p className="text-[11px] font-bold text-aaj-gray uppercase tracking-widest mt-2">
+                        Validez les demandes envoyées via l&apos;espace public et gérez toutes les
+                        annonces.
+                      </p>
+                    </div>
+
+                    <section className="space-y-4">
+                      <h3 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-royal flex items-center gap-2">
+                        <Clock size={12} /> En attente de validation
+                        <span className="ml-2 px-2 py-0.5 rounded bg-aaj-soft text-aaj-royal text-[9px]">
+                          {jobItems.filter((j) => (j.status || 'pending') === 'pending').length}
+                        </span>
+                      </h3>
+                      {jobItems.filter((j) => (j.status || 'pending') === 'pending').length ===
+                      0 ? (
+                        <div className="p-8 border border-dashed border-aaj-border rounded text-center bg-slate-50/50">
+                          <CheckCircle2 size={32} className="mx-auto text-emerald-200 mb-3" />
+                          <p className="text-[11px] font-black uppercase tracking-widest text-aaj-gray">
+                            Toutes les demandes ont été traitées.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {jobItems
+                            .filter((j) => (j.status || 'pending') === 'pending')
+                            .map((j) => (
+                              <article
+                                key={j.id}
+                                className="border border-aaj-border rounded bg-white overflow-hidden"
+                              >
+                                <div className="px-6 py-4 bg-slate-50 border-b border-aaj-border flex flex-wrap items-center gap-3 justify-between">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span
+                                      className={`inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[2px] px-2.5 py-1 rounded border ${
+                                        j.kind === 'offer'
+                                          ? 'bg-aaj-soft text-aaj-royal border-aaj-royal/20'
+                                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                      }`}
+                                    >
+                                      {j.kind === 'offer' ? 'Offre' : 'Demande'}
+                                    </span>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-aaj-gray border border-aaj-border px-2 py-0.5 rounded">
+                                      {j.contractType || '—'}
+                                    </span>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-aaj-gray">
+                                      {j.source === 'public' ? 'Espace public' : 'Espace adhérent'}
+                                    </span>
+                                  </div>
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-aaj-gray">
+                                    {j.createdAt?.toDate?.()?.toLocaleDateString('fr-FR') || ''}
+                                  </span>
+                                </div>
+                                <div className="p-6 space-y-3">
+                                  <h4 className="text-base font-black uppercase tracking-tight">
+                                    {j.title}
+                                  </h4>
+                                  <p className="text-[12px] text-aaj-gray font-medium leading-relaxed whitespace-pre-wrap">
+                                    {j.description}
+                                  </p>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] font-bold text-aaj-gray uppercase tracking-tight pt-2 border-t border-aaj-border">
+                                    <span>{j.authorName || '—'} · {j.city}</span>
+                                    <span className="md:text-right">
+                                      {j.authorEmail || ''}
+                                      {j.authorPhone ? ` · ${j.authorPhone}` : ''}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="px-6 py-4 bg-slate-50 border-t border-aaj-border flex justify-end gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRejectJob(j.id)}
+                                    className="px-5 py-2 border border-red-200 text-red-500 rounded text-[10px] font-black uppercase tracking-widest hover:bg-red-50 transition-colors"
+                                  >
+                                    Rejeter
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApproveJob(j.id)}
+                                    className="px-5 py-2 bg-emerald-600 text-white rounded text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100"
+                                  >
+                                    Publier
+                                  </button>
+                                </div>
+                              </article>
+                            ))}
+                        </div>
+                      )}
+                    </section>
+
+                    <section className="space-y-4">
+                      <h3 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-royal flex items-center gap-2">
+                        <FileText size={12} /> Toutes les annonces
+                      </h3>
+                      <div className="border border-aaj-border rounded overflow-hidden">
+                        <table className="w-full text-left text-[11px]">
+                          <thead className="bg-slate-50 border-b border-aaj-border">
+                            <tr className="text-[9px] font-black uppercase tracking-widest text-aaj-gray">
+                              <th className="px-4 py-3">Type</th>
+                              <th className="px-4 py-3">Titre</th>
+                              <th className="px-4 py-3">Auteur</th>
+                              <th className="px-4 py-3">Statut</th>
+                              <th className="px-4 py-3 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {jobItems.length === 0 ? (
+                              <tr>
+                                <td
+                                  colSpan={5}
+                                  className="px-4 py-8 text-center text-aaj-gray font-bold uppercase tracking-widest"
+                                >
+                                  Aucune annonce.
+                                </td>
+                              </tr>
+                            ) : (
+                              jobItems.map((j) => {
+                                const status = j.status || 'pending';
+                                const statusClass =
+                                  status === 'approved'
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : status === 'rejected'
+                                      ? 'bg-red-50 text-red-700 border-red-200'
+                                      : 'bg-amber-50 text-amber-700 border-amber-200';
+                                return (
+                                  <tr
+                                    key={j.id}
+                                    className="border-t border-aaj-border hover:bg-slate-50/50"
+                                  >
+                                    <td className="px-4 py-3 font-black uppercase tracking-widest text-aaj-dark text-[10px]">
+                                      {j.kind === 'offer' ? 'Offre' : 'Demande'}
+                                    </td>
+                                    <td className="px-4 py-3 font-bold text-aaj-dark">
+                                      <button
+                                        type="button"
+                                        onClick={() => setJobDetail(j)}
+                                        className="text-left hover:text-aaj-royal"
+                                      >
+                                        {j.title}
+                                      </button>
+                                    </td>
+                                    <td className="px-4 py-3 text-aaj-gray">
+                                      {j.authorName || '—'}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <span
+                                        className={`inline-block text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded border ${statusClass}`}
+                                      >
+                                        {status === 'approved'
+                                          ? 'Publié'
+                                          : status === 'rejected'
+                                            ? 'Rejeté'
+                                            : 'En attente'}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-right">
+                                      <div className="inline-flex items-center gap-2">
+                                        {status !== 'approved' && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleApproveJob(j.id)}
+                                            className="text-[9px] font-black uppercase tracking-widest text-emerald-700 hover:underline"
+                                          >
+                                            Publier
+                                          </button>
+                                        )}
+                                        {status !== 'rejected' && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRejectJob(j.id)}
+                                            className="text-[9px] font-black uppercase tracking-widest text-amber-700 hover:underline"
+                                          >
+                                            Rejeter
+                                          </button>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteJob(j.id)}
+                                          className="text-[9px] font-black uppercase tracking-widest text-red-600 hover:underline"
+                                        >
+                                          Supprimer
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  </motion.div>
+                )}
+
                 {activeTab === 'admin-profile-requests' && can('profileRequests_manage') && (
                   <motion.div
                     key="admin-profile-requests"
@@ -6440,6 +7073,123 @@ export const MemberSpacePage = () => {
                 </button>
                 <div className="overflow-y-auto custom-scrollbar">
                   <NewsPostCard item={selectedNews} />
+                </div>
+              </motion.div>
+            </div>
+          )}
+
+          {/* Modal: Job Detail */}
+          {jobDetail && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setJobDetail(null)}
+                className="absolute inset-0 bg-aaj-dark/90 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="relative bg-white w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl rounded"
+              >
+                <div className="p-8 border-b border-aaj-border bg-slate-50 flex justify-between items-start gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-3 flex-wrap">
+                      <span
+                        className={`inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[2px] px-2.5 py-1 rounded border ${
+                          jobDetail.kind === 'offer'
+                            ? 'bg-aaj-soft text-aaj-royal border-aaj-royal/20'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}
+                      >
+                        {jobDetail.kind === 'offer' ? 'Offre' : 'Demande'}
+                      </span>
+                      <span className="text-[9px] font-black uppercase tracking-widest text-aaj-gray border border-aaj-border px-2.5 py-1 rounded">
+                        {jobDetail.contractType || '—'}
+                      </span>
+                    </div>
+                    <h3 className="text-2xl font-black uppercase tracking-tighter text-aaj-dark">
+                      {jobDetail.title}
+                    </h3>
+                    <p className="text-[10px] font-bold text-aaj-gray uppercase tracking-widest mt-2">
+                      {jobDetail.city}
+                      {jobDetail.createdAt?.toDate?.()
+                        ? ` · Publié le ${jobDetail.createdAt.toDate().toLocaleDateString('fr-FR')}`
+                        : ''}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setJobDetail(null)}
+                    className="p-2 hover:bg-white transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="p-8 overflow-y-auto flex-1 custom-scrollbar space-y-6">
+                  <div>
+                    <h4 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-royal mb-3">
+                      Description
+                    </h4>
+                    <p className="text-sm text-aaj-dark font-medium leading-relaxed whitespace-pre-wrap">
+                      {jobDetail.description}
+                    </p>
+                  </div>
+                  <div className="border-t border-aaj-border pt-6">
+                    <h4 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-royal mb-3">
+                      Contact
+                    </h4>
+                    <div className="space-y-2 text-sm">
+                      {jobDetail.company && (
+                        <div className="flex items-center gap-3">
+                          <Building2 size={14} className="text-aaj-royal" />
+                          <span className="font-bold uppercase tracking-tight">
+                            {jobDetail.company}
+                          </span>
+                        </div>
+                      )}
+                      {jobDetail.authorName && (
+                        <div className="flex items-center gap-3">
+                          <UserCircle size={14} className="text-aaj-royal" />
+                          <span className="font-bold uppercase tracking-tight">
+                            {jobDetail.authorName}
+                            {jobDetail.authorRole ? ` · ${jobDetail.authorRole}` : ''}
+                          </span>
+                        </div>
+                      )}
+                      {jobDetail.authorEmail && (
+                        <div className="flex items-center gap-3">
+                          <Mail size={14} className="text-aaj-royal" />
+                          <a
+                            href={`mailto:${jobDetail.authorEmail}`}
+                            className="font-bold text-aaj-royal hover:underline"
+                          >
+                            {jobDetail.authorEmail}
+                          </a>
+                        </div>
+                      )}
+                      {jobDetail.authorPhone && (
+                        <div className="flex items-center gap-3">
+                          <Phone size={14} className="text-aaj-royal" />
+                          <a
+                            href={`tel:${jobDetail.authorPhone}`}
+                            className="font-bold text-aaj-royal hover:underline"
+                          >
+                            {jobDetail.authorPhone}
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="p-6 border-t border-aaj-border bg-slate-50 flex justify-end">
+                  <button
+                    onClick={() => setJobDetail(null)}
+                    className="px-8 py-3 border border-aaj-border rounded font-black uppercase tracking-widest text-[11px] text-aaj-dark hover:bg-white transition-all shadow-sm"
+                  >
+                    Fermer
+                  </button>
                 </div>
               </motion.div>
             </div>

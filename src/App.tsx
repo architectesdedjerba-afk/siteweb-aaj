@@ -10,6 +10,7 @@ import { HomePage } from "./pages/Home";
 import { AboutPage } from "./pages/About";
 import { NewsPage } from "./pages/News";
 import { PartnersPage } from "./pages/Partners";
+import { JobsPage } from "./pages/Jobs";
 import { MemberSpacePage } from "./pages/MemberSpace";
 import { EventRegistrationPage } from "./pages/EventRegistration";
 import { MembershipApplicationPage } from "./pages/MembershipApplication";
@@ -71,6 +72,7 @@ export default function App() {
                   <Route path="/aaj" element={<AboutPage />} />
                   <Route path="/evennements" element={<NewsPage />} />
                   <Route path="/partenaires" element={<PartnersPage />} />
+                  <Route path="/emplois" element={<JobsPage />} />
                   <Route path="/espace-adherents" element={<MemberSpacePage />} />
                   <Route path="/inscription-evenement" element={<EventRegistrationPage />} />
                   <Route path="/demander-adhesion" element={<MembershipApplicationPage />} />
