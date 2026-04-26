@@ -10,10 +10,21 @@ function handle_collections(string $method, array $rest): void
 {
     $name = $rest[0] ?? '';
     $id = $rest[1] ?? null;
+    $action = $rest[2] ?? null;
     if ($name === '') json_error('bad_path', 'Collection manquante.', 400);
 
     $spec = collection_spec($name);
     if (!$spec) json_error('unknown_collection', "Collection inconnue : $name", 404);
+
+    // Sub-actions on a specific document (e.g. POST /collections/contact_messages/<id>/reply)
+    if ($id !== null && $action !== null) {
+        if ($name === 'contact_messages' && $action === 'reply' && $method === 'POST') {
+            require_once __DIR__ . '/../lib/mail.php';
+            contact_messages_reply($id);
+            return;
+        }
+        json_error('not_found', 'Action inconnue.', 404);
+    }
 
     if ($method === 'GET' && $id === null) { list_collection($spec); return; }
     if ($method === 'GET' && $id !== null) { get_one($spec, $id); return; }
@@ -274,18 +285,33 @@ function build_specs(): array
         'toView' => fn(array $r) => [
             'id' => $r['id'],
             'userId' => $r['user_id'], 'userEmail' => $r['user_email'],
+            'userName' => $r['user_name'] ?? null,
             'subject' => $r['subject'], 'message' => $r['message'],
             'fileBase64' => $r['file_url'], 'fileName' => $r['file_name'],
+            'status' => $r['status'] ?? 'unread',
+            'replied' => isset($r['replied']) ? (bool)$r['replied'] : false,
+            'repliedAt' => isset($r['replied_at']) ? iso_datetime($r['replied_at']) : null,
+            'repliedBy' => $r['replied_by'] ?? null,
+            'replyMessage' => $r['reply_message'] ?? null,
             'createdAt' => iso_datetime($r['created_at']),
         ],
         'toRow' => function (array $p) {
             $row = [];
             if (array_key_exists('userId', $p))     $row['user_id'] = $p['userId'];
             if (array_key_exists('userEmail', $p))  $row['user_email'] = $p['userEmail'];
+            if (array_key_exists('userName', $p))   $row['user_name'] = $p['userName'];
             if (array_key_exists('subject', $p))    $row['subject'] = $p['subject'];
             if (array_key_exists('message', $p))    $row['message'] = $p['message'];
             if (array_key_exists('fileBase64', $p)) $row['file_url'] = $p['fileBase64'];
             if (array_key_exists('fileName', $p))   $row['file_name'] = $p['fileName'];
+            if (array_key_exists('status', $p)) {
+                $s = is_string($p['status']) ? $p['status'] : 'unread';
+                $row['status'] = in_array($s, ['unread', 'read', 'archived'], true) ? $s : 'unread';
+            }
+            if (array_key_exists('replied', $p))     $row['replied'] = $p['replied'] ? 1 : 0;
+            if (array_key_exists('repliedAt', $p))   $row['replied_at'] = $p['repliedAt'];
+            if (array_key_exists('repliedBy', $p))   $row['replied_by'] = $p['repliedBy'];
+            if (array_key_exists('replyMessage', $p)) $row['reply_message'] = $p['replyMessage'];
             return $row;
         },
         'listFilter' => function (array $u, array $qs): array {
@@ -1105,4 +1131,90 @@ function delete_one(array $spec, string $id): void
     }
     db()->prepare("DELETE FROM `{$spec['table']}` WHERE `{$spec['idColumn']}` = ?")->execute([$id]);
     json_response(['ok' => true]);
+}
+
+/**
+ * POST /collections/contact_messages/<id>/reply
+ * Body: { body: string }
+ *
+ * Sends an HTML email via SMTP to the message author, then marks the row
+ * as replied. SMTP failures are non-fatal — the DB update still happens
+ * so the admin sees the reply was recorded; the response carries
+ * { emailSent: false } so the UI can warn.
+ */
+function contact_messages_reply(string $id): void
+{
+    $user = require_auth();
+    if (!is_admin($user) && !user_has_permission($user, 'messages_inbox')) {
+        json_error('forbidden', 'Permission requise : messages_inbox', 403);
+    }
+
+    $pdo = db();
+    $get = $pdo->prepare('SELECT * FROM `contact_messages` WHERE `id` = ? LIMIT 1');
+    $get->execute([$id]);
+    $row = $get->fetch();
+    if (!$row) json_error('not_found', 'Message introuvable.', 404);
+
+    $payload = read_json_body();
+    $body = isset($payload['body']) && is_string($payload['body']) ? trim($payload['body']) : '';
+    if ($body === '') json_error('invalid_input', 'Le corps de la réponse est requis.', 400);
+    if (mb_strlen($body) > 10000) json_error('invalid_input', 'Réponse trop longue (10 000 caractères max).', 400);
+
+    $toEmail = (string)($row['user_email'] ?? '');
+    if ($toEmail === '' || !filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+        json_error('invalid_input', 'Le message ne contient pas d\'adresse email valide.', 400);
+    }
+    $toName = (string)($row['user_name'] ?? $toEmail);
+    $originalSubject = (string)($row['subject'] ?? '');
+    $subject = 'Re: ' . ($originalSubject !== '' ? $originalSubject : 'Votre message');
+
+    $original = (string)($row['message'] ?? '');
+    $bodyHtml = nl2br(htmlspecialchars($body, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    $originalHtml = nl2br(htmlspecialchars($original, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    $sentAt = date('d/m/Y H:i');
+
+    $html = <<<HTML
+<!DOCTYPE html>
+<html lang="fr"><body style="font-family: Arial, Helvetica, sans-serif; color:#1f2937; max-width:640px; margin:0 auto; padding:24px;">
+  <p>Bonjour,</p>
+  <div style="margin:16px 0; line-height:1.6;">{$bodyHtml}</div>
+  <p style="margin:24px 0 8px 0;">Cordialement,<br/>L'Association des Architectes de Jerba</p>
+  <hr style="border:none; border-top:1px solid #e5e7eb; margin:24px 0;"/>
+  <div style="font-size:12px; color:#6b7280;">
+    <p style="margin:0 0 8px 0;"><strong>Message d'origine</strong> ({$sentAt})</p>
+    <blockquote style="border-left:3px solid #d1d5db; padding-left:12px; margin:0; color:#4b5563;">{$originalHtml}</blockquote>
+  </div>
+</body></html>
+HTML;
+
+    $emailSent = false;
+    try {
+        $emailSent = send_mail($toEmail, $toName, $subject, $html, $body);
+    } catch (Throwable $e) {
+        error_log('[contact_messages_reply] mail error: ' . $e->getMessage());
+        $emailSent = false;
+    }
+
+    $upd = $pdo->prepare(
+        'UPDATE `contact_messages`
+            SET `replied` = 1,
+                `replied_at` = NOW(),
+                `replied_by` = :uid,
+                `reply_message` = :msg,
+                `status` = CASE WHEN `status` = \'unread\' THEN \'read\' ELSE `status` END
+          WHERE `id` = :id'
+    );
+    $upd->execute([
+        ':uid' => (string)$user['uid'],
+        ':msg' => $body,
+        ':id'  => $id,
+    ]);
+
+    $get->execute([$id]);
+    $fresh = $get->fetch();
+    $spec = collection_spec('contact_messages');
+    json_response([
+        'item' => ($spec['toView'])($fresh),
+        'emailSent' => $emailSent,
+    ]);
 }

@@ -197,6 +197,10 @@ export const MemberSpacePage = () => {
   }>({ to: '', sending: false, result: null, error: null });
   const [adminMessages, setAdminMessages] = useState<any[]>([]);
   const [userMessages, setUserMessages] = useState<any[]>([]);
+  // Inline reply form state (admin → contact_message author)
+  const [replyingMessageId, setReplyingMessageId] = useState<string | null>(null);
+  const [replyBody, setReplyBody] = useState('');
+  const [isSendingReply, setIsSendingReply] = useState(false);
   const [newContactFile, setNewContactFile] = useState({ base64: '', name: '' });
   const contactFileInputRef = useRef<HTMLInputElement>(null);
   const [newMember, setNewMember] = useState({
@@ -1703,6 +1707,38 @@ export const MemberSpacePage = () => {
     } catch (err) {
       console.error('Error updating message status:', err);
       alert('Erreur lors de la mise à jour du message.');
+    }
+  };
+
+  // Send an email reply via the admin inbox. The backend updates the row
+  // (replied + replied_at + reply_message + status) and returns the fresh
+  // view, so we patch local state immediately instead of waiting for the
+  // 8s onSnapshot poll.
+  const handleSendReply = async (messageId: string) => {
+    if (!can('messages_inbox')) return;
+    const body = replyBody.trim();
+    if (!body) {
+      alert('Veuillez saisir une réponse avant d\'envoyer.');
+      return;
+    }
+    setIsSendingReply(true);
+    try {
+      const res = await apiClient.replyToContactMessage(messageId, body);
+      setAdminMessages((prev) => prev.map((m) => (m.id === messageId ? res.item : m)));
+      setReplyingMessageId(null);
+      setReplyBody('');
+      if (res.emailSent) {
+        alert('Réponse envoyée par email.');
+      } else {
+        alert(
+          'Réponse enregistrée, mais l\'envoi de l\'email a échoué. Vérifiez la configuration SMTP.',
+        );
+      }
+    } catch (err: any) {
+      console.error('Error sending reply:', err);
+      alert(err?.message || 'Erreur lors de l\'envoi de la réponse.');
+    } finally {
+      setIsSendingReply(false);
     }
   };
 
@@ -4894,6 +4930,74 @@ export const MemberSpacePage = () => {
                                   </div>
                                 </div>
                               )}
+
+                              {msg.replied && msg.replyMessage && (
+                                <div className="mt-6 border-l-4 border-green-500 bg-green-50/60 p-4 rounded">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <CheckCircle2 size={12} className="text-green-600" />
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-green-700">
+                                      Réponse envoyée
+                                      {msg.repliedAt
+                                        ? ' • ' +
+                                          new Date(msg.repliedAt).toLocaleString('fr-FR', {
+                                            day: '2-digit',
+                                            month: '2-digit',
+                                            year: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                          })
+                                        : ''}
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-aaj-dark leading-relaxed font-medium whitespace-pre-wrap">
+                                    {msg.replyMessage}
+                                  </div>
+                                </div>
+                              )}
+
+                              {replyingMessageId === msg.id && (
+                                <div className="mt-6 border border-aaj-royal/30 bg-aaj-royal/5 p-4 rounded">
+                                  <label className="block text-[10px] font-black uppercase tracking-widest text-aaj-gray mb-2">
+                                    Votre réponse à {msg.userName || msg.userEmail}
+                                  </label>
+                                  <textarea
+                                    value={replyBody}
+                                    onChange={(e) => setReplyBody(e.target.value)}
+                                    rows={6}
+                                    maxLength={10000}
+                                    placeholder="Saisissez votre réponse — elle sera envoyée par email à l'expéditeur."
+                                    className="w-full p-3 border border-aaj-border rounded text-xs font-medium text-aaj-dark focus:outline-none focus:border-aaj-royal resize-y"
+                                    disabled={isSendingReply}
+                                  />
+                                  <div className="flex gap-3 mt-3">
+                                    <button
+                                      onClick={() => handleSendReply(msg.id)}
+                                      disabled={isSendingReply || !replyBody.trim()}
+                                      className="px-4 py-2 bg-aaj-royal text-white rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-dark transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                    >
+                                      {isSendingReply ? (
+                                        <>
+                                          <Loader2 size={12} className="animate-spin" /> Envoi…
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Send size={12} /> Envoyer la réponse
+                                        </>
+                                      )}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setReplyingMessageId(null);
+                                        setReplyBody('');
+                                      }}
+                                      disabled={isSendingReply}
+                                      className="px-4 py-2 border border-aaj-border rounded text-[10px] font-black uppercase tracking-widest text-aaj-gray hover:bg-slate-50 transition-all disabled:opacity-50"
+                                    >
+                                      Annuler
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                             <div className="md:w-64 flex flex-col gap-4 justify-between border-l border-aaj-border pl-8">
                               <div className="space-y-4">
@@ -4927,6 +5031,21 @@ export const MemberSpacePage = () => {
                               </div>
 
                               <div className="space-y-2">
+                                <button
+                                  onClick={() => {
+                                    if (replyingMessageId === msg.id) {
+                                      setReplyingMessageId(null);
+                                      setReplyBody('');
+                                    } else {
+                                      setReplyingMessageId(msg.id);
+                                      setReplyBody('');
+                                    }
+                                  }}
+                                  className="w-full py-2 bg-aaj-royal text-white rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-dark transition-all flex items-center justify-center gap-2"
+                                >
+                                  <Send size={12} />
+                                  {msg.replied ? 'Répondre à nouveau' : 'Répondre'}
+                                </button>
                                 {msg.status === 'unread' && (
                                   <button
                                     onClick={() =>
