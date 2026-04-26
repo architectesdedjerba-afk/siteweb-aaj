@@ -113,6 +113,29 @@ import { useNotifications } from '../lib/NotificationContext';
 import { NotificationsList } from '../components/notifications/NotificationsList';
 import { NotificationPreferences } from '../components/notifications/NotificationPreferences';
 
+/**
+ * Format a contact-message reply timestamp. The firebase shim wraps `*At`
+ * fields in {seconds, toDate()}; the optimistic-update path right after a
+ * POST puts the raw ISO string from the API. Accept either, return ' • DD/MM/YYYY HH:MM'.
+ */
+const formatReplyTimestamp = (raw: any): string => {
+  if (!raw) return '';
+  let d: Date | null = null;
+  if (typeof raw === 'string') d = new Date(raw);
+  else if (typeof raw?.toDate === 'function') d = raw.toDate();
+  if (!d || isNaN(d.getTime())) return '';
+  return (
+    ' • ' +
+    d.toLocaleString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  );
+};
+
 export const MemberSpacePage = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -3416,6 +3439,21 @@ export const MemberSpacePage = () => {
                                 )}
                               </div>
                             </div>
+
+                            {msg.replied && msg.replyMessage && (
+                              <div className="mt-4 border-l-4 border-green-500 bg-green-50/60 p-4 rounded">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <CheckCircle2 size={12} className="text-green-600" />
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-green-700">
+                                    Réponse de l&apos;administration
+                                    {formatReplyTimestamp(msg.repliedAt)}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-aaj-dark leading-relaxed font-medium whitespace-pre-wrap">
+                                  {msg.replyMessage}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                         {userMessages.length === 0 && (
@@ -4937,16 +4975,7 @@ export const MemberSpacePage = () => {
                                     <CheckCircle2 size={12} className="text-green-600" />
                                     <span className="text-[9px] font-black uppercase tracking-widest text-green-700">
                                       Réponse envoyée
-                                      {msg.repliedAt
-                                        ? ' • ' +
-                                          new Date(msg.repliedAt).toLocaleString('fr-FR', {
-                                            day: '2-digit',
-                                            month: '2-digit',
-                                            year: 'numeric',
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                          })
-                                        : ''}
+                                      {formatReplyTimestamp(msg.repliedAt)}
                                     </span>
                                   </div>
                                   <div className="text-xs text-aaj-dark leading-relaxed font-medium whitespace-pre-wrap">
