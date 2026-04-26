@@ -124,9 +124,17 @@
      satellite shows through unchanged) while dark labels and roads
      darken the satellite where they overlap. Result: legible place
      names without dimming the entire imagery — replaces the previous
-     45% opacity overlay which washed labels out. */
-  .unesco-hybrid-osm,
-  .unesco-hybrid-osm img {
+     45% opacity overlay which washed labels out.
+
+     The per-tile rule must out-specify Leaflet's built-in
+     `.leaflet-container img.leaflet-tile { mix-blend-mode: plus-lighter }`
+     (specificity 0,2,1) that ships with leaflet.css 1.9 — without
+     `.leaflet-container` and `img.leaflet-tile` qualifiers, Leaflet's
+     rule wins and every label disappears under the satellite. */
+  .unesco-hybrid-osm {
+    mix-blend-mode: multiply;
+  }
+  .leaflet-container .unesco-hybrid-osm img.leaflet-tile {
     mix-blend-mode: multiply;
   }
 

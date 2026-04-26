@@ -85,8 +85,13 @@ export interface NewsItem {
   type: EventType;
   category?: string;
   imageUrl?: string;
+  fileUrl?: string;
   fileBase64?: string;
   fileName?: string;
+  fileMimeType?: string;
+  authorEmail?: string;
+  authorDisplayName?: string;
+  authorPhotoBase64?: string;
   createdAt?: Timestamp;
 }
 

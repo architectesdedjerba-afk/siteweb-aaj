@@ -10,6 +10,7 @@ import { HomePage } from "./pages/Home";
 import { AboutPage } from "./pages/About";
 import { NewsPage } from "./pages/News";
 import { PartnersPage } from "./pages/Partners";
+import { JobsPage } from "./pages/Jobs";
 import { MemberSpacePage } from "./pages/MemberSpace";
 import { EventRegistrationPage } from "./pages/EventRegistration";
 import { MembershipApplicationPage } from "./pages/MembershipApplication";
@@ -21,6 +22,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { CookieBanner } from "./components/CookieBanner";
 import { AuthProvider } from "./lib/AuthContext";
+import { NotificationProvider } from "./lib/NotificationContext";
 import { ToastProvider } from "./lib/toast";
 import { I18nProvider } from "./lib/i18n";
 import { ArrowUp } from "lucide-react";
@@ -53,6 +55,7 @@ export default function App() {
       <I18nProvider>
         <ToastProvider>
           <AuthProvider>
+            <NotificationProvider>
             <BrowserRouter>
             <ScrollToTop />
             <a
@@ -69,6 +72,7 @@ export default function App() {
                   <Route path="/aaj" element={<AboutPage />} />
                   <Route path="/evennements" element={<NewsPage />} />
                   <Route path="/partenaires" element={<PartnersPage />} />
+                  <Route path="/emplois" element={<JobsPage />} />
                   <Route path="/espace-adherents" element={<MemberSpacePage />} />
                   <Route path="/inscription-evenement" element={<EventRegistrationPage />} />
                   <Route path="/demander-adhesion" element={<MembershipApplicationPage />} />
@@ -93,6 +97,7 @@ export default function App() {
               </button>
             </div>
             </BrowserRouter>
+            </NotificationProvider>
           </AuthProvider>
         </ToastProvider>
       </I18nProvider>

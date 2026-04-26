@@ -188,6 +188,20 @@ function notify_membership_application(array $app): void
     foreach (notification_admin_recipients('membership_application') as $adminEmail) {
         send_mail($adminEmail, '', $adminSubject, $adminHtml);
     }
+
+    // Notification in-app à tous les admins/super-admins.
+    $rawName = trim((string)($app['firstName'] ?? '') . ' ' . (string)($app['lastName'] ?? ''))
+             ?: (string)($app['fullName'] ?? $applicantEmail);
+    $rawCategory = (string)($app['category'] ?? '');
+    push_notifications_to_users(admin_recipient_uids(), [
+        'type'     => 'membership_application',
+        'title'    => 'Nouvelle demande d\'adhésion',
+        'body'     => $rawName . ($rawCategory !== '' ? ' — ' . $rawCategory : ''),
+        'link'     => '/espace-adherents',
+        'icon'     => 'user-plus',
+        'priority' => 'high',
+        'data'     => ['applicationId' => $app['id'] ?? null, 'email' => $applicantEmail],
+    ]);
 }
 
 function notify_partner_application(array $app): void
@@ -226,4 +240,16 @@ function notify_partner_application(array $app): void
     foreach (notification_admin_recipients('partner_application') as $adminEmail) {
         send_mail($adminEmail, '', $adminSubject, $adminHtml);
     }
+
+    $rawCompany = (string)($app['companyName'] ?? '');
+    $rawContact = (string)($app['contactName'] ?? '');
+    push_notifications_to_users(admin_recipient_uids(), [
+        'type'     => 'partner_application',
+        'title'    => 'Nouvelle proposition de partenariat',
+        'body'     => trim($rawCompany . ($rawContact ? ' — ' . $rawContact : '')),
+        'link'     => '/espace-adherents',
+        'icon'     => 'briefcase',
+        'priority' => 'normal',
+        'data'     => ['applicationId' => $app['id'] ?? null, 'email' => $contactEmail],
+    ]);
 }
