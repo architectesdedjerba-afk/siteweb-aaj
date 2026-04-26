@@ -62,16 +62,20 @@ CREATE TABLE IF NOT EXISTS users (
 -- news
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS news (
-  id         VARCHAR(64) NOT NULL,
-  title      VARCHAR(300) NOT NULL,
-  content    TEXT NOT NULL,
-  date       VARCHAR(32) NULL,
-  type       VARCHAR(32) NULL,
-  category   VARCHAR(100) NULL,
-  image_url  TEXT NULL,
-  file_url   TEXT NULL,
-  file_name  VARCHAR(255) NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id                  VARCHAR(64) NOT NULL,
+  title               VARCHAR(300) NOT NULL,
+  content             TEXT NOT NULL,
+  date                VARCHAR(32) NULL,
+  type                VARCHAR(32) NULL,
+  category            VARCHAR(100) NULL,
+  image_url           TEXT NULL,
+  file_url            TEXT NULL,
+  file_name           VARCHAR(255) NULL,
+  file_mime_type      VARCHAR(100) NULL,
+  author_email        VARCHAR(200) NULL,
+  author_display_name VARCHAR(200) NULL,
+  author_photo_base64 LONGTEXT NULL,
+  created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_news_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

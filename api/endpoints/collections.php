@@ -151,7 +151,19 @@ function build_specs(): array
             'id' => $r['id'],
             'title' => $r['title'], 'content' => $r['content'],
             'date' => $r['date'], 'type' => $r['type'], 'category' => $r['category'],
-            'imageUrl' => $r['image_url'], 'fileBase64' => $r['file_url'], 'fileName' => $r['file_name'],
+            'imageUrl' => $r['image_url'],
+            // `file_url` historically held a base64 data URL; since the PR
+            // streaming uploads to /api/files it stores the public URL.
+            // Both render fine in <img src> / <a href>, so we expose them
+            // under the new `fileUrl` key and keep `fileBase64` for any
+            // legacy reader still around.
+            'fileUrl' => $r['file_url'],
+            'fileBase64' => $r['file_url'],
+            'fileName' => $r['file_name'],
+            'fileMimeType' => $r['file_mime_type'] ?? null,
+            'authorEmail' => $r['author_email'] ?? null,
+            'authorDisplayName' => $r['author_display_name'] ?? null,
+            'authorPhotoBase64' => $r['author_photo_base64'] ?? null,
             'createdAt' => iso_datetime($r['created_at']),
         ],
         'toRow' => function (array $p) {
@@ -160,8 +172,15 @@ function build_specs(): array
                 if (array_key_exists($k, $p)) $row[$k] = $p[$k];
             }
             if (array_key_exists('imageUrl', $p))   $row['image_url'] = $p['imageUrl'];
-            if (array_key_exists('fileBase64', $p)) $row['file_url'] = $p['fileBase64'];
+            // Accept the new `fileUrl` payload key (post /api/files migration)
+            // and keep the legacy `fileBase64` mapping for older callers.
+            if (array_key_exists('fileUrl', $p))    $row['file_url'] = $p['fileUrl'];
+            elseif (array_key_exists('fileBase64', $p)) $row['file_url'] = $p['fileBase64'];
             if (array_key_exists('fileName', $p))   $row['file_name'] = $p['fileName'];
+            if (array_key_exists('fileMimeType', $p)) $row['file_mime_type'] = $p['fileMimeType'];
+            if (array_key_exists('authorEmail', $p)) $row['author_email'] = $p['authorEmail'];
+            if (array_key_exists('authorDisplayName', $p)) $row['author_display_name'] = $p['authorDisplayName'];
+            if (array_key_exists('authorPhotoBase64', $p)) $row['author_photo_base64'] = $p['authorPhotoBase64'];
             return $row;
         },
         'afterInsert' => function (array $row, array $view, array $payload): void {
