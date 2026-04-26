@@ -119,24 +119,32 @@
     transform: translateY(0);
   }
 
-  /* UNESCO map: hybrid layer = satellite imagery + OSM labels.
-     `darken` blending compares each OSM pixel to the satellite and
-     keeps the darker one. The cream OSM background loses to the
-     satellite (so imagery shows through unchanged), while dark labels
-     and roads win and stay crisp on top — a clean labels-only effect
-     without dimming. `multiply` was too subtle over Djerba's light
-     sandy imagery; `darken` makes labels pop.
-
+  /* UNESCO map: hybrid layer = Esri satellite + OSM-FR labels.
+     OSM-FR is the only provider with rich Djerba data, but it renders
+     everything in light pastels (max RGB ~180 even for "dark" labels)
+     which is brighter than typical Djerba satellite imagery (RGB
+     ~205,185,155). Plain blend modes can't darken features below the
+     sandy satellite tone, so labels stay invisible.
+     The fix: pre-process the OSM tile with `filter` before blending.
+       brightness(0.7) → drops everything below 128
+       contrast(3)    → pushes values away from middle gray (light bg
+                        clamps to 255, dark features clamp to 0)
+       brightness(1.3) → recovers the bg back toward white
+     Net effect: cream bg becomes near-white (satellite shows through
+     unchanged in `multiply`) and feature pixels become near-black
+     (multiply darkens the satellite to make them visible). Verified
+     against actual Djerba tiles at zoom 14-16.
      The per-tile rule must out-specify Leaflet's built-in
      `.leaflet-container img.leaflet-tile { mix-blend-mode: plus-lighter }`
      (specificity 0,2,1) that ships with leaflet.css 1.9 — without
      `.leaflet-container` and `img.leaflet-tile` qualifiers, Leaflet's
      rule wins and every label disappears under the satellite. */
   .unesco-hybrid-osm {
-    mix-blend-mode: darken;
+    mix-blend-mode: multiply;
   }
   .leaflet-container .unesco-hybrid-osm img.leaflet-tile {
-    mix-blend-mode: darken;
+    filter: brightness(0.7) contrast(3) brightness(1.3);
+    mix-blend-mode: multiply;
   }
 
   /* UNESCO map: disambiguation popup shown when several overlapping

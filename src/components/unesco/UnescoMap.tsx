@@ -123,20 +123,30 @@ export function UnescoMap({
           'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
       }
     );
-    // Hybrid overlay — we tried Esri's `World_Boundaries_and_Places` and
-    // CartoDB's `voyager_only_labels` and found both essentially empty
-    // over Djerba at the zoom levels members actually use (the label
-    // rasters return ~200-byte blank tiles). OSM's standard tile set has
-    // the dense labelling we need (roads, villages, neighbourhoods). The
-    // earlier 45% opacity approach washed every label out; we now layer
-    // OSM at full opacity with `mix-blend-mode: multiply` (CSS class
-    // `unesco-hybrid-osm` in index.css). Multiply keeps the satellite
-    // intact under light OSM regions and darkens it under labels/roads,
-    // so place names remain crisp without dimming the imagery.
-    const hybridOsm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // Hybrid overlay — choosing the OSM tile source for Djerba is
+    // surprisingly fiddly. Standard OSM (tile.openstreetmap.org), Esri
+    // `World_Boundaries_and_Places`, CartoDB's `voyager_only_labels`
+    // and most labels-only providers return effectively empty tiles
+    // for Djerba (~100-870 bytes, no rendered features). OSM France
+    // (tile.openstreetmap.fr/osmfr) DOES have rich Djerba data:
+    // village name labels (red text like "Guellala"), road numbers,
+    // building outlines and parcel boundaries.
+    //
+    // The catch: OSM-FR renders everything in light pastels — even
+    // dark-looking labels max around RGB(180, 80, 100) which is still
+    // brighter than typical satellite (RGB ~205, 185, 155). Plain
+    // `mix-blend-mode: multiply` or `darken` produced too-subtle
+    // results. The CSS rule for `.unesco-hybrid-osm` in index.css
+    // applies `filter: brightness(0.7) contrast(3) brightness(1.3)`
+    // first to push light bg toward white (so satellite shows through
+    // unchanged) and feature pixels toward black, then `multiply`
+    // blends the now-darker features into the satellite — labels and
+    // roads finally pop. Verified empirically against tiles for the
+    // Djerba UNESCO perimeter.
+    const hybridOsm = L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', {
       maxZoom: 19,
       className: 'unesco-hybrid-osm',
-      attribution: '&copy; OpenStreetMap contributors',
+      attribution: 'Tiles &copy; <a href="https://www.openstreetmap.fr/">OSM France</a> | Data &copy; OpenStreetMap contributors',
     });
     const hybrid = L.layerGroup([imagery, hybridOsm]);
 
