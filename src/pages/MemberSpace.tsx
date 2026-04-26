@@ -108,6 +108,7 @@ import {
 import CommissionCalendar from '../components/CommissionCalendar';
 import { NewsPostCard } from '../components/NewsPostCard';
 import { PasswordInput } from '../components/PasswordInput';
+import { DocumentThumbnail } from '../components/DocumentThumbnail';
 import { uploadFile, deleteFile } from '../lib/storage';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { ChannelApprovals } from '../components/chat/ChannelApprovals';
@@ -3164,19 +3165,25 @@ export const MemberSpacePage = () => {
                                   href={doc.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="flex items-center justify-between p-4 border border-aaj-border rounded hover:bg-slate-50 transition-colors group"
+                                  className="flex items-center gap-4 p-4 border border-aaj-border rounded hover:bg-slate-50 transition-colors group"
                                 >
-                                  <div className="flex flex-col">
+                                  <DocumentThumbnail
+                                    url={doc.url}
+                                    name={doc.name}
+                                    fileType={doc.fileType}
+                                  />
+                                  <div className="flex flex-col flex-1 min-w-0">
                                     <span className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-3">
-                                      <MapPin size={12} className="text-aaj-royal" /> {doc.name}
+                                      <MapPin size={12} className="text-aaj-royal shrink-0" />
+                                      <span className="truncate">{doc.name}</span>
                                     </span>
                                     {doc.subCategory && (
-                                      <span className="text-[9px] text-aaj-gray font-black uppercase tracking-widest mt-1 ml-6">
+                                      <span className="text-[9px] text-aaj-gray font-black uppercase tracking-widest mt-1 ml-6 truncate">
                                         {doc.subCategory}
                                       </span>
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-3 shrink-0">
                                     <span className="text-[9px] font-black text-aaj-gray uppercase border border-aaj-border px-2 py-1 rounded group-hover:bg-white transition-colors">
                                       {doc.fileType}
                                     </span>
@@ -3226,24 +3233,29 @@ export const MemberSpacePage = () => {
                                   href={doc.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="flex items-center justify-between p-4 border border-aaj-border rounded hover:bg-slate-50 transition-colors group"
+                                  className="flex items-center gap-4 p-4 border border-aaj-border rounded hover:bg-slate-50 transition-colors group"
                                 >
-                                  <div className="flex flex-col">
+                                  <DocumentThumbnail
+                                    url={doc.url}
+                                    name={doc.name}
+                                    fileType={doc.fileType}
+                                  />
+                                  <div className="flex flex-col flex-1 min-w-0">
                                     <span className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-3">
                                       {doc.fileType === 'xlsx' || doc.fileType === 'xls' ? (
-                                        <FileSpreadsheet size={12} className="text-aaj-royal" />
+                                        <FileSpreadsheet size={12} className="text-aaj-royal shrink-0" />
                                       ) : (
-                                        <FileText size={12} className="text-aaj-royal" />
+                                        <FileText size={12} className="text-aaj-royal shrink-0" />
                                       )}
-                                      {doc.name}
+                                      <span className="truncate">{doc.name}</span>
                                     </span>
                                     {doc.subCategory && (
-                                      <span className="text-[9px] text-aaj-gray font-black uppercase tracking-widest mt-1 ml-6">
+                                      <span className="text-[9px] text-aaj-gray font-black uppercase tracking-widest mt-1 ml-6 truncate">
                                         {doc.subCategory}
                                       </span>
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-3 shrink-0">
                                     <span className="text-[9px] font-black text-aaj-gray uppercase border border-aaj-border px-2 py-1 rounded group-hover:bg-white transition-colors">
                                       {doc.fileType}
                                     </span>
