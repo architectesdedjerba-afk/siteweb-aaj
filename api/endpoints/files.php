@@ -25,14 +25,22 @@ function handle_files(string $method, array $rest): void
 function files_upload(): void
 {
     global $CONFIG;
-    $user = require_auth();
+
+    // We resolve auth lazily so the `jobs_cv` folder can accept anonymous
+    // CV/portfolio attachments from the public job request form. All other
+    // folders still require an authenticated session.
+    $user = current_user();
 
     if (empty($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
         json_error('no_file', 'Aucun fichier envoyé.', 400);
     }
     $folder = preg_replace('/[^a-z0-9_\-]/', '', strtolower((string)($_POST['folder'] ?? 'misc'))) ?: 'misc';
-    if (!in_array($folder, ['news', 'partners', 'users', 'documents', 'commission_pvs', 'contact_messages', 'chat', 'unesco', 'unesco_permits', 'misc'], true)) {
+    if (!in_array($folder, ['news', 'partners', 'users', 'documents', 'commission_pvs', 'contact_messages', 'chat', 'unesco', 'unesco_permits', 'jobs_cv', 'misc'], true)) {
         json_error('invalid_folder', 'Dossier inconnu.', 400);
+    }
+
+    if ($folder !== 'jobs_cv' && !$user) {
+        json_error('unauthenticated', 'Authentification requise.', 401);
     }
 
     // Folder-level authorization
@@ -67,6 +75,12 @@ function files_upload(): void
             }
             if ($user['status'] !== 'active' && !is_admin($user)) json_error('forbidden', 'Compte inactif.', 403);
             break;
+        case 'jobs_cv':
+            // Anonymous CV/portfolio upload from the public job request form.
+            // No auth required; mime + size restrictions enforced below; the
+            // download endpoint gates access to members so anonymous visitors
+            // can't enumerate uploaded CVs.
+            break;
         case 'users':
         case 'contact_messages':
         case 'misc':
@@ -93,7 +107,7 @@ function files_upload(): void
     // Commission PVs accept any image/* or PDF — architects often submit a
     // stack of phone photos of the paper PV instead of a scanned PDF.
     $isImageOrPdf = (strpos($mime, 'image/') === 0) || $mime === 'application/pdf';
-    if ($folder === 'commission_pvs') {
+    if ($folder === 'commission_pvs' || $folder === 'jobs_cv') {
         if (!$isImageOrPdf) json_error('invalid_mime', 'Seules les images et les PDF sont acceptés.', 415);
     } elseif (!in_array($mime, $allowed, true)) {
         json_error('invalid_mime', 'Type de fichier non autorisé.', 415);
@@ -119,11 +133,14 @@ function files_upload(): void
     }
 
     $access = (string)($_POST['access'] ?? ($folder === 'news' || $folder === 'partners' ? 'public' : 'members'));
+    // Anonymous CVs are always gated to logged-in members regardless of the
+    // posted `access` field — the upload route is public, the download is not.
+    if ($folder === 'jobs_cv') $access = 'members';
 
     db()->prepare(
         'INSERT INTO files (id, folder, owner_uid, original_name, stored_path, mime_type, size_bytes, access)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    )->execute([$id, $folder, $user['uid'], $up['name'], $storedPath, $mime, (int)$up['size'], $access]);
+    )->execute([$id, $folder, $user['uid'] ?? null, $up['name'], $storedPath, $mime, (int)$up['size'], $access]);
 
     $publicUrl = rtrim((string)$CONFIG['site']['uploads_base'], '/') . '/' . $id;
 
