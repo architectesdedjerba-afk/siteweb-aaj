@@ -24,6 +24,50 @@ export const DEFAULT_VILLES: string[] = Array.from(new Set(TUNISIAN_DELEGATIONS)
 export const VILLES_DOC_PATH = { col: 'config', id: 'villes' } as const;
 export const MEMBER_TYPES_DOC_PATH = { col: 'config', id: 'memberTypes' } as const;
 export const COMMISSION_COLORS_DOC_PATH = { col: 'config', id: 'commissionColors' } as const;
+export const NEWS_CATEGORIES_DOC_PATH = { col: 'config', id: 'newsCategories' } as const;
+
+export const DEFAULT_NEWS_CATEGORIES: string[] = [
+  'Information générale',
+  'Important',
+  'Événement',
+  'Annonce officielle',
+  'Formation',
+];
+
+const CATEGORY_PALETTE: Array<{ bg: string; text: string; ring: string }> = [
+  { bg: '#EFF6FF', text: '#1E40AF', ring: '#1E40AF' },
+  { bg: '#FEF2F2', text: '#B91C1C', ring: '#B91C1C' },
+  { bg: '#ECFDF5', text: '#047857', ring: '#047857' },
+  { bg: '#FFFBEB', text: '#B45309', ring: '#B45309' },
+  { bg: '#F5F3FF', text: '#6D28D9', ring: '#6D28D9' },
+  { bg: '#FDF2F8', text: '#BE185D', ring: '#BE185D' },
+  { bg: '#F0F9FF', text: '#0369A1', ring: '#0369A1' },
+  { bg: '#F0FDF4', text: '#15803D', ring: '#15803D' },
+];
+
+const KNOWN_CATEGORY_STYLE: Record<string, number> = {
+  'information générale': 0,
+  important: 1,
+  'événement': 2,
+  evenement: 2,
+  'annonce officielle': 3,
+  formation: 4,
+};
+
+export function newsCategoryStyle(name: string | undefined | null): {
+  bg: string;
+  text: string;
+  ring: string;
+} {
+  const key = (name || '').trim().toLowerCase();
+  if (!key) return { bg: '#F1F5F9', text: '#475569', ring: '#475569' };
+  if (KNOWN_CATEGORY_STYLE[key] !== undefined) {
+    return CATEGORY_PALETTE[KNOWN_CATEGORY_STYLE[key]];
+  }
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return CATEGORY_PALETTE[hash % CATEGORY_PALETTE.length];
+}
 
 /**
  * Default colour assignments for the three Djerba town councils whose
@@ -133,6 +177,31 @@ export async function loadCommissionColors(): Promise<Record<string, string>> {
     console.warn('loadCommissionColors fallback to defaults:', err);
   }
   return { ...DEFAULT_COMMISSION_COLORS };
+}
+
+export async function loadNewsCategories(): Promise<string[]> {
+  try {
+    const snap = await getDoc(
+      doc(db, NEWS_CATEGORIES_DOC_PATH.col, NEWS_CATEGORIES_DOC_PATH.id)
+    );
+    if (snap.exists()) {
+      const data = snap.data() as { list?: string[] };
+      if (Array.isArray(data.list) && data.list.length > 0) {
+        return data.list.filter((c) => typeof c === 'string' && c.trim().length > 0);
+      }
+    }
+  } catch (err) {
+    console.warn('loadNewsCategories fallback to defaults:', err);
+  }
+  return [...DEFAULT_NEWS_CATEGORIES];
+}
+
+export async function saveNewsCategories(list: string[]): Promise<void> {
+  await setDoc(
+    doc(db, NEWS_CATEGORIES_DOC_PATH.col, NEWS_CATEGORIES_DOC_PATH.id),
+    { list, updatedAt: serverTimestamp() },
+    { merge: true }
+  );
 }
 
 export async function saveCommissionColors(colors: Record<string, string>): Promise<void> {

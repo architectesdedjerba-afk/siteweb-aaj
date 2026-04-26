@@ -87,18 +87,23 @@ import {
   COMMISSION_COLORS_DOC_PATH,
   DEFAULT_COMMISSION_COLORS,
   DEFAULT_MEMBER_TYPES,
+  DEFAULT_NEWS_CATEGORIES,
   DEFAULT_VILLES,
   MEMBER_TYPES_DOC_PATH,
+  NEWS_CATEGORIES_DOC_PATH,
   VILLES_DOC_PATH,
   buildMatricule,
   colorForTown,
   computeNextIndex,
+  newsCategoryStyle,
   saveCommissionColors,
   saveMemberTypes,
+  saveNewsCategories,
   saveVilles,
   type MemberType,
 } from '../lib/memberConfig';
 import CommissionCalendar from '../components/CommissionCalendar';
+import { NewsPostCard } from '../components/NewsPostCard';
 import { PasswordInput } from '../components/PasswordInput';
 import { uploadFile, deleteFile } from '../lib/storage';
 import { SearchableSelect } from '../components/SearchableSelect';
@@ -238,6 +243,8 @@ export const MemberSpacePage = () => {
     city: 'Houmt Souk',
   });
   const [villesList, setVillesList] = useState<string[]>(DEFAULT_VILLES);
+  const [newsCategoriesList, setNewsCategoriesList] = useState<string[]>(DEFAULT_NEWS_CATEGORIES);
+  const [newNewsCategoryInput, setNewNewsCategoryInput] = useState('');
   const [memberTypesList, setMemberTypesList] = useState<MemberType[]>(DEFAULT_MEMBER_TYPES);
   const [commissionColors, setCommissionColors] = useState<Record<string, string>>(
     () => ({ ...DEFAULT_COMMISSION_COLORS })
@@ -349,7 +356,14 @@ export const MemberSpacePage = () => {
   const newsFileInputRef = useRef<HTMLInputElement>(null);
   const pvFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [newNews, setNewNews] = useState({ title: '', content: '', fileUrl: '', fileName: '' });
+  const [newNews, setNewNews] = useState({
+    title: '',
+    content: '',
+    category: '',
+    fileUrl: '',
+    fileName: '',
+    fileMimeType: '',
+  });
   const [newsUploading, setNewsUploading] = useState(false);
   type PVFile = { id: string; url: string; name: string; type: string };
   const [newPV, setNewPV] = useState<{
@@ -451,6 +465,31 @@ export const MemberSpacePage = () => {
       }
     );
 
+    const unsubNewsCategories = onSnapshot(
+      doc(db, NEWS_CATEGORIES_DOC_PATH.col, NEWS_CATEGORIES_DOC_PATH.id),
+      async (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as { list?: string[] };
+          if (Array.isArray(data.list) && data.list.length > 0) {
+            setNewsCategoriesList(data.list);
+            return;
+          }
+        }
+        if (isSuperAdmin) {
+          try {
+            await saveNewsCategories(DEFAULT_NEWS_CATEGORIES);
+          } catch (err) {
+            console.warn('Seeding default news categories failed:', err);
+          }
+        }
+        setNewsCategoriesList([...DEFAULT_NEWS_CATEGORIES]);
+      },
+      (err) => {
+        console.warn('News categories config read blocked, using defaults.', err);
+        setNewsCategoriesList([...DEFAULT_NEWS_CATEGORIES]);
+      }
+    );
+
     const qNews = query(collection(db, 'news'), orderBy('createdAt', 'desc'));
     const unsubscribeNews = onSnapshot(qNews, (snapshot) => {
       const newsData = snapshot.docs.map((doc) => ({
@@ -512,6 +551,7 @@ export const MemberSpacePage = () => {
       unsubVilles();
       unsubTypes();
       unsubColors();
+      unsubNewsCategories();
       unsubscribeNews();
       unsubscribePVs();
       unsubscribeAdminMessages();
@@ -984,7 +1024,12 @@ export const MemberSpacePage = () => {
     setNewsUploading(true);
     try {
       const res = await apiClient.uploadFile(file, 'news', 'members');
-      setNewNews({ ...newNews, fileUrl: res.url, fileName: res.name });
+      setNewNews({
+        ...newNews,
+        fileUrl: res.url,
+        fileName: res.name,
+        fileMimeType: res.type || file.type || '',
+      });
     } catch (err: any) {
       console.error('Error uploading news file:', err);
       alert(err?.message || "Erreur lors de l'upload du fichier.");
@@ -1003,8 +1048,17 @@ export const MemberSpacePage = () => {
         ...newNews,
         createdAt: serverTimestamp(),
         authorEmail: user?.email,
+        authorDisplayName: userProfile?.displayName || user?.email || '',
+        authorPhotoBase64: userProfile?.photoBase64 || '',
       });
-      setNewNews({ title: '', content: '', fileUrl: '', fileName: '' });
+      setNewNews({
+        title: '',
+        content: '',
+        category: '',
+        fileUrl: '',
+        fileName: '',
+        fileMimeType: '',
+      });
       if (newsFileInputRef.current) newsFileInputRef.current.value = '';
       alert('Annonce publiée !');
     } catch (err) {
@@ -1012,6 +1066,68 @@ export const MemberSpacePage = () => {
       alert('Erreur lors de la diffusion.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleAddNewsCategory = async (raw: string) => {
+    const cat = raw.trim();
+    if (!cat) return;
+    if (newsCategoriesList.some((c) => c.toLowerCase() === cat.toLowerCase())) {
+      setConfigMessage({ type: 'error', text: 'Cette catégorie existe déjà.' });
+      return;
+    }
+    const next = [...newsCategoriesList, cat];
+    setConfigSaving(true);
+    try {
+      await saveNewsCategories(next);
+      setNewsCategoriesList(next);
+      setNewNewsCategoryInput('');
+      setConfigMessage({ type: 'success', text: `Catégorie "${cat}" ajoutée.` });
+    } catch (err) {
+      console.error('Error saving news category:', err);
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, "Erreur lors de l'enregistrement de la catégorie."),
+      });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleRemoveNewsCategory = async (cat: string) => {
+    if (!window.confirm(`Supprimer la catégorie "${cat}" ?`)) return;
+    const next = newsCategoriesList.filter((c) => c !== cat);
+    setConfigSaving(true);
+    try {
+      await saveNewsCategories(next);
+      setNewsCategoriesList(next);
+      setConfigMessage({ type: 'success', text: `Catégorie "${cat}" supprimée.` });
+    } catch (err) {
+      console.error('Error removing news category:', err);
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, 'Erreur lors de la suppression.'),
+      });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleResetNewsCategories = async () => {
+    if (!window.confirm('Réinitialiser la liste des catégories aux valeurs par défaut ?')) return;
+    setConfigSaving(true);
+    try {
+      await saveNewsCategories(DEFAULT_NEWS_CATEGORIES);
+      setNewsCategoriesList([...DEFAULT_NEWS_CATEGORIES]);
+      setConfigMessage({ type: 'success', text: 'Catégories réinitialisées.' });
+    } catch (err) {
+      console.error('Error resetting news categories:', err);
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, 'Erreur lors de la réinitialisation.'),
+      });
+    } finally {
+      setConfigSaving(false);
     }
   };
 
@@ -2361,39 +2477,14 @@ export const MemberSpacePage = () => {
                               Voir Historique
                             </button>
                           </div>
-                          <div className="space-y-6">
+                          <div className="space-y-4">
                             {newsItems.slice(0, 2).map((item, idx) => (
-                              <div
-                                key={idx}
+                              <NewsPostCard
+                                key={item.id || idx}
+                                item={item}
+                                compact
                                 onClick={() => setSelectedNews(item)}
-                                className="group cursor-pointer"
-                              >
-                                <div className="flex justify-between items-start">
-                                  <span className="text-[9px] font-black text-aaj-gray uppercase tracking-widest">
-                                    {item.createdAt?.toDate?.()?.toLocaleDateString('fr-FR', {
-                                      day: 'numeric',
-                                      month: 'short',
-                                      year: 'numeric',
-                                    }) || 'Récemment'}
-                                  </span>
-                                  {(item.fileUrl || item.fileBase64) && (
-                                    <a
-                                      href={item.fileUrl || item.fileBase64}
-                                      download={item.fileName || 'Annonce_AAJ.pdf'}
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="text-[8px] font-black uppercase tracking-widest bg-slate-100 px-2 py-0.5 rounded text-aaj-gray hover:bg-aaj-royal hover:text-white transition-all flex items-center gap-1"
-                                    >
-                                      <Download size={8} /> Document
-                                    </a>
-                                  )}
-                                </div>
-                                <h4 className="text-lg font-black uppercase tracking-tighter group-hover:text-aaj-royal transition-colors">
-                                  {item.title}
-                                </h4>
-                                <p className="text-xs text-aaj-gray mt-2 leading-relaxed font-medium line-clamp-2">
-                                  {item.content}
-                                </p>
-                              </div>
+                              />
                             ))}
                             {newsItems.length === 0 && (
                               <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest italic py-4">
@@ -2877,38 +2968,13 @@ export const MemberSpacePage = () => {
                       </button>
                     </div>
 
-                    <div className="space-y-6">
+                    <div className="max-w-2xl mx-auto space-y-6">
                       {newsItems.map((item, idx) => (
-                        <div
-                          key={idx}
+                        <NewsPostCard
+                          key={item.id || idx}
+                          item={item}
                           onClick={() => setSelectedNews(item)}
-                          className="p-8 border border-aaj-border rounded bg-white relative hover:border-aaj-royal transition-all group cursor-pointer"
-                        >
-                          <div className="flex justify-between items-start mb-4">
-                            <span className="text-[10px] font-black text-aaj-royal uppercase tracking-widest">
-                              {item.createdAt?.toDate?.()?.toLocaleDateString('fr-FR', {
-                                day: 'numeric',
-                                month: 'long',
-                                year: 'numeric',
-                              })}
-                            </span>
-                            {item.fileBase64 && (
-                              <a
-                                href={item.fileBase64}
-                                download={item.fileName}
-                                className="text-[10px] font-black uppercase tracking-widest text-aaj-royal flex items-center gap-2 hover:bg-aaj-royal hover:text-white px-3 py-1 rounded transition-all border border-aaj-royal"
-                              >
-                                <Download size={14} /> Télécharger la pièce jointe
-                              </a>
-                            )}
-                          </div>
-                          <h3 className="text-xl font-black uppercase tracking-tighter mb-4 group-hover:text-aaj-royal transition-colors">
-                            {item.title}
-                          </h3>
-                          <div className="text-sm text-aaj-gray leading-relaxed font-medium whitespace-pre-wrap">
-                            {item.content}
-                          </div>
-                        </div>
+                        />
                       ))}
                       {newsItems.length === 0 && (
                         <div className="p-12 border border-dashed border-aaj-border rounded text-center opacity-50">
@@ -4758,6 +4824,85 @@ export const MemberSpacePage = () => {
                       </div>
                     </section>
 
+                    {/* Catégories d'annonces */}
+                    <section className="border border-aaj-border rounded overflow-hidden">
+                      <div className="p-5 bg-slate-50 border-b border-aaj-border flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-black uppercase tracking-widest text-aaj-dark">
+                            Catégories d&apos;annonces
+                          </h3>
+                          <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-wider mt-1">
+                            {newsCategoriesList.length} catégorie
+                            {newsCategoriesList.length > 1 ? 's' : ''} disponible
+                            {newsCategoriesList.length > 1 ? 's' : ''}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleResetNewsCategories}
+                          disabled={configSaving}
+                          className="text-[10px] font-black uppercase tracking-widest text-aaj-gray hover:text-aaj-dark border border-aaj-border px-4 py-2 rounded"
+                        >
+                          Réinitialiser
+                        </button>
+                      </div>
+                      <div className="p-5 bg-slate-50 border-b border-aaj-border flex gap-3">
+                        <input
+                          type="text"
+                          value={newNewsCategoryInput}
+                          onChange={(e) => setNewNewsCategoryInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddNewsCategory(newNewsCategoryInput);
+                            }
+                          }}
+                          placeholder="Ajouter une catégorie (ex: Important)"
+                          className="flex-1 bg-white border border-aaj-border rounded px-3 py-2 text-xs font-bold"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleAddNewsCategory(newNewsCategoryInput)}
+                          disabled={configSaving}
+                          className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center justify-center gap-2"
+                        >
+                          <Plus size={12} /> Ajouter
+                        </button>
+                      </div>
+                      <div className="max-h-96 overflow-y-auto custom-scrollbar divide-y divide-aaj-border">
+                        {newsCategoriesList.map((cat) => {
+                          const style = newsCategoryStyle(cat);
+                          return (
+                            <div
+                              key={cat}
+                              className="flex items-center justify-between px-5 py-2.5"
+                            >
+                              <span
+                                className="inline-flex items-center text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full"
+                                style={{ backgroundColor: style.bg, color: style.text }}
+                              >
+                                {cat}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveNewsCategory(cat)}
+                                disabled={configSaving}
+                                className="text-red-500 hover:text-red-700 transition-colors"
+                                title="Supprimer"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                        {newsCategoriesList.length === 0 && (
+                          <div className="px-5 py-4 text-[11px] text-aaj-gray italic">
+                            Aucune catégorie configurée.
+                          </div>
+                        )}
+                      </div>
+                    </section>
+
                     {/* Couleurs des commissions */}
                     <section className="border border-aaj-border rounded overflow-hidden">
                       <div className="p-5 bg-slate-50 border-b border-aaj-border flex flex-wrap items-center justify-between gap-3">
@@ -5409,6 +5554,24 @@ export const MemberSpacePage = () => {
                       </div>
                       <div className="space-y-2">
                         <label className="text-[10px] uppercase font-black tracking-widest text-aaj-gray ml-1">
+                          Catégorie
+                        </label>
+                        <select
+                          value={newNews.category}
+                          onChange={(e) => setNewNews({ ...newNews, category: e.target.value })}
+                          className="w-full bg-slate-50 border border-aaj-border rounded px-4 py-3 text-xs font-bold focus:ring-1 focus:ring-aaj-royal outline-none transition-all"
+                        >
+                          <option value="">— Aucune catégorie —</option>
+                          {newsCategoriesList.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase font-black tracking-widest text-aaj-gray ml-1">
                           Message (Détails)
                         </label>
                         <textarea
@@ -5455,7 +5618,12 @@ export const MemberSpacePage = () => {
                             <button
                               type="button"
                               onClick={() =>
-                                setNewNews({ ...newNews, fileUrl: '', fileName: '' })
+                                setNewNews({
+                                  ...newNews,
+                                  fileUrl: '',
+                                  fileName: '',
+                                  fileMimeType: '',
+                                })
                               }
                               className="bg-red-50 text-red-500 px-4 rounded hover:bg-red-100 transition-colors"
                             >
@@ -5484,34 +5652,54 @@ export const MemberSpacePage = () => {
                         Dernières Diffusions <span className="h-px flex-1 bg-aaj-border"></span>
                       </h3>
                       <div className="space-y-4">
-                        {newsItems.map((item, idx) => (
-                          <div
-                            key={idx}
-                            className="p-6 border border-aaj-border rounded bg-white flex justify-between items-center group"
-                          >
-                            <div>
-                              <p className="text-[11px] font-black uppercase tracking-widest">
-                                {item.title}
-                              </p>
-                              <p className="text-[9px] font-bold text-aaj-gray uppercase tracking-widest">
-                                {item.createdAt?.toDate?.()?.toLocaleDateString('fr-FR')}
-                              </p>
+                        {newsItems.map((item, idx) => {
+                          const catStyle = item.category
+                            ? newsCategoryStyle(item.category)
+                            : null;
+                          return (
+                            <div
+                              key={idx}
+                              className="p-6 border border-aaj-border rounded bg-white flex justify-between items-center gap-4 group"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                  {catStyle && item.category && (
+                                    <span
+                                      className="inline-flex items-center text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
+                                      style={{
+                                        backgroundColor: catStyle.bg,
+                                        color: catStyle.text,
+                                      }}
+                                    >
+                                      {item.category}
+                                    </span>
+                                  )}
+                                  <p className="text-[11px] font-black uppercase tracking-widest truncate">
+                                    {item.title}
+                                  </p>
+                                </div>
+                                <p className="text-[9px] font-bold text-aaj-gray uppercase tracking-widest">
+                                  {item.createdAt?.toDate?.()?.toLocaleDateString('fr-FR')}
+                                </p>
+                              </div>
+                              <div className="flex gap-2 shrink-0">
+                                {(item.fileUrl || item.fileBase64) && (
+                                  <FileText size={16} className="text-aaj-gray" />
+                                )}
+                                <button
+                                  onClick={async () => {
+                                    if (window.confirm('Supprimer cette annonce ?')) {
+                                      await deleteDoc(doc(db, 'news', item.id));
+                                    }
+                                  }}
+                                  className="text-aaj-gray hover:text-red-500 transition-colors"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
                             </div>
-                            <div className="flex gap-2">
-                              {(item.fileUrl || item.fileBase64) && <FileText size={16} className="text-aaj-gray" />}
-                              <button
-                                onClick={async () => {
-                                  if (window.confirm('Supprimer cette annonce ?')) {
-                                    await deleteDoc(doc(db, 'news', item.id));
-                                  }
-                                }}
-                                className="text-aaj-gray hover:text-red-500 transition-colors"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   </motion.div>
@@ -6241,68 +6429,17 @@ export const MemberSpacePage = () => {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="relative bg-white w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl rounded"
+                className="relative bg-transparent w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
               >
-                <div className="p-8 border-b border-aaj-border flex justify-between items-start">
-                  <div>
-                    <span className="text-[10px] font-black text-aaj-royal uppercase tracking-widest block mb-2">
-                      Annonce Officielle
-                    </span>
-                    <h3 className="text-2xl font-black uppercase tracking-tighter text-aaj-dark">
-                      {selectedNews.title}
-                    </h3>
-                  </div>
-                  <button
-                    onClick={() => setSelectedNews(null)}
-                    className="p-2 hover:bg-slate-50 transition-colors"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-                <div className="p-8 overflow-y-auto flex-1 custom-scrollbar">
-                  <div className="text-sm font-black text-aaj-gray uppercase tracking-widest mb-6 border-b border-aaj-border pb-4">
-                    Publié le{' '}
-                    {selectedNews.createdAt?.toDate?.()?.toLocaleDateString('fr-FR', {
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric',
-                    })}
-                  </div>
-                  <div className="text-sm text-aaj-dark leading-relaxed font-medium whitespace-pre-wrap mb-8">
-                    {selectedNews.content}
-                  </div>
-                  {(selectedNews.fileUrl || selectedNews.fileBase64) && (
-                    <div className="bg-slate-50 p-6 border border-aaj-border rounded flex justify-between items-center">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-white border border-aaj-border rounded flex items-center justify-center text-aaj-royal">
-                          <FileText size={20} />
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-aaj-dark mb-0.5 line-clamp-1">
-                            {selectedNews.fileName || 'Document Joint'}
-                          </p>
-                          <p className="text-[9px] font-bold text-aaj-gray uppercase tracking-widest">
-                            Document PDF / Image
-                          </p>
-                        </div>
-                      </div>
-                      <a
-                        href={selectedNews.fileUrl || selectedNews.fileBase64}
-                        download={selectedNews.fileName}
-                        className="bg-aaj-dark text-white px-6 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all"
-                      >
-                        Télécharger
-                      </a>
-                    </div>
-                  )}
-                </div>
-                <div className="p-8 border-t border-aaj-border bg-slate-50 flex justify-end">
-                  <button
-                    onClick={() => setSelectedNews(null)}
-                    className="px-8 py-4 border border-aaj-border rounded font-black uppercase tracking-widest text-[11px] text-aaj-dark hover:bg-white transition-all shadow-sm"
-                  >
-                    Fermer
-                  </button>
+                <button
+                  onClick={() => setSelectedNews(null)}
+                  className="self-end mb-3 p-2 bg-white/10 text-white hover:bg-white/20 transition-colors rounded-full"
+                  aria-label="Fermer"
+                >
+                  <X size={18} />
+                </button>
+                <div className="overflow-y-auto custom-scrollbar">
+                  <NewsPostCard item={selectedNews} />
                 </div>
               </motion.div>
             </div>
