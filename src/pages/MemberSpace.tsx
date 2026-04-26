@@ -5936,6 +5936,17 @@ export const MemberSpacePage = () => {
                                       {j.authorPhone ? ` · ${j.authorPhone}` : ''}
                                     </span>
                                   </div>
+                                  {j.cvFileId && (
+                                    <a
+                                      href={`/api/files/${encodeURIComponent(j.cvFileId)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-aaj-royal hover:underline"
+                                    >
+                                      <FileText size={12} />
+                                      {j.cvFileName || 'CV / Portfolio'}
+                                    </a>
+                                  )}
                                 </div>
                                 <div className="px-6 py-4 bg-slate-50 border-t border-aaj-border flex justify-end gap-3">
                                   <button
@@ -7193,6 +7204,19 @@ export const MemberSpacePage = () => {
                             className="font-bold text-aaj-royal hover:underline"
                           >
                             {jobDetail.authorPhone}
+                          </a>
+                        </div>
+                      )}
+                      {jobDetail.cvFileId && (
+                        <div className="flex items-center gap-3">
+                          <FileText size={14} className="text-aaj-royal" />
+                          <a
+                            href={`/api/files/${encodeURIComponent(jobDetail.cvFileId)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-bold text-aaj-royal hover:underline"
+                          >
+                            {jobDetail.cvFileName || 'CV / Portfolio'}
                           </a>
                         </div>
                       )}

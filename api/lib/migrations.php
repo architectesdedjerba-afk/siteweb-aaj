@@ -484,6 +484,26 @@ function migration_008_jobs_default_perms(): void
     }
 }
 
+/**
+ * Migration 009 — Jobs CV / portfolio attachment fields.
+ *
+ * Public visitors submitting a job/internship request now attach an optional
+ * CV/portfolio file (PDF or image) uploaded to /api/files (folder=jobs_cv).
+ * Two columns store the file id (download lookup) and the original filename
+ * (display in the moderation panel + detail modal). Idempotent.
+ */
+function migration_009_jobs_cv_fields(): void
+{
+    if (!table_exists('jobs')) return;
+    $pdo = db();
+    if (!column_exists('jobs', 'cv_file_id')) {
+        $pdo->exec("ALTER TABLE `jobs` ADD COLUMN `cv_file_id` VARCHAR(64) NULL AFTER `status`");
+    }
+    if (!column_exists('jobs', 'cv_file_name')) {
+        $pdo->exec("ALTER TABLE `jobs` ADD COLUMN `cv_file_name` VARCHAR(255) NULL AFTER `cv_file_id`");
+    }
+}
+
 function run_auto_migrations(): void
 {
     try {
@@ -525,6 +545,11 @@ function run_auto_migrations(): void
     }
     try {
         migration_008_jobs_default_perms();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_009_jobs_cv_fields();
     } catch (Throwable $e) {
         error_log('[migrations] ' . $e->getMessage());
     }

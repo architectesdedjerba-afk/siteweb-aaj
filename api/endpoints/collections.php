@@ -301,6 +301,8 @@ function build_specs(): array
             'authorPhone' => $r['author_phone'],
             'source' => $r['source'],
             'status' => $r['status'],
+            'cvFileId' => $r['cv_file_id'] ?? null,
+            'cvFileName' => $r['cv_file_name'] ?? null,
             'createdAt' => iso_datetime($r['created_at']),
         ],
         'toRow' => function (array $p) {
@@ -318,6 +320,8 @@ function build_specs(): array
             if (array_key_exists('authorPhone', $p))  $row['author_phone'] = $p['authorPhone'];
             if (array_key_exists('source', $p))       $row['source'] = (string)$p['source'];
             if (array_key_exists('status', $p))       $row['status'] = (string)$p['status'];
+            if (array_key_exists('cvFileId', $p))     $row['cv_file_id'] = $p['cvFileId'];
+            if (array_key_exists('cvFileName', $p))   $row['cv_file_name'] = $p['cvFileName'];
             return $row;
         },
         'validateCreate' => function (array $p): void {
