@@ -133,12 +133,16 @@ export function NewsPostCard({ item, onClick, compact = false }: NewsPostCardPro
           target="_blank"
           rel="noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="block bg-slate-50 border-t border-aaj-border"
+          className="block bg-slate-50 border-t border-aaj-border flex items-center justify-center"
         >
           <img
             src={url}
             alt={item.fileName || 'Pièce jointe'}
-            className={`w-full object-cover ${compact ? 'max-h-64' : 'max-h-[28rem]'}`}
+            className={
+              compact
+                ? 'w-full object-cover max-h-64'
+                : 'max-w-full max-h-[80vh] object-contain'
+            }
             loading="lazy"
           />
         </a>
