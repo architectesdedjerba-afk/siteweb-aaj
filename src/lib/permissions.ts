@@ -28,6 +28,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'chat_create_channel', label: 'Proposer un canal de discussion' },
       { key: 'unesco_view', label: 'Consulter Djerba UNESCO' },
       { key: 'unesco_permits_submit', label: 'Déposer une demande de permis UNESCO' },
+      { key: 'jobs_view', label: 'Consulter les offres et demandes d\u2019emploi' },
+      { key: 'jobs_create', label: 'Publier une offre d\u2019emploi ou de stage' },
     ],
   },
   {
@@ -46,6 +48,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'chat_manage', label: 'Modérer la messagerie interne (canaux & messages)' },
       { key: 'unesco_manage', label: 'Gérer Djerba UNESCO (KMZ, zones, documents)' },
       { key: 'unesco_permits_review', label: 'Instruire les demandes de permis UNESCO' },
+      { key: 'notifications_send', label: 'Diffuser des notifications aux adhérents' },
+      { key: 'jobs_manage', label: 'Modérer les offres et demandes d\u2019emploi' },
     ],
   },
   {
@@ -116,6 +120,10 @@ export const DEFAULT_ROLES: DefaultRole[] = [
       'unesco_permits_submit',
       'unesco_manage',
       'unesco_permits_review',
+      'notifications_send',
+      'jobs_view',
+      'jobs_create',
+      'jobs_manage',
     ]),
   },
   {
@@ -137,6 +145,8 @@ export const DEFAULT_ROLES: DefaultRole[] = [
       'chat_create_channel',
       'unesco_view',
       'unesco_permits_submit',
+      'jobs_view',
+      'jobs_create',
     ]),
   },
   {
@@ -155,6 +165,8 @@ export const DEFAULT_ROLES: DefaultRole[] = [
       'profile_edit',
       'chat_use',
       'chat_create_channel',
+      'jobs_view',
+      'jobs_create',
     ]),
   },
 ];

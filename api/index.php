@@ -86,6 +86,11 @@ try {
         handle_unesco($method, array_slice($segments, 1));
     }
 
+    if ($root === 'notifications') {
+        require __DIR__ . '/endpoints/notifications.php';
+        handle_notifications($method, array_slice($segments, 1));
+    }
+
     json_error('not_found', 'Endpoint inconnu.', 404);
 } catch (PDOException $e) {
     error_log('[api-db] ' . $e->getMessage());

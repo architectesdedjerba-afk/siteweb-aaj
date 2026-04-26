@@ -99,9 +99,11 @@ export function ChatPage({ embedded = false, autoFocusInput = false }: ChatPageP
           embedded ? 'flex h-full min-h-0' : 'flex h-[calc(100vh-220px)] min-h-[500px]'
         }
       >
-        {/* Left: channel list */}
+        {/* Left: channel list — narrowed from w-80 (320px) to w-64/w-72 so
+            the conversation pane takes the larger share of the popup, in
+            the WhatsApp / Telegram desktop pattern. */}
         <div
-          className={`${showListMobile ? 'flex' : 'hidden'} lg:flex w-full lg:w-80 flex-shrink-0`}
+          className={`${showListMobile ? 'flex' : 'hidden'} lg:flex w-full lg:w-64 xl:w-72 flex-shrink-0`}
         >
           <ChannelList
             channels={channels}

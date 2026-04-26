@@ -118,4 +118,75 @@
     opacity: 1;
     transform: translateY(0);
   }
+
+  /* UNESCO map: hybrid layer = satellite imagery + OSM labels.
+     `darken` blending compares each OSM pixel to the satellite and
+     keeps the darker one. The cream OSM background loses to the
+     satellite (so imagery shows through unchanged), while dark labels
+     and roads win and stay crisp on top — a clean labels-only effect
+     without dimming. `multiply` was too subtle over Djerba's light
+     sandy imagery; `darken` makes labels pop.
+
+     The per-tile rule must out-specify Leaflet's built-in
+     `.leaflet-container img.leaflet-tile { mix-blend-mode: plus-lighter }`
+     (specificity 0,2,1) that ships with leaflet.css 1.9 — without
+     `.leaflet-container` and `img.leaflet-tile` qualifiers, Leaflet's
+     rule wins and every label disappears under the satellite. */
+  .unesco-hybrid-osm {
+    mix-blend-mode: darken;
+  }
+  .leaflet-container .unesco-hybrid-osm img.leaflet-tile {
+    mix-blend-mode: darken;
+  }
+
+  /* UNESCO map: disambiguation popup shown when several overlapping
+     zones share the click point. Slim list, neutral chrome. */
+  .leaflet-popup.unesco-overlap-popup .leaflet-popup-content {
+    margin: 8px 12px;
+    min-width: 200px;
+  }
+  .unesco-overlap-menu .unesco-overlap-title {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 800;
+    color: #3F4A5C;
+    margin: 0 0 6px;
+  }
+  .unesco-overlap-list {
+    display: flex;
+    flex-direction: column;
+  }
+  .unesco-overlap-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 4px;
+    background: transparent;
+    border: 0;
+    border-top: 1px solid #D8E2EF;
+    cursor: pointer;
+    font-size: 13px;
+    text-align: left;
+    color: #0A192F;
+    width: 100%;
+  }
+  .unesco-overlap-item:first-child {
+    border-top: 0;
+  }
+  .unesco-overlap-item:hover {
+    background: #F1F5F9;
+  }
+  .unesco-overlap-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    flex-shrink: 0;
+  }
+  .unesco-overlap-label {
+    font-weight: 500;
+    flex: 1;
+    min-width: 0;
+  }
 }

@@ -141,6 +141,22 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // ---- contact_messages sub-actions ----
+  /**
+   * Send an email reply to a contact message and persist the reply on
+   * the row. Backend marks the message as replied and (if it was unread)
+   * flips status to "read". `emailSent: false` means the DB was updated
+   * but SMTP delivery failed — caller should warn the operator.
+   */
+  replyToContactMessage: (id: string, body: string) =>
+    http<{ item: any; emailSent: boolean }>(
+      `/collections/contact_messages/${encodeURIComponent(id)}/reply`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ body }),
+      },
+    ),
+
   // ---- files ----
   uploadFile: async (file: File, folder: string, access?: 'public' | 'members' | 'private') => {
     const fd = new FormData();
@@ -268,7 +284,72 @@ export const api = {
     statusCounts: () =>
       http<{ counts: Record<string, number>; pendingReview: number }>('/unesco/status-counts'),
   },
+
+  // ---- notifications ----
+  notifications: {
+    // Email template management
+    schema: () =>
+      http<{
+        events: Array<{
+          id: string;
+          label: string;
+          kind: 'single' | 'dual';
+          vars: Array<{ key: string; desc: string }>;
+          defaults: NotificationEventConfigOnWire;
+        }>;
+        currentSettings: { events: Record<string, NotificationEventConfigOnWire> };
+      }>('/notifications/schema'),
+    test: (event: string, field: 'applicant' | 'admin' | 'single', to: string) =>
+      http<{ ok: boolean }>('/notifications/test', {
+        method: 'POST',
+        body: JSON.stringify({ event, field, to }),
+      }),
+    // In-app notifications
+    unreadCount: () =>
+      http<{ unread: number; active: number; total: number }>('/notifications/unread-count'),
+    broadcast: (payload: {
+      scope?: 'all' | 'active' | 'admins' | 'representatives' | 'members';
+      uids?: string[];
+      type?: string;
+      title: string;
+      body?: string;
+      link?: string;
+      icon?: string;
+      priority?: 'low' | 'normal' | 'high';
+      data?: Record<string, any>;
+    }) =>
+      http<{ ok: true; sent: number; targeted: number; scope: string }>('/notifications/broadcast', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    markAllRead: () =>
+      http<{ ok: true; updated: number }>('/notifications/mark-all-read', { method: 'POST' }),
+    archiveAllRead: () =>
+      http<{ ok: true; updated: number }>('/notifications/archive-all-read', { method: 'POST' }),
+    bulk: (action: 'read' | 'unread' | 'archive' | 'unarchive' | 'delete', ids: string[]) =>
+      http<{ ok: true; affected: number; action: string }>('/notifications/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ action, ids }),
+      }),
+    clearArchived: () =>
+      http<{ ok: true; deleted: number }>('/notifications/clear-archived', { method: 'DELETE' }),
+  },
 };
+
+/**
+ * Wire-format event config — see `src/lib/notifications.ts` for the richer
+ * domain type. Kept structurally identical here to avoid a circular import.
+ */
+interface NotificationEventConfigOnWire {
+  enabled: boolean;
+  extraRecipients: string[];
+  subject?: string;
+  html?: string;
+  applicantSubject?: string;
+  applicantHtml?: string;
+  adminSubject?: string;
+  adminHtml?: string;
+}
 
 // ---- UNESCO types ----
 export interface UnescoGeoJsonSource {

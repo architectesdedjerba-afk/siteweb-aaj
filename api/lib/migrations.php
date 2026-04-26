@@ -284,6 +284,206 @@ function migration_003_unesco_default_perms(): void
     }
 }
 
+/**
+ * Migration 004 — tables du système de notifications in-app.
+ * Idempotent : CREATE TABLE IF NOT EXISTS.
+ */
+function migration_004_notifications_tables(): void
+{
+    $pdo = db();
+
+    $ddl = [
+        'notifications' => <<<'SQL'
+CREATE TABLE IF NOT EXISTS notifications (
+  id            VARCHAR(64)  NOT NULL,
+  recipient_uid VARCHAR(64)  NOT NULL,
+  type          VARCHAR(50)  NOT NULL DEFAULT 'system',
+  title         VARCHAR(300) NOT NULL,
+  body          TEXT NULL,
+  link          VARCHAR(500) NULL,
+  icon          VARCHAR(50)  NULL,
+  priority      VARCHAR(16)  NOT NULL DEFAULT 'normal',
+  data          JSON NULL,
+  sender_uid    VARCHAR(64)  NULL,
+  sender_name   VARCHAR(200) NULL,
+  read_at       DATETIME NULL,
+  archived_at   DATETIME NULL,
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_notifs_recipient_created (recipient_uid, created_at),
+  KEY idx_notifs_recipient_unread (recipient_uid, read_at),
+  KEY idx_notifs_recipient_archived (recipient_uid, archived_at),
+  KEY idx_notifs_type (type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL,
+        'notification_preferences' => <<<'SQL'
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  id          VARCHAR(160) NOT NULL,
+  uid         VARCHAR(64)  NOT NULL,
+  type        VARCHAR(50)  NOT NULL,
+  in_app      TINYINT(1)   NOT NULL DEFAULT 1,
+  email       TINYINT(1)   NOT NULL DEFAULT 0,
+  updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_notif_prefs_uid_type (uid, type),
+  KEY idx_notif_prefs_uid (uid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL,
+    ];
+
+    foreach ($ddl as $table => $sql) {
+        if (!table_exists($table)) {
+            $pdo->exec($sql);
+        }
+    }
+}
+
+/**
+ * Migration 005 — backfill `notifications_send` sur le rôle admin pour
+ * que la diffusion soit immédiatement disponible sans repasser par le
+ * super-admin. Pareil que migration_003 pour UNESCO : on n'écrase rien
+ * si le super-admin a explicitement désactivé la perm.
+ */
+function migration_005_notifications_default_perms(): void
+{
+    $pdo = db();
+    $keys = ['notifications_send'];
+    $systemRoles = ['admin'];
+
+    $stmt = $pdo->prepare('SELECT id, permissions FROM roles WHERE id = ? LIMIT 1');
+    $update = $pdo->prepare('UPDATE roles SET permissions = :perms WHERE id = :id');
+
+    foreach ($systemRoles as $roleId) {
+        $stmt->execute([$roleId]);
+        $row = $stmt->fetch();
+        if (!$row) continue;
+        $perms = is_string($row['permissions'])
+            ? (json_decode((string)$row['permissions'], true) ?: [])
+            : (array)$row['permissions'];
+        $changed = false;
+        foreach ($keys as $k) {
+            if (!array_key_exists($k, $perms)) {
+                $perms[$k] = true;
+                $changed = true;
+            }
+        }
+        if ($changed) {
+            $update->execute([
+                ':perms' => json_encode($perms, JSON_UNESCAPED_UNICODE),
+                ':id'    => $roleId,
+            ]);
+        }
+    }
+}
+
+/**
+ * Migration 006 — extend contact_messages so admins can reply by email
+ * directly from the inbox UI. Adds a status flag, replied tracking
+ * fields, the stored reply body, and an optional user_name (some legacy
+ * rows only had user_email). All idempotent.
+ */
+function migration_006_contact_messages_reply_fields(): void
+{
+    $table = 'contact_messages';
+    if (!table_exists($table)) return;
+    $pdo = db();
+
+    if (!column_exists($table, 'user_name')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `user_name` VARCHAR(200) NULL AFTER `user_email`");
+    }
+    if (!column_exists($table, 'status')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `status` VARCHAR(16) NOT NULL DEFAULT 'unread' AFTER `message`");
+    }
+    if (!column_exists($table, 'replied')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `replied` TINYINT(1) NOT NULL DEFAULT 0 AFTER `status`");
+    }
+    if (!column_exists($table, 'replied_at')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `replied_at` DATETIME NULL AFTER `replied`");
+    }
+    if (!column_exists($table, 'replied_by')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `replied_by` VARCHAR(64) NULL AFTER `replied_at`");
+    }
+    if (!column_exists($table, 'reply_message')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `reply_message` TEXT NULL AFTER `replied_by`");
+    }
+}
+
+/**
+ * Migration 007 — `jobs` table (offres & demandes d'emploi/stage).
+ * Idempotent: CREATE TABLE IF NOT EXISTS. See api/migrations/007_jobs.sql for
+ * the raw DDL.
+ */
+function migration_007_jobs_table(): void
+{
+    if (table_exists('jobs')) return;
+    db()->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS jobs (
+  id            VARCHAR(64) NOT NULL,
+  kind          VARCHAR(16) NOT NULL DEFAULT 'offer',
+  contract_type VARCHAR(32) NULL,
+  title         VARCHAR(300) NOT NULL,
+  description   TEXT NOT NULL,
+  city          VARCHAR(100) NULL,
+  company       VARCHAR(200) NULL,
+  author_uid    VARCHAR(64) NULL,
+  author_name   VARCHAR(200) NULL,
+  author_role   VARCHAR(100) NULL,
+  author_email  VARCHAR(255) NULL,
+  author_phone  VARCHAR(50)  NULL,
+  source        VARCHAR(16)  NOT NULL DEFAULT 'member',
+  status        VARCHAR(16)  NOT NULL DEFAULT 'pending',
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_jobs_status (status),
+  KEY idx_jobs_kind (kind),
+  KEY idx_jobs_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL);
+}
+
+/**
+ * Migration 008 — backfill jobs permissions on existing system roles.
+ *
+ * Mirrors migration_003 (UNESCO): jobs_view + jobs_create are added to
+ * admin/representative/member; jobs_manage is added to admin only. We only
+ * insert keys that are missing so super-admin overrides survive.
+ */
+function migration_008_jobs_default_perms(): void
+{
+    $pdo = db();
+    $matrix = [
+        'admin'          => ['jobs_view' => true, 'jobs_create' => true, 'jobs_manage' => true],
+        'representative' => ['jobs_view' => true, 'jobs_create' => true],
+        'member'         => ['jobs_view' => true, 'jobs_create' => true],
+    ];
+
+    $stmt   = $pdo->prepare('SELECT id, permissions FROM roles WHERE id = ? LIMIT 1');
+    $update = $pdo->prepare('UPDATE roles SET permissions = :perms WHERE id = :id');
+
+    foreach ($matrix as $roleId => $defaults) {
+        $stmt->execute([$roleId]);
+        $row = $stmt->fetch();
+        if (!$row) continue;
+        $perms = is_string($row['permissions'])
+            ? (json_decode((string)$row['permissions'], true) ?: [])
+            : (array)$row['permissions'];
+        $changed = false;
+        foreach ($defaults as $k => $v) {
+            if (!array_key_exists($k, $perms)) {
+                $perms[$k] = $v;
+                $changed = true;
+            }
+        }
+        if ($changed) {
+            $update->execute([
+                ':perms' => json_encode($perms, JSON_UNESCAPED_UNICODE),
+                ':id'    => $roleId,
+            ]);
+        }
+    }
+}
+
 function run_auto_migrations(): void
 {
     try {
@@ -301,6 +501,31 @@ function run_auto_migrations(): void
     } catch (Throwable $e) {
         // Never break the request if a migration fails; surface in error_log so
         // ops can grep production logs instead of seeing a 500.
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_004_notifications_tables();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_005_notifications_default_perms();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_006_contact_messages_reply_fields();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_007_jobs_table();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_008_jobs_default_perms();
+    } catch (Throwable $e) {
         error_log('[migrations] ' . $e->getMessage());
     }
 }

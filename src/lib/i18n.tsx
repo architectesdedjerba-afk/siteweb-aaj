@@ -18,8 +18,17 @@ export const translations: Translations = {
   'nav.about': { fr: 'À Propos', ar: 'حول', en: 'About' },
   'nav.events': { fr: 'Évènements', ar: 'الأحداث', en: 'Events' },
   'nav.partners': { fr: 'Partenaires', ar: 'الشركاء', en: 'Partners' },
+  'nav.jobs': { fr: 'Emplois', ar: 'وظائف', en: 'Jobs' },
   'nav.members': { fr: 'Connexion', ar: 'تسجيل الدخول', en: 'Login' },
   'nav.legal': { fr: 'Mentions légales', ar: 'الإشعار القانوني', en: 'Legal Notice' },
+  'nav.notifications': { fr: 'Notifications', ar: 'الإشعارات', en: 'Notifications' },
+  'notifications.unread': { fr: 'non lues', ar: 'غير مقروءة', en: 'unread' },
+  'notifications.empty': { fr: 'Aucune notification', ar: 'لا توجد إشعارات', en: 'No notifications' },
+  'notifications.viewAll': {
+    fr: 'Tout voir dans l’espace adhérents',
+    ar: 'عرض الكل في فضاء الأعضاء',
+    en: 'View all in member space',
+  },
 
   'home.tagline': { fr: "Association des Architectes de Jerba", ar: 'جمعية مهندسي جربة المعماريين', en: 'Association of Architects of Jerba' },
   'home.hero.title1': { fr: "L'excellence", ar: 'التميز', en: 'Architectural' },

@@ -219,6 +219,35 @@ CREATE TABLE IF NOT EXISTS partner_applications (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -------------------------------------------------------------
+-- jobs — offres & demandes d'emploi/stage publiées par les
+-- adhérents (offres) ou via le formulaire public (demandes).
+-- `kind` : offer | request
+-- `source` : member | public
+-- `status` : pending | approved | rejected
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS jobs (
+  id            VARCHAR(64) NOT NULL,
+  kind          VARCHAR(16) NOT NULL DEFAULT 'offer',
+  contract_type VARCHAR(32) NULL,
+  title         VARCHAR(300) NOT NULL,
+  description   TEXT NOT NULL,
+  city          VARCHAR(100) NULL,
+  company       VARCHAR(200) NULL,
+  author_uid    VARCHAR(64) NULL,
+  author_name   VARCHAR(200) NULL,
+  author_role   VARCHAR(100) NULL,
+  author_email  VARCHAR(255) NULL,
+  author_phone  VARCHAR(50)  NULL,
+  source        VARCHAR(16)  NOT NULL DEFAULT 'member',
+  status        VARCHAR(16)  NOT NULL DEFAULT 'pending',
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_jobs_status (status),
+  KEY idx_jobs_kind (kind),
+  KEY idx_jobs_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -------------------------------------------------------------
 -- password_resets — short-lived tokens sent by email
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS password_resets (
@@ -495,6 +524,56 @@ CREATE TABLE IF NOT EXISTS unesco_permit_files (
   CONSTRAINT fk_unesco_pfiles_permit
     FOREIGN KEY (permit_id) REFERENCES unesco_permits(id)
     ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -------------------------------------------------------------
+-- notifications — in-app notifications. One row per recipient ;
+-- broadcasts fan out into N rows (one per target user) so unread
+-- counts and per-user read/archive markers stay simple.
+--
+-- `data` est une enveloppe JSON libre (ex : {applicationId, permitId,
+-- channelId, …}) que le frontend peut utiliser pour router vers la
+-- bonne vue. `link` est une URL relative servant de fallback simple.
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notifications (
+  id            VARCHAR(64)  NOT NULL,
+  recipient_uid VARCHAR(64)  NOT NULL,
+  type          VARCHAR(50)  NOT NULL DEFAULT 'system',
+  title         VARCHAR(300) NOT NULL,
+  body          TEXT NULL,
+  link          VARCHAR(500) NULL,
+  icon          VARCHAR(50)  NULL,
+  priority      VARCHAR(16)  NOT NULL DEFAULT 'normal',
+  data          JSON NULL,
+  sender_uid    VARCHAR(64)  NULL,
+  sender_name   VARCHAR(200) NULL,
+  read_at       DATETIME NULL,
+  archived_at   DATETIME NULL,
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_notifs_recipient_created (recipient_uid, created_at),
+  KEY idx_notifs_recipient_unread (recipient_uid, read_at),
+  KEY idx_notifs_recipient_archived (recipient_uid, archived_at),
+  KEY idx_notifs_type (type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -------------------------------------------------------------
+-- notification_preferences — per-user toggle pour chaque type de
+-- notification, avec un canal in_app + email. L'id est la clé
+-- composée "{uid}_{type}" (avec type='all' pour le réglage global)
+-- afin que le routeur générique de collections puisse l'adresser.
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  id          VARCHAR(160) NOT NULL,
+  uid         VARCHAR(64)  NOT NULL,
+  type        VARCHAR(50)  NOT NULL,
+  in_app      TINYINT(1)   NOT NULL DEFAULT 1,
+  email       TINYINT(1)   NOT NULL DEFAULT 0,
+  updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_notif_prefs_uid_type (uid, type),
+  KEY idx_notif_prefs_uid (uid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================
