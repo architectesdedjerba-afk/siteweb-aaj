@@ -141,6 +141,22 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // ---- contact_messages sub-actions ----
+  /**
+   * Send an email reply to a contact message and persist the reply on
+   * the row. Backend marks the message as replied and (if it was unread)
+   * flips status to "read". `emailSent: false` means the DB was updated
+   * but SMTP delivery failed — caller should warn the operator.
+   */
+  replyToContactMessage: (id: string, body: string) =>
+    http<{ item: any; emailSent: boolean }>(
+      `/collections/contact_messages/${encodeURIComponent(id)}/reply`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ body }),
+      },
+    ),
+
   // ---- files ----
   uploadFile: async (file: File, folder: string, access?: 'public' | 'members' | 'private') => {
     const fd = new FormData();

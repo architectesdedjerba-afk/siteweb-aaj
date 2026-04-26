@@ -377,6 +377,38 @@ function migration_005_notifications_default_perms(): void
     }
 }
 
+/**
+ * Migration 006 — extend contact_messages so admins can reply by email
+ * directly from the inbox UI. Adds a status flag, replied tracking
+ * fields, the stored reply body, and an optional user_name (some legacy
+ * rows only had user_email). All idempotent.
+ */
+function migration_006_contact_messages_reply_fields(): void
+{
+    $table = 'contact_messages';
+    if (!table_exists($table)) return;
+    $pdo = db();
+
+    if (!column_exists($table, 'user_name')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `user_name` VARCHAR(200) NULL AFTER `user_email`");
+    }
+    if (!column_exists($table, 'status')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `status` VARCHAR(16) NOT NULL DEFAULT 'unread' AFTER `message`");
+    }
+    if (!column_exists($table, 'replied')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `replied` TINYINT(1) NOT NULL DEFAULT 0 AFTER `status`");
+    }
+    if (!column_exists($table, 'replied_at')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `replied_at` DATETIME NULL AFTER `replied`");
+    }
+    if (!column_exists($table, 'replied_by')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `replied_by` VARCHAR(64) NULL AFTER `replied_at`");
+    }
+    if (!column_exists($table, 'reply_message')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `reply_message` TEXT NULL AFTER `replied_by`");
+    }
+}
+
 function run_auto_migrations(): void
 {
     try {
@@ -403,6 +435,11 @@ function run_auto_migrations(): void
     }
     try {
         migration_005_notifications_default_perms();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_006_contact_messages_reply_fields();
     } catch (Throwable $e) {
         error_log('[migrations] ' . $e->getMessage());
     }
