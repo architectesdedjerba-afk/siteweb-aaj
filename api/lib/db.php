@@ -44,8 +44,9 @@ function ensure_column(string $table, string $column, string $definition): void
             'archived_at' => 'DATETIME NULL',
         ],
         'commission_pvs' => [
-            'files' => 'JSON NULL',
-            'type'  => 'VARCHAR(100) NULL',
+            'files'       => 'JSON NULL',
+            'type'        => 'VARCHAR(100) NULL',
+            'archived_at' => 'DATETIME NULL',
         ],
     ];
     static $done = [];
