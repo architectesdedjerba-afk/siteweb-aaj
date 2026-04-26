@@ -120,11 +120,12 @@
   }
 
   /* UNESCO map: hybrid layer = satellite imagery + OSM labels.
-     `multiply` blending lets light OSM regions stay invisible (so the
-     satellite shows through unchanged) while dark labels and roads
-     darken the satellite where they overlap. Result: legible place
-     names without dimming the entire imagery — replaces the previous
-     45% opacity overlay which washed labels out.
+     `darken` blending compares each OSM pixel to the satellite and
+     keeps the darker one. The cream OSM background loses to the
+     satellite (so imagery shows through unchanged), while dark labels
+     and roads win and stay crisp on top — a clean labels-only effect
+     without dimming. `multiply` was too subtle over Djerba's light
+     sandy imagery; `darken` makes labels pop.
 
      The per-tile rule must out-specify Leaflet's built-in
      `.leaflet-container img.leaflet-tile { mix-blend-mode: plus-lighter }`
@@ -132,10 +133,10 @@
      `.leaflet-container` and `img.leaflet-tile` qualifiers, Leaflet's
      rule wins and every label disappears under the satellite. */
   .unesco-hybrid-osm {
-    mix-blend-mode: multiply;
+    mix-blend-mode: darken;
   }
   .leaflet-container .unesco-hybrid-osm img.leaflet-tile {
-    mix-blend-mode: multiply;
+    mix-blend-mode: darken;
   }
 
   /* UNESCO map: disambiguation popup shown when several overlapping
