@@ -1174,6 +1174,8 @@ function unesco_detect_zone(?float $lat, ?float $lng): ?string
 
 function unesco_permit_notify_reviewers(string $permitId): void
 {
+    if (!notification_event_enabled('unesco_permit_review_requested')) return;
+
     try {
         $stmt = db()->prepare('SELECT * FROM unesco_permits WHERE id = ?');
         $stmt->execute([$permitId]);
@@ -1186,19 +1188,31 @@ function unesco_permit_notify_reviewers(string $permitId): void
               WHERE status = 'active'
                 AND (role IN ('admin', 'super-admin') OR role = 'representative')"
         )->fetchAll();
-        if (!$reviewers) return;
 
         $title = (string)($permit['title'] ?? 'Nouvelle demande UNESCO');
-        $subject = "[AAJ – UNESCO] Nouvelle demande : $title";
-        $html = '<p>Une nouvelle demande de permis UNESCO vient d\'être déposée.</p>'
-            . '<p><strong>Titre :</strong> ' . htmlspecialchars($title) . '</p>'
-            . '<p>Connectez-vous à l\'espace adhérents pour l\'instruire.</p>';
-        foreach ($reviewers as $r) {
+        $vars = ['title' => $title, 'permitId' => $permitId];
+        $subject = notification_render('unesco_permit_review_requested', 'subject', $vars);
+        $html    = notification_render('unesco_permit_review_requested', 'html', $vars);
+
+        // Build the list of admin/super-admin emails from the DB, then add
+        // configured extra recipients (notification_admin_recipients dedupes).
+        $reviewerEmails = [];
+        foreach ($reviewers ?? [] as $r) {
             if (!$r['email']) continue;
-            // Restrict to admins + super-admins here; extending to per-user
-            // perm would require a JSON query against the roles table.
             if (!in_array($r['role'], ['admin', 'super-admin'], true)) continue;
-            @send_mail((string)$r['email'], (string)($r['display_name'] ?? ''), $subject, $html);
+            $reviewerEmails[] = (string)$r['email'];
+        }
+        $allRecipients = notification_admin_recipients('unesco_permit_review_requested', $reviewerEmails);
+        if (!$allRecipients) return;
+
+        // Build a name map so we can pass display_name when available
+        $nameByEmail = [];
+        foreach ($reviewers ?? [] as $r) {
+            $nameByEmail[strtolower((string)$r['email'])] = (string)($r['display_name'] ?? '');
+        }
+        foreach ($allRecipients as $email) {
+            $name = $nameByEmail[strtolower($email)] ?? '';
+            @send_mail($email, $name, $subject, $html);
         }
     } catch (Throwable $e) {
         error_log('[unesco] notify reviewers failed: ' . $e->getMessage());
@@ -1207,6 +1221,8 @@ function unesco_permit_notify_reviewers(string $permitId): void
 
 function unesco_permit_notify_applicant(string $permitId, string $toStatus, string $message): void
 {
+    if (!notification_event_enabled('unesco_permit_status_changed')) return;
+
     try {
         $stmt = db()->prepare(
             'SELECT p.*, u.email AS applicant_email, u.display_name AS applicant_name
@@ -1228,14 +1244,16 @@ function unesco_permit_notify_applicant(string $permitId, string $toStatus, stri
             'withdrawn' => 'Demande retirée',
         ];
         $label = $labels[$toStatus] ?? $toStatus;
-        $subject = "[AAJ – UNESCO] $label : " . (string)$row['title'];
-        $html = '<p>Bonjour,</p>'
-            . '<p>Le statut de votre demande "<strong>' . htmlspecialchars((string)$row['title']) . '</strong>" a évolué.</p>'
-            . '<p><strong>Nouveau statut :</strong> ' . htmlspecialchars($label) . '</p>';
-        if ($message !== '') {
-            $html .= '<p><strong>Commentaire :</strong><br>' . nl2br(htmlspecialchars($message)) . '</p>';
-        }
-        $html .= '<p>Connectez-vous à l\'espace adhérents pour consulter le détail.</p>';
+
+        $vars = [
+            'name'        => (string)($row['applicant_name'] ?? ''),
+            'title'       => (string)$row['title'],
+            'status'      => $toStatus,
+            'statusLabel' => $label,
+            'message'     => $message,
+        ];
+        $subject = notification_render('unesco_permit_status_changed', 'subject', $vars);
+        $html    = notification_render('unesco_permit_status_changed', 'html', $vars);
 
         @send_mail((string)$row['applicant_email'], (string)($row['applicant_name'] ?? ''), $subject, $html);
     } catch (Throwable $e) {

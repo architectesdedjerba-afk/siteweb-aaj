@@ -98,6 +98,7 @@ import {
 } from '../lib/memberConfig';
 import CommissionCalendar from '../components/CommissionCalendar';
 import { PasswordInput } from '../components/PasswordInput';
+import { NotificationSettingsPanel } from '../components/NotificationSettingsPanel';
 import { uploadFile, deleteFile } from '../lib/storage';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { ChannelApprovals } from '../components/chat/ChannelApprovals';
@@ -4200,6 +4201,9 @@ export const MemberSpacePage = () => {
                         )}
                       </div>
                     </section>
+
+                    {/* Mails de notifications */}
+                    <NotificationSettingsPanel />
 
                     {/* Member Types */}
                     <section className="border border-aaj-border rounded overflow-hidden">

@@ -268,7 +268,42 @@ export const api = {
     statusCounts: () =>
       http<{ counts: Record<string, number>; pendingReview: number }>('/unesco/status-counts'),
   },
+
+  // ---- notifications ----
+  notifications: {
+    schema: () =>
+      http<{
+        events: Array<{
+          id: string;
+          label: string;
+          kind: 'single' | 'dual';
+          vars: Array<{ key: string; desc: string }>;
+          defaults: NotificationEventConfigOnWire;
+        }>;
+        currentSettings: { events: Record<string, NotificationEventConfigOnWire> };
+      }>('/notifications/schema'),
+    test: (event: string, field: 'applicant' | 'admin' | 'single', to: string) =>
+      http<{ ok: boolean }>('/notifications/test', {
+        method: 'POST',
+        body: JSON.stringify({ event, field, to }),
+      }),
+  },
 };
+
+/**
+ * Wire-format event config — see `src/lib/notifications.ts` for the richer
+ * domain type. Kept structurally identical here to avoid a circular import.
+ */
+interface NotificationEventConfigOnWire {
+  enabled: boolean;
+  extraRecipients: string[];
+  subject?: string;
+  html?: string;
+  applicantSubject?: string;
+  applicantHtml?: string;
+  adminSubject?: string;
+  adminHtml?: string;
+}
 
 // ---- UNESCO types ----
 export interface UnescoGeoJsonSource {
