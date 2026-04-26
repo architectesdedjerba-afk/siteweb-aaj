@@ -245,6 +245,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   author_phone  VARCHAR(50)  NULL,
   source        VARCHAR(16)  NOT NULL DEFAULT 'member',
   status        VARCHAR(16)  NOT NULL DEFAULT 'pending',
+  cv_file_id    VARCHAR(64)  NULL,
+  cv_file_name  VARCHAR(255) NULL,
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_jobs_status (status),
