@@ -484,6 +484,21 @@ function migration_008_jobs_default_perms(): void
     }
 }
 
+/**
+ * Migration 009 — add `approval_date` to the documents (library) table so
+ * Plans d'Aménagement can carry the date the PAU was officially approved.
+ * Stored as VARCHAR(10) to match the YYYY-MM-DD value emitted by the
+ * <input type="date"> element on the frontend (no timezone shenanigans).
+ */
+function migration_009_documents_approval_date(): void
+{
+    $table = 'documents';
+    if (!table_exists($table)) return;
+    if (!column_exists($table, 'approval_date')) {
+        db()->exec("ALTER TABLE `$table` ADD COLUMN `approval_date` VARCHAR(10) NULL AFTER `sub_category`");
+    }
+}
+
 function run_auto_migrations(): void
 {
     try {
@@ -525,6 +540,11 @@ function run_auto_migrations(): void
     }
     try {
         migration_008_jobs_default_perms();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_009_documents_approval_date();
     } catch (Throwable $e) {
         error_log('[migrations] ' . $e->getMessage());
     }

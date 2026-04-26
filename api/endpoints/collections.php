@@ -446,17 +446,20 @@ function build_specs(): array
             'fileBase64' => $r['url'], // compat alias for legacy frontend code
             'category' => $r['category'],
             'subCategory' => $r['sub_category'],
+            // YYYY-MM-DD string (or null) — added by migration 009 for PAU docs.
+            'approvalDate' => $r['approval_date'] ?? null,
             'fileType' => $r['file_type'],
             'createdAt' => iso_datetime($r['created_at']),
         ],
         'toRow' => function (array $p) {
             $row = [];
-            if (array_key_exists('name', $p))        $row['name'] = $p['name'];
-            if (array_key_exists('url', $p))         $row['url'] = $p['url'];
-            if (array_key_exists('fileBase64', $p))  $row['url'] = $p['fileBase64'];
-            if (array_key_exists('category', $p))    $row['category'] = $p['category'];
-            if (array_key_exists('subCategory', $p)) $row['sub_category'] = $p['subCategory'];
-            if (array_key_exists('fileType', $p))    $row['file_type'] = $p['fileType'];
+            if (array_key_exists('name', $p))         $row['name'] = $p['name'];
+            if (array_key_exists('url', $p))          $row['url'] = $p['url'];
+            if (array_key_exists('fileBase64', $p))   $row['url'] = $p['fileBase64'];
+            if (array_key_exists('category', $p))     $row['category'] = $p['category'];
+            if (array_key_exists('subCategory', $p))  $row['sub_category'] = $p['subCategory'];
+            if (array_key_exists('approvalDate', $p)) $row['approval_date'] = $p['approvalDate'] !== '' ? $p['approvalDate'] : null;
+            if (array_key_exists('fileType', $p))     $row['file_type'] = $p['fileType'];
             return $row;
         },
         'canList' => fn(?array $u) => $u && $u['status'] === 'active',

@@ -129,13 +129,14 @@ CREATE TABLE IF NOT EXISTS contact_messages (
 -- documents (library)
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS documents (
-  id           VARCHAR(64) NOT NULL,
-  name         VARCHAR(300) NOT NULL,
-  url          TEXT NULL,
-  category     VARCHAR(100) NOT NULL DEFAULT '',
-  sub_category VARCHAR(100) NULL,
-  file_type    VARCHAR(50) NULL,
-  created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id            VARCHAR(64) NOT NULL,
+  name          VARCHAR(300) NOT NULL,
+  url           TEXT NULL,
+  category      VARCHAR(100) NOT NULL DEFAULT '',
+  sub_category  VARCHAR(100) NULL,
+  approval_date VARCHAR(10) NULL,
+  file_type     VARCHAR(50) NULL,
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_docs_category (category),
   KEY idx_docs_created_at (created_at)

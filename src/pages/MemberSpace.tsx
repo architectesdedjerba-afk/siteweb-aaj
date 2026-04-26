@@ -51,6 +51,7 @@ import {
   Briefcase,
   GraduationCap,
   Clock,
+  Calendar,
 } from 'lucide-react';
 import {
   // auth API
@@ -939,6 +940,7 @@ export const MemberSpacePage = () => {
     category: string;
     commune: string;
     arrondissement: string;
+    approvalDate: string;
     legalType: string;
     fileType: string;
     file: File | null;
@@ -949,6 +951,7 @@ export const MemberSpacePage = () => {
     category: "Plan d'Aménagement",
     commune: 'Houmt Souk',
     arrondissement: '',
+    approvalDate: '',
     legalType: 'Contrat',
     fileType: 'pdf',
     file: null,
@@ -1001,6 +1004,7 @@ export const MemberSpacePage = () => {
         docData.commune = newDoc.commune;
         docData.arrondissement = newDoc.arrondissement;
         docData.subCategory = `${newDoc.commune}${newDoc.arrondissement ? ' - ' + newDoc.arrondissement : ''}`;
+        if (newDoc.approvalDate) docData.approvalDate = newDoc.approvalDate;
       } else if (newDoc.category === 'Cadre Contractuel & Légal') {
         docData.subCategory = newDoc.legalType;
       }
@@ -1013,6 +1017,7 @@ export const MemberSpacePage = () => {
         category: "Plan d'Aménagement",
         commune: 'Houmt Souk',
         arrondissement: '',
+        approvalDate: '',
         legalType: 'Contrat',
         fileType: 'pdf',
         file: null,
@@ -3183,6 +3188,17 @@ export const MemberSpacePage = () => {
                                         {doc.subCategory}
                                       </span>
                                     )}
+                                    {doc.approvalDate && (
+                                      <span className="text-[9px] text-aaj-gray font-black uppercase tracking-widest mt-1 ml-6 flex items-center gap-1.5">
+                                        <Calendar size={9} className="text-aaj-royal/70 shrink-0" />
+                                        Approuvé le{' '}
+                                        {new Date(doc.approvalDate).toLocaleDateString('fr-FR', {
+                                          day: '2-digit',
+                                          month: '2-digit',
+                                          year: 'numeric',
+                                        })}
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="flex items-center gap-3 shrink-0">
                                     <span className="text-[9px] font-black text-aaj-gray uppercase border border-aaj-border px-2 py-1 rounded group-hover:bg-white transition-colors">
@@ -3422,6 +3438,20 @@ export const MemberSpacePage = () => {
                                 className="w-full bg-white border border-aaj-border rounded px-5 py-3.5 text-xs font-bold focus:ring-1 focus:ring-aaj-royal outline-none"
                               />
                             </div>
+                            <div className="space-y-3 md:col-span-2">
+                              <label className="text-[10px] uppercase font-black tracking-widest text-aaj-gray ml-1 flex items-center gap-2">
+                                <Calendar size={11} className="text-aaj-royal" />
+                                Date d&apos;approbation du PAU (Optionnel)
+                              </label>
+                              <input
+                                type="date"
+                                value={newDoc.approvalDate}
+                                onChange={(e) =>
+                                  setNewDoc({ ...newDoc, approvalDate: e.target.value })
+                                }
+                                className="w-full bg-white border border-aaj-border rounded px-5 py-3.5 text-xs font-bold focus:ring-1 focus:ring-aaj-royal outline-none"
+                              />
+                            </div>
                           </div>
                         ) : (
                           <div className="pt-4 border-t border-slate-200">
@@ -3479,13 +3509,23 @@ export const MemberSpacePage = () => {
                                 <h4 className="font-black uppercase tracking-tight leading-none mb-2">
                                   {doc.name}
                                 </h4>
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-3 flex-wrap">
                                   <span className="text-[9px] font-black uppercase tracking-widest text-aaj-royal bg-blue-50 px-2 py-0.5 rounded">
                                     {doc.category}
                                   </span>
                                   {doc.subCategory && (
                                     <span className="text-[9px] font-black uppercase tracking-widest text-aaj-gray">
                                       {doc.subCategory}
+                                    </span>
+                                  )}
+                                  {doc.approvalDate && (
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-aaj-royal/80 flex items-center gap-1">
+                                      <Calendar size={9} />
+                                      {new Date(doc.approvalDate).toLocaleDateString('fr-FR', {
+                                        day: '2-digit',
+                                        month: '2-digit',
+                                        year: 'numeric',
+                                      })}
                                     </span>
                                   )}
                                   <span className="text-[9px] font-black uppercase tracking-widest text-aaj-gray/50">
