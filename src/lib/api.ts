@@ -287,6 +287,24 @@ export const api = {
 
   // ---- notifications ----
   notifications: {
+    // Email template management
+    schema: () =>
+      http<{
+        events: Array<{
+          id: string;
+          label: string;
+          kind: 'single' | 'dual';
+          vars: Array<{ key: string; desc: string }>;
+          defaults: NotificationEventConfigOnWire;
+        }>;
+        currentSettings: { events: Record<string, NotificationEventConfigOnWire> };
+      }>('/notifications/schema'),
+    test: (event: string, field: 'applicant' | 'admin' | 'single', to: string) =>
+      http<{ ok: boolean }>('/notifications/test', {
+        method: 'POST',
+        body: JSON.stringify({ event, field, to }),
+      }),
+    // In-app notifications
     unreadCount: () =>
       http<{ unread: number; active: number; total: number }>('/notifications/unread-count'),
     broadcast: (payload: {
@@ -317,6 +335,21 @@ export const api = {
       http<{ ok: true; deleted: number }>('/notifications/clear-archived', { method: 'DELETE' }),
   },
 };
+
+/**
+ * Wire-format event config — see `src/lib/notifications.ts` for the richer
+ * domain type. Kept structurally identical here to avoid a circular import.
+ */
+interface NotificationEventConfigOnWire {
+  enabled: boolean;
+  extraRecipients: string[];
+  subject?: string;
+  html?: string;
+  applicantSubject?: string;
+  applicantHtml?: string;
+  adminSubject?: string;
+  adminHtml?: string;
+}
 
 // ---- UNESCO types ----
 export interface UnescoGeoJsonSource {

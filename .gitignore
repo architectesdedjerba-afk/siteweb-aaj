@@ -27,6 +27,9 @@ api/config.php
 api/uploads-storage/*
 !api/uploads-storage/.htaccess
 
+# Local dev / deploy helpers (contain hardcoded creds)
+scripts/deploy-ftp.mjs
+
 # Editor / OS
 .DS_Store
 Thumbs.db

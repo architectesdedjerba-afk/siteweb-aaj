@@ -2,31 +2,142 @@
 declare(strict_types=1);
 
 /**
- * Endpoints dédiés au système de notifications :
+ * /api/notifications — combined router for two distinct features that share
+ * the URL namespace:
  *
- *   POST  /api/notifications/broadcast     (admin) — fan-out à un scope
- *   POST  /api/notifications/mark-all-read         — marque tout comme lu
- *   POST  /api/notifications/archive-all-read      — archive le lu/non-archivé
- *   POST  /api/notifications/bulk                  — actions groupées par ids
- *   DELETE /api/notifications/clear-archived       — purge les archivées
- *   GET   /api/notifications/unread-count          — { unread: int, total: int }
+ *   IN-APP NOTIFICATIONS (origin/main feature):
+ *     POST   /api/notifications/broadcast          (admin) fan-out à un scope
+ *     POST   /api/notifications/mark-all-read              tout marquer lu
+ *     POST   /api/notifications/archive-all-read           archive le lu
+ *     POST   /api/notifications/bulk                       actions groupées
+ *     DELETE /api/notifications/clear-archived             purge archives
+ *     GET    /api/notifications/unread-count               { unread, total }
+ *     (le CRUD standard reste sur /api/collections/notifications)
  *
- * Le CRUD standard reste sur /api/collections/notifications.
+ *   EMAIL TEMPLATES (admin-editable):
+ *     GET    /api/notifications/schema             catalogue + valeurs courantes
+ *     POST   /api/notifications/test               envoie un mail de test
+ *     (les settings eux-mêmes vivent dans /api/collections/config/notifications)
  */
 
 function handle_notifications(string $method, array $rest): void
 {
     $action = $rest[0] ?? '';
 
-    if ($method === 'GET' && $action === 'unread-count') { notif_unread_count(); return; }
-    if ($method === 'POST' && $action === 'broadcast') { notif_broadcast(); return; }
-    if ($method === 'POST' && $action === 'mark-all-read') { notif_mark_all_read(); return; }
-    if ($method === 'POST' && $action === 'archive-all-read') { notif_archive_all_read(); return; }
-    if ($method === 'POST' && $action === 'bulk') { notif_bulk_action(); return; }
-    if ($method === 'DELETE' && $action === 'clear-archived') { notif_clear_archived(); return; }
+    // In-app notifications (origin/main)
+    if ($method === 'GET'    && $action === 'unread-count')      { notif_unread_count();       return; }
+    if ($method === 'POST'   && $action === 'broadcast')         { notif_broadcast();          return; }
+    if ($method === 'POST'   && $action === 'mark-all-read')     { notif_mark_all_read();      return; }
+    if ($method === 'POST'   && $action === 'archive-all-read')  { notif_archive_all_read();   return; }
+    if ($method === 'POST'   && $action === 'bulk')              { notif_bulk_action();        return; }
+    if ($method === 'DELETE' && $action === 'clear-archived')    { notif_clear_archived();     return; }
+
+    // Email template management
+    if ($method === 'GET'  && $action === 'schema') { notifications_schema();    return; }
+    if ($method === 'POST' && $action === 'test')   { notifications_send_test(); return; }
 
     json_error('not_found', 'Endpoint notifications inconnu.', 404);
 }
+
+/* ============================================================
+ * EMAIL TEMPLATES
+ * ============================================================ */
+
+/**
+ * Returns the full event catalogue (id, label, fields, vars) plus the
+ * baked-in defaults — the frontend uses this to render the editor and
+ * to power the "Restaurer les valeurs par défaut" button.
+ */
+function notifications_schema(): void
+{
+    $user = require_auth();
+    if (!is_super_admin($user) && !user_has_permission($user, 'config_manage')) {
+        json_error('forbidden', 'Accès refusé.', 403);
+    }
+
+    $events = [];
+    foreach (NOTIFICATION_DEFAULTS as $event => $defaults) {
+        $events[] = [
+            'id'      => $event,
+            'label'   => notifications_label($event),
+            'kind'    => in_array($event, NOTIFICATION_DUAL_EVENTS, true) ? 'dual' : 'single',
+            'vars'    => NOTIFICATION_VARS[$event] ?? [],
+            'defaults' => $defaults,
+        ];
+    }
+
+    json_response([
+        'events' => $events,
+        'currentSettings' => notification_settings(),
+    ]);
+}
+
+/**
+ * Friendly French label for the event id (used in the admin UI heading).
+ */
+function notifications_label(string $event): string
+{
+    static $labels = [
+        'membership_application' => "Demande d'adhésion",
+        'partner_application'    => 'Proposition de partenariat',
+        'password_reset'         => 'Réinitialisation du mot de passe',
+        'account_created'        => 'Compte créé (bienvenue)',
+        'unesco_permit_review_requested' => 'UNESCO — nouvelle demande à instruire',
+        'unesco_permit_status_changed'   => 'UNESCO — statut mis à jour',
+    ];
+    return $labels[$event] ?? $event;
+}
+
+/**
+ * Sends one rendered template (using sample vars from notification_sample_vars)
+ * to a single test address chosen by the caller.
+ *
+ * Body: { event: string, field: 'applicant'|'admin'|'single', to: email }
+ */
+function notifications_send_test(): void
+{
+    global $CONFIG;
+    $user = require_auth();
+    if (!is_super_admin($user) && !user_has_permission($user, 'config_manage')) {
+        json_error('forbidden', 'Accès refusé.', 403);
+    }
+
+    $body  = read_json_body();
+    $event = (string)($body['event'] ?? '');
+    $kind  = (string)($body['field'] ?? 'single'); // applicant | admin | single
+    $to    = strtolower(trim((string)($body['to'] ?? $user['email'] ?? '')));
+    if ($event === '' || !isset(NOTIFICATION_DEFAULTS[$event])) {
+        json_error('invalid_input', 'Événement inconnu.', 400);
+    }
+    if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        json_error('invalid_email', 'Email destinataire invalide.', 400);
+    }
+
+    [$subjectField, $htmlField] = match ($kind) {
+        'applicant' => ['applicantSubject', 'applicantHtml'],
+        'admin'     => ['adminSubject', 'adminHtml'],
+        default     => ['subject', 'html'],
+    };
+    if (!isset(NOTIFICATION_DEFAULTS[$event][$subjectField])) {
+        json_error('invalid_input', "Champ inconnu pour cet événement.", 400);
+    }
+
+    $siteUrl = (string)($CONFIG['site']['url'] ?? '');
+    $vars    = notification_sample_vars($event, $siteUrl);
+    $subject = '[TEST] ' . notification_render($event, $subjectField, $vars);
+    $html    = '<p style="background:#fffbe6;border:1px solid #fde68a;padding:10px;border-radius:6px;font-size:12px">'
+             . 'Email de test envoyé depuis l\'espace admin AAJ avec des données fictives.'
+             . '</p>'
+             . notification_render($event, $htmlField, $vars);
+
+    @set_time_limit(20);
+    $ok = (bool)@send_mail($to, (string)($user['display_name'] ?? ''), $subject, $html);
+    json_response(['ok' => $ok]);
+}
+
+/* ============================================================
+ * IN-APP NOTIFICATIONS
+ * ============================================================ */
 
 function notif_unread_count(): void
 {
@@ -77,7 +188,6 @@ function notif_broadcast(): void
         'senderName' => $u['displayName'] ?? null,
     ];
 
-    // Cibles : 'uids' explicite OU scope nommé.
     $uids = [];
     if (!empty($p['uids']) && is_array($p['uids'])) {
         $uids = array_values(array_filter(array_map('strval', $p['uids']), fn($x) => $x !== ''));
@@ -149,7 +259,6 @@ function notif_bulk_action(): void
     $ids = array_values(array_filter(array_map('strval', $ids), fn($x) => $x !== ''));
     if (empty($ids)) json_error('invalid_input', 'ids vides.', 400);
 
-    // Construire la liste de placeholders pour le WHERE IN.
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
     $now = gmdate('Y-m-d H:i:s');
     $sql = null;

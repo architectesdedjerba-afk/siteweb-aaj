@@ -152,52 +152,51 @@ function admin_notify_emails(): array
 
 function notify_membership_application(array $app): void
 {
-    global $CONFIG;
-    $siteUrl = rtrim((string)($CONFIG['site']['url'] ?? ''), '/');
-    $applicantEmail = (string)($app['email'] ?? '');
-    $firstName = htmlspecialchars((string)($app['firstName'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $lastName  = htmlspecialchars((string)($app['lastName'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $fullName  = trim($firstName . ' ' . $lastName) ?: htmlspecialchars((string)($app['fullName'] ?? $applicantEmail), ENT_QUOTES, 'UTF-8');
-    $category  = htmlspecialchars((string)($app['category'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $city      = htmlspecialchars((string)($app['city'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $phone     = htmlspecialchars((string)($app['phone'] ?? ''), ENT_QUOTES, 'UTF-8');
+    if (!notification_event_enabled('membership_application')) return;
 
-    // Ack to the applicant
+    global $CONFIG;
+    $siteUrl  = rtrim((string)($CONFIG['site']['url'] ?? ''), '/');
+    $adminUrl = $siteUrl ? ($siteUrl . '/espace-adherents') : '';
+    $adminLink = $adminUrl
+        ? '<a href="' . htmlspecialchars($adminUrl, ENT_QUOTES, 'UTF-8') . "\">Traiter la demande dans l'espace adhérents</a>"
+        : '';
+
+    $applicantEmail = (string)($app['email'] ?? '');
+    $firstName = (string)($app['firstName'] ?? '');
+    $lastName  = (string)($app['lastName'] ?? '');
+    $fullName  = trim($firstName . ' ' . $lastName) ?: ((string)($app['fullName'] ?? $applicantEmail));
+
+    $vars = [
+        'fullName'  => $fullName,
+        'firstName' => $firstName,
+        'lastName'  => $lastName,
+        'email'     => $applicantEmail,
+        'phone'     => (string)($app['phone'] ?? ''),
+        'category'  => (string)($app['category'] ?? ''),
+        'city'      => (string)($app['city'] ?? ''),
+        'adminLink' => $adminLink,
+    ];
+
     if ($applicantEmail !== '') {
-        $html = "<p>Bonjour $fullName,</p>"
-              . "<p>Nous avons bien reçu votre demande d'adhésion à l'Association des "
-              . "Architectes de Jerba. Elle est maintenant en cours d'examen par le "
-              . "bureau exécutif — vous recevrez une réponse prochainement.</p>"
-              . "<p style='color:#555;font-size:13px'>Récapitulatif :<br>"
-              . "Nom : $fullName<br>"
-              . "Catégorie : $category<br>"
-              . "Ville : $city</p>"
-              . "<p>— L'équipe AAJ</p>";
-        send_mail($applicantEmail, trim($firstName . ' ' . $lastName), "Votre demande d'adhésion à l'AAJ", $html);
+        $subject = notification_render('membership_application', 'applicantSubject', $vars);
+        $html    = notification_render('membership_application', 'applicantHtml', $vars);
+        send_mail($applicantEmail, $fullName, $subject, $html);
     }
 
-    // Notification to admins
-    $adminUrl = $siteUrl ? ($siteUrl . '/espace-adherents') : '';
-    $htmlAdmin = "<p>Une nouvelle demande d'adhésion vient d'être soumise :</p>"
-               . "<ul>"
-               . "<li><strong>Nom :</strong> $fullName</li>"
-               . "<li><strong>Email :</strong> " . htmlspecialchars($applicantEmail, ENT_QUOTES, 'UTF-8') . "</li>"
-               . "<li><strong>Téléphone :</strong> $phone</li>"
-               . "<li><strong>Catégorie :</strong> $category</li>"
-               . "<li><strong>Ville :</strong> $city</li>"
-               . "</ul>"
-               . ($adminUrl ? "<p><a href=\"$adminUrl\">Traiter la demande dans l'espace adhérents</a></p>" : '');
-    foreach (admin_notify_emails() as $adminEmail) {
-        send_mail($adminEmail, '', "Nouvelle demande d'adhésion AAJ : $fullName", $htmlAdmin);
+    $adminSubject = notification_render('membership_application', 'adminSubject', $vars);
+    $adminHtml    = notification_render('membership_application', 'adminHtml', $vars);
+    foreach (notification_admin_recipients('membership_application') as $adminEmail) {
+        send_mail($adminEmail, '', $adminSubject, $adminHtml);
     }
 
     // Notification in-app à tous les admins/super-admins.
     $rawName = trim((string)($app['firstName'] ?? '') . ' ' . (string)($app['lastName'] ?? ''))
              ?: (string)($app['fullName'] ?? $applicantEmail);
+    $rawCategory = (string)($app['category'] ?? '');
     push_notifications_to_users(admin_recipient_uids(), [
         'type'     => 'membership_application',
         'title'    => 'Nouvelle demande d\'adhésion',
-        'body'     => $rawName . ($category !== '' ? ' — ' . html_entity_decode($category, ENT_QUOTES, 'UTF-8') : ''),
+        'body'     => $rawName . ($rawCategory !== '' ? ' — ' . $rawCategory : ''),
         'link'     => '/espace-adherents',
         'icon'     => 'user-plus',
         'priority' => 'high',
@@ -207,40 +206,39 @@ function notify_membership_application(array $app): void
 
 function notify_partner_application(array $app): void
 {
-    global $CONFIG;
-    $siteUrl = rtrim((string)($CONFIG['site']['url'] ?? ''), '/');
-    $contactEmail = (string)($app['email'] ?? '');
-    $contactName  = htmlspecialchars((string)($app['contactName'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $company      = htmlspecialchars((string)($app['companyName'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $activity     = htmlspecialchars((string)($app['activity'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $sponsorship  = htmlspecialchars((string)($app['sponsorshipType'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $phone        = htmlspecialchars((string)($app['phone'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $message      = htmlspecialchars((string)($app['message'] ?? ''), ENT_QUOTES, 'UTF-8');
+    if (!notification_event_enabled('partner_application')) return;
 
-    // Ack to the applicant
+    global $CONFIG;
+    $siteUrl  = rtrim((string)($CONFIG['site']['url'] ?? ''), '/');
+    $adminUrl = $siteUrl ? ($siteUrl . '/espace-adherents') : '';
+    $adminLink = $adminUrl
+        ? '<a href="' . htmlspecialchars($adminUrl, ENT_QUOTES, 'UTF-8') . "\">Voir dans l'espace adhérents</a>"
+        : '';
+
+    $contactEmail = (string)($app['email'] ?? '');
+    $contactName  = (string)($app['contactName'] ?? '');
+
+    $vars = [
+        'contactName'     => $contactName,
+        'company'         => (string)($app['companyName'] ?? ''),
+        'email'           => $contactEmail,
+        'phone'           => (string)($app['phone'] ?? ''),
+        'activity'        => (string)($app['activity'] ?? ''),
+        'sponsorshipType' => (string)($app['sponsorshipType'] ?? ''),
+        'message'         => (string)($app['message'] ?? ''),
+        'adminLink'       => $adminLink,
+    ];
+
     if ($contactEmail !== '') {
-        $html = "<p>Bonjour $contactName,</p>"
-              . "<p>Nous avons bien reçu votre proposition de partenariat pour $company. "
-              . "Notre équipe vous contactera prochainement pour discuter des prochaines "
-              . "étapes.</p>"
-              . "<p>— L'équipe AAJ</p>";
-        send_mail($contactEmail, $contactName, 'Votre proposition de partenariat AAJ', $html);
+        $subject = notification_render('partner_application', 'applicantSubject', $vars);
+        $html    = notification_render('partner_application', 'applicantHtml', $vars);
+        send_mail($contactEmail, $contactName, $subject, $html);
     }
 
-    $adminUrl = $siteUrl ? ($siteUrl . '/espace-adherents') : '';
-    $htmlAdmin = "<p>Nouvelle proposition de partenariat :</p>"
-               . "<ul>"
-               . "<li><strong>Contact :</strong> $contactName</li>"
-               . "<li><strong>Email :</strong> " . htmlspecialchars($contactEmail, ENT_QUOTES, 'UTF-8') . "</li>"
-               . "<li><strong>Téléphone :</strong> $phone</li>"
-               . "<li><strong>Société :</strong> $company</li>"
-               . "<li><strong>Activité :</strong> $activity</li>"
-               . "<li><strong>Type de sponsoring :</strong> $sponsorship</li>"
-               . "</ul>"
-               . ($message !== '' ? "<p><strong>Message :</strong><br>" . nl2br($message) . "</p>" : '')
-               . ($adminUrl ? "<p><a href=\"$adminUrl\">Voir dans l'espace adhérents</a></p>" : '');
-    foreach (admin_notify_emails() as $adminEmail) {
-        send_mail($adminEmail, '', 'Nouvelle proposition de partenariat AAJ', $htmlAdmin);
+    $adminSubject = notification_render('partner_application', 'adminSubject', $vars);
+    $adminHtml    = notification_render('partner_application', 'adminHtml', $vars);
+    foreach (notification_admin_recipients('partner_application') as $adminEmail) {
+        send_mail($adminEmail, '', $adminSubject, $adminHtml);
     }
 
     $rawCompany = (string)($app['companyName'] ?? '');

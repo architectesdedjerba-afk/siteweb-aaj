@@ -108,6 +108,7 @@ import {
 import CommissionCalendar from '../components/CommissionCalendar';
 import { NewsPostCard } from '../components/NewsPostCard';
 import { PasswordInput } from '../components/PasswordInput';
+import { NotificationSettingsPanel } from '../components/NotificationSettingsPanel';
 import { DocumentThumbnail } from '../components/DocumentThumbnail';
 import { uploadFile, deleteFile } from '../lib/storage';
 import { SearchableSelect } from '../components/SearchableSelect';
@@ -4755,6 +4756,9 @@ export const MemberSpacePage = () => {
                         )}
                       </div>
                     </section>
+
+                    {/* Mails de notifications */}
+                    <NotificationSettingsPanel />
 
                     {/* Member Types */}
                     <section className="border border-aaj-border rounded overflow-hidden">

@@ -103,11 +103,16 @@ function auth_reset_request(): void
              . ($CONFIG['site']['reset_path'] ?? '/reset-password')
              . '?oobCode=' . urlencode($token);
 
-        $html = "<p>Bonjour,</p>"
-              . "<p>Vous avez demandé la réinitialisation de votre mot de passe pour l'espace adhérents des Architectes de Jerba.</p>"
-              . "<p><a href=\"$url\">Réinitialiser mon mot de passe</a></p>"
-              . "<p>Ce lien expire dans 1 heure. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.</p>";
-        send_mail($user['email'], $user['display_name'] ?? '', 'Réinitialisation de votre mot de passe', $html);
+        if (notification_event_enabled('password_reset')) {
+            $vars = [
+                'name'     => (string)($user['display_name'] ?? ''),
+                'email'    => (string)$user['email'],
+                'resetUrl' => $url,
+            ];
+            $subject = notification_render('password_reset', 'subject', $vars);
+            $html    = notification_render('password_reset', 'html', $vars);
+            send_mail($user['email'], $user['display_name'] ?? '', $subject, $html);
+        }
     }
 
     json_response(['ok' => true]);
@@ -178,26 +183,21 @@ function generate_temp_password(int $length = 12): string
 
 function send_welcome_email(string $toEmail, string $toName, string $tempPassword): bool
 {
+    if (!notification_event_enabled('account_created')) return true;
+
     global $CONFIG;
     $loginUrl = rtrim((string)$CONFIG['site']['url'], '/') . '/espace-adherents';
-    $safePwd   = htmlspecialchars($tempPassword, ENT_QUOTES, 'UTF-8');
-    $safeEmail = htmlspecialchars($toEmail, ENT_QUOTES, 'UTF-8');
-    $safeName  = htmlspecialchars($toName !== '' ? $toName : $toEmail, ENT_QUOTES, 'UTF-8');
-    $safeUrl   = htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8');
 
-    $html = "<p>Bonjour $safeName,</p>"
-          . "<p>Un compte vient d'être créé pour vous sur l'espace adhérents "
-          . "des Architectes de Jerba.</p>"
-          . "<p><strong>Vos identifiants de connexion :</strong></p>"
-          . "<ul>"
-          . "<li>Email : <code>$safeEmail</code></li>"
-          . "<li>Mot de passe temporaire : <code>$safePwd</code></li>"
-          . "</ul>"
-          . "<p><a href=\"$safeUrl\">Accéder à l'espace adhérents</a></p>"
-          . "<p>Pour des raisons de sécurité, vous serez invité à choisir un "
-          . "nouveau mot de passe lors de votre première connexion.</p>";
+    $vars = [
+        'name'         => $toName !== '' ? $toName : $toEmail,
+        'email'        => $toEmail,
+        'tempPassword' => $tempPassword,
+        'loginUrl'     => $loginUrl,
+    ];
+    $subject = notification_render('account_created', 'subject', $vars);
+    $html    = notification_render('account_created', 'html', $vars);
 
-    return send_mail($toEmail, $toName, "Votre compte sur l'espace adhérents AAJ", $html);
+    return send_mail($toEmail, $toName, $subject, $html);
 }
 
 /**
