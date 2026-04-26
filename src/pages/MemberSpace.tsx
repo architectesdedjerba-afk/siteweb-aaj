@@ -322,7 +322,8 @@ export const MemberSpacePage = () => {
   const newsFileInputRef = useRef<HTMLInputElement>(null);
   const pvFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [newNews, setNewNews] = useState({ title: '', content: '', fileBase64: '', fileName: '' });
+  const [newNews, setNewNews] = useState({ title: '', content: '', fileUrl: '', fileName: '' });
+  const [newsUploading, setNewsUploading] = useState(false);
   type PVFile = { id: string; url: string; name: string; type: string };
   const [newPV, setNewPV] = useState<{
     town: string;
@@ -952,13 +953,17 @@ export const MemberSpacePage = () => {
 
   const handleNewsFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      try {
-        const base64 = await fileToBase64(file);
-        setNewNews({ ...newNews, fileBase64: base64, fileName: file.name });
-      } catch (err) {
-        console.error('Error converting file:', err);
-      }
+    if (!file) return;
+    setNewsUploading(true);
+    try {
+      const res = await apiClient.uploadFile(file, 'news', 'members');
+      setNewNews({ ...newNews, fileUrl: res.url, fileName: res.name });
+    } catch (err: any) {
+      console.error('Error uploading news file:', err);
+      alert(err?.message || "Erreur lors de l'upload du fichier.");
+    } finally {
+      setNewsUploading(false);
+      if (newsFileInputRef.current) newsFileInputRef.current.value = '';
     }
   };
 
@@ -972,7 +977,7 @@ export const MemberSpacePage = () => {
         createdAt: serverTimestamp(),
         authorEmail: user?.email,
       });
-      setNewNews({ title: '', content: '', fileBase64: '', fileName: '' });
+      setNewNews({ title: '', content: '', fileUrl: '', fileName: '' });
       if (newsFileInputRef.current) newsFileInputRef.current.value = '';
       alert('Annonce publiée !');
     } catch (err) {
@@ -2312,9 +2317,9 @@ export const MemberSpacePage = () => {
                                       year: 'numeric',
                                     }) || 'Récemment'}
                                   </span>
-                                  {item.fileBase64 && (
+                                  {(item.fileUrl || item.fileBase64) && (
                                     <a
-                                      href={item.fileBase64}
+                                      href={item.fileUrl || item.fileBase64}
                                       download={item.fileName || 'Annonce_AAJ.pdf'}
                                       onClick={(e) => e.stopPropagation()}
                                       className="text-[8px] font-black uppercase tracking-widest bg-slate-100 px-2 py-0.5 rounded text-aaj-gray hover:bg-aaj-royal hover:text-white transition-all flex items-center gap-1"
@@ -5281,21 +5286,28 @@ export const MemberSpacePage = () => {
                           <button
                             type="button"
                             onClick={() => newsFileInputRef.current?.click()}
-                            className="flex-1 bg-slate-50 border border-dashed border-aaj-border hover:border-aaj-royal hover:bg-white px-5 py-3.5 rounded text-left flex items-center justify-between group transition-all"
+                            disabled={newsUploading}
+                            className="flex-1 bg-slate-50 border border-dashed border-aaj-border hover:border-aaj-royal hover:bg-white px-5 py-3.5 rounded text-left flex items-center justify-between group transition-all disabled:opacity-60"
                           >
                             <span className="text-[10px] font-bold uppercase tracking-widest text-aaj-gray group-hover:text-aaj-royal truncate">
-                              {newNews.fileName || 'Uploader une image, un PDF...'}
+                              {newsUploading
+                                ? 'Envoi en cours...'
+                                : newNews.fileName || 'Uploader une image, un PDF...'}
                             </span>
-                            <Upload
-                              size={14}
-                              className="text-aaj-gray group-hover:text-aaj-royal shrink-0"
-                            />
+                            {newsUploading ? (
+                              <Loader2 size={14} className="animate-spin text-aaj-gray shrink-0" />
+                            ) : (
+                              <Upload
+                                size={14}
+                                className="text-aaj-gray group-hover:text-aaj-royal shrink-0"
+                              />
+                            )}
                           </button>
-                          {newNews.fileBase64 && (
+                          {newNews.fileUrl && (
                             <button
                               type="button"
                               onClick={() =>
-                                setNewNews({ ...newNews, fileBase64: '', fileName: '' })
+                                setNewNews({ ...newNews, fileUrl: '', fileName: '' })
                               }
                               className="bg-red-50 text-red-500 px-4 rounded hover:bg-red-100 transition-colors"
                             >
@@ -5307,8 +5319,8 @@ export const MemberSpacePage = () => {
 
                       <button
                         type="submit"
-                        disabled={isSaving}
-                        className="w-full bg-aaj-dark text-white px-12 py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all flex items-center justify-center gap-2"
+                        disabled={isSaving || newsUploading}
+                        className="w-full bg-aaj-dark text-white px-12 py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                       >
                         {isSaving ? (
                           <Loader2 size={14} className="animate-spin" />
@@ -5338,7 +5350,7 @@ export const MemberSpacePage = () => {
                               </p>
                             </div>
                             <div className="flex gap-2">
-                              {item.fileBase64 && <FileText size={16} className="text-aaj-gray" />}
+                              {(item.fileUrl || item.fileBase64) && <FileText size={16} className="text-aaj-gray" />}
                               <button
                                 onClick={async () => {
                                   if (window.confirm('Supprimer cette annonce ?')) {
@@ -6111,7 +6123,7 @@ export const MemberSpacePage = () => {
                   <div className="text-sm text-aaj-dark leading-relaxed font-medium whitespace-pre-wrap mb-8">
                     {selectedNews.content}
                   </div>
-                  {selectedNews.fileBase64 && (
+                  {(selectedNews.fileUrl || selectedNews.fileBase64) && (
                     <div className="bg-slate-50 p-6 border border-aaj-border rounded flex justify-between items-center">
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 bg-white border border-aaj-border rounded flex items-center justify-center text-aaj-royal">
@@ -6127,7 +6139,7 @@ export const MemberSpacePage = () => {
                         </div>
                       </div>
                       <a
-                        href={selectedNews.fileBase64}
+                        href={selectedNews.fileUrl || selectedNews.fileBase64}
                         download={selectedNews.fileName}
                         className="bg-aaj-dark text-white px-6 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all"
                       >
