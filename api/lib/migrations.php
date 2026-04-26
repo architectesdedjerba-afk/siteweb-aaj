@@ -499,6 +499,32 @@ function migration_009_documents_approval_date(): void
     }
 }
 
+/**
+ * Migration 010 — extend the `news` table so an annonce can carry the
+ * uploaded file's mime type (needed to decide inline image preview vs.
+ * download tile) and the author identity (avatar + display name shown
+ * in the Facebook-style card). All idempotent.
+ */
+function migration_010_news_attachment_and_author_fields(): void
+{
+    $table = 'news';
+    if (!table_exists($table)) return;
+    $pdo = db();
+
+    if (!column_exists($table, 'file_mime_type')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `file_mime_type` VARCHAR(100) NULL AFTER `file_name`");
+    }
+    if (!column_exists($table, 'author_email')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `author_email` VARCHAR(200) NULL AFTER `file_mime_type`");
+    }
+    if (!column_exists($table, 'author_display_name')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `author_display_name` VARCHAR(200) NULL AFTER `author_email`");
+    }
+    if (!column_exists($table, 'author_photo_base64')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `author_photo_base64` LONGTEXT NULL AFTER `author_display_name`");
+    }
+}
+
 function run_auto_migrations(): void
 {
     try {
@@ -545,6 +571,11 @@ function run_auto_migrations(): void
     }
     try {
         migration_009_documents_approval_date();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_010_news_attachment_and_author_fields();
     } catch (Throwable $e) {
         error_log('[migrations] ' . $e->getMessage());
     }
