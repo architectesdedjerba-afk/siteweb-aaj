@@ -109,20 +109,29 @@ export function UnescoMap({
       scrollWheelZoom: true,
     });
 
+    // Each base-layer entry below uses its OWN tile-layer instance — even
+    // though Hybride re-uses the same Esri imagery and OSM URLs. Sharing
+    // a single `imagery` instance between the Hybride layer-group and the
+    // Satellite option confused Leaflet's L.Control.Layers: because
+    // `hybrid.addTo(map)` registers the inner imagery layer on the map
+    // directly, `map.hasLayer(imagery)` was true even in Hybride mode,
+    // and any later `layeradd` event (e.g. dropping the pin marker)
+    // triggered a control `_update()` that flipped the radio back to
+    // Hybride. Distinct instances keep the radio state unambiguous.
+    const ESRI_IMAGERY_URL =
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+    const ESRI_ATTRIBUTION =
+      'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
+    const OSM_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+    const OSM_ATTRIBUTION = '&copy; OpenStreetMap contributors';
+
     // Plan (OSM)
-    const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const osm = L.tileLayer(OSM_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION });
+    // Satellite (standalone Esri World Imagery)
+    const imagery = L.tileLayer(ESRI_IMAGERY_URL, {
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors',
+      attribution: ESRI_ATTRIBUTION,
     });
-    // Satellite imagery (Esri World Imagery)
-    const imagery = L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      {
-        maxZoom: 19,
-        attribution:
-          'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-      }
-    );
     // Hybrid overlay — we tried Esri's `World_Boundaries_and_Places` and
     // CartoDB's `voyager_only_labels` and found both essentially empty
     // over Djerba at the zoom levels members actually use (the label
@@ -133,12 +142,16 @@ export function UnescoMap({
     // `unesco-hybrid-osm` in index.css). Multiply keeps the satellite
     // intact under light OSM regions and darkens it under labels/roads,
     // so place names remain crisp without dimming the imagery.
-    const hybridOsm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const hybridImagery = L.tileLayer(ESRI_IMAGERY_URL, {
+      maxZoom: 19,
+      attribution: ESRI_ATTRIBUTION,
+    });
+    const hybridOsm = L.tileLayer(OSM_URL, {
       maxZoom: 19,
       className: 'unesco-hybrid-osm',
-      attribution: '&copy; OpenStreetMap contributors',
+      attribution: OSM_ATTRIBUTION,
     });
-    const hybrid = L.layerGroup([imagery, hybridOsm]);
+    const hybrid = L.layerGroup([hybridImagery, hybridOsm]);
 
     // Default = Hybride (satellite + labels), matching the Google-Maps
     // satellite experience. Users can switch to plain satellite or OSM.
