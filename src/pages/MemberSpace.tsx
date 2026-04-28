@@ -91,7 +91,9 @@ import {
 } from '../lib/permissions';
 import {
   COMMISSION_COLORS_DOC_PATH,
+  COMMISSION_TYPES_DOC_PATH,
   DEFAULT_COMMISSION_COLORS,
+  DEFAULT_COMMISSION_TYPES,
   DEFAULT_MEMBER_TYPES,
   DEFAULT_NEWS_CATEGORIES,
   DEFAULT_VILLES,
@@ -103,6 +105,7 @@ import {
   computeNextIndex,
   newsCategoryStyle,
   saveCommissionColors,
+  saveCommissionTypes,
   saveMemberTypes,
   saveNewsCategories,
   saveVilles,
@@ -280,6 +283,9 @@ export const MemberSpacePage = () => {
     () => ({ ...DEFAULT_COMMISSION_COLORS })
   );
   const [colorDrafts, setColorDrafts] = useState<Record<string, string>>({});
+  const [commissionTypesList, setCommissionTypesList] =
+    useState<string[]>(DEFAULT_COMMISSION_TYPES);
+  const [newCommissionTypeInput, setNewCommissionTypeInput] = useState('');
   const [configSaving, setConfigSaving] = useState(false);
   const [newVilleInput, setNewVilleInput] = useState('');
   const [newTypeInput, setNewTypeInput] = useState({ letter: '', label: '' });
@@ -516,6 +522,26 @@ export const MemberSpacePage = () => {
       }
     );
 
+    const unsubCommissionTypes = onSnapshot(
+      doc(db, COMMISSION_TYPES_DOC_PATH.col, COMMISSION_TYPES_DOC_PATH.id),
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as { list?: string[] };
+          if (Array.isArray(data.list) && data.list.length > 0) {
+            setCommissionTypesList(
+              data.list.filter((t) => typeof t === 'string' && t.trim().length > 0)
+            );
+            return;
+          }
+        }
+        setCommissionTypesList([...DEFAULT_COMMISSION_TYPES]);
+      },
+      (err) => {
+        console.warn('Commission types config read blocked, using defaults.', err);
+        setCommissionTypesList([...DEFAULT_COMMISSION_TYPES]);
+      }
+    );
+
     const unsubNewsCategories = onSnapshot(
       doc(db, NEWS_CATEGORIES_DOC_PATH.col, NEWS_CATEGORIES_DOC_PATH.id),
       async (snap) => {
@@ -613,6 +639,7 @@ export const MemberSpacePage = () => {
       unsubVilles();
       unsubTypes();
       unsubColors();
+      unsubCommissionTypes();
       unsubNewsCategories();
       unsubscribeNews();
       unsubscribePVs();
@@ -1185,6 +1212,68 @@ export const MemberSpacePage = () => {
       setConfigMessage({ type: 'success', text: 'Catégories réinitialisées.' });
     } catch (err) {
       console.error('Error resetting news categories:', err);
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, 'Erreur lors de la réinitialisation.'),
+      });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleAddCommissionType = async (raw: string) => {
+    const t = raw.trim();
+    if (!t) return;
+    if (commissionTypesList.some((x) => x.toLowerCase() === t.toLowerCase())) {
+      setConfigMessage({ type: 'error', text: 'Ce type de commission existe déjà.' });
+      return;
+    }
+    const next = [...commissionTypesList, t];
+    setConfigSaving(true);
+    try {
+      await saveCommissionTypes(next);
+      setCommissionTypesList(next);
+      setNewCommissionTypeInput('');
+      setConfigMessage({ type: 'success', text: `Type "${t}" ajouté.` });
+    } catch (err) {
+      console.error('Error saving commission type:', err);
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, "Erreur lors de l'enregistrement du type."),
+      });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleRemoveCommissionType = async (t: string) => {
+    if (!window.confirm(`Supprimer le type de commission "${t}" ?`)) return;
+    const next = commissionTypesList.filter((x) => x !== t);
+    setConfigSaving(true);
+    try {
+      await saveCommissionTypes(next);
+      setCommissionTypesList(next);
+      setConfigMessage({ type: 'success', text: `Type "${t}" supprimé.` });
+    } catch (err) {
+      console.error('Error removing commission type:', err);
+      setConfigMessage({
+        type: 'error',
+        text: describeFirestoreError(err, 'Erreur lors de la suppression.'),
+      });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleResetCommissionTypes = async () => {
+    if (!window.confirm('Réinitialiser les types de commissions aux valeurs par défaut ?')) return;
+    setConfigSaving(true);
+    try {
+      await saveCommissionTypes(DEFAULT_COMMISSION_TYPES);
+      setCommissionTypesList([...DEFAULT_COMMISSION_TYPES]);
+      setConfigMessage({ type: 'success', text: 'Types de commissions réinitialisés.' });
+    } catch (err) {
+      console.error('Error resetting commission types:', err);
       setConfigMessage({
         type: 'error',
         text: describeFirestoreError(err, 'Erreur lors de la réinitialisation.'),
@@ -3214,10 +3303,9 @@ export const MemberSpacePage = () => {
                                       className="w-full bg-white border border-aaj-border rounded px-3 py-2 text-xs"
                                     />
                                     <datalist id="commission-types-edit">
-                                      <option value="Ordinaire" />
-                                      <option value="Extraordinaire" />
-                                      <option value="Consultative" />
-                                      <option value="Spéciale" />
+                                      {commissionTypesList.map((t) => (
+                                        <option key={t} value={t} />
+                                      ))}
                                     </datalist>
                                   </div>
                                   <div className="sm:col-span-3 flex items-center justify-end gap-2 pt-2">
@@ -5346,6 +5434,74 @@ export const MemberSpacePage = () => {
                       </div>
                     </section>
 
+                    {/* Types de commissions */}
+                    <section className="border border-aaj-border rounded overflow-hidden">
+                      <div className="p-5 bg-slate-50 border-b border-aaj-border flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-black uppercase tracking-widest text-aaj-dark">
+                            Types de commissions
+                          </h3>
+                          <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-wider mt-1">
+                            {commissionTypesList.length} type
+                            {commissionTypesList.length > 1 ? 's' : ''} disponible
+                            {commissionTypesList.length > 1 ? 's' : ''} pour les avis de commissions
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleResetCommissionTypes}
+                          disabled={configSaving}
+                          className="text-[10px] font-black uppercase tracking-widest text-aaj-gray hover:text-aaj-dark border border-aaj-border px-4 py-2 rounded"
+                        >
+                          Réinitialiser
+                        </button>
+                      </div>
+                      <div className="p-5 bg-slate-50 border-b border-aaj-border flex gap-3">
+                        <input
+                          type="text"
+                          value={newCommissionTypeInput}
+                          onChange={(e) => setNewCommissionTypeInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddCommissionType(newCommissionTypeInput);
+                            }
+                          }}
+                          placeholder="Ajouter un type (ex: Ordinaire)"
+                          className="flex-1 bg-white border border-aaj-border rounded px-3 py-2 text-xs font-bold"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleAddCommissionType(newCommissionTypeInput)}
+                          disabled={configSaving}
+                          className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center justify-center gap-2"
+                        >
+                          <Plus size={12} /> Ajouter
+                        </button>
+                      </div>
+                      <div className="max-h-96 overflow-y-auto custom-scrollbar divide-y divide-aaj-border">
+                        {commissionTypesList.map((t) => (
+                          <div key={t} className="flex items-center justify-between px-5 py-2.5">
+                            <span className="text-xs font-bold text-aaj-dark">{t}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCommissionType(t)}
+                              disabled={configSaving}
+                              className="text-red-500 hover:text-red-700 transition-colors"
+                              title="Supprimer"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        ))}
+                        {commissionTypesList.length === 0 && (
+                          <div className="px-5 py-4 text-[11px] text-aaj-gray italic">
+                            Aucun type configuré.
+                          </div>
+                        )}
+                      </div>
+                    </section>
+
                     {/* Couleurs des commissions */}
                     <section className="border border-aaj-border rounded overflow-hidden">
                       <div className="p-5 bg-slate-50 border-b border-aaj-border flex flex-wrap items-center justify-between gap-3">
@@ -5834,10 +5990,9 @@ export const MemberSpacePage = () => {
                             className="w-full bg-white border border-aaj-border rounded px-4 py-3 text-xs font-bold"
                           />
                           <datalist id="commission-types">
-                            <option value="Ordinaire" />
-                            <option value="Extraordinaire" />
-                            <option value="Consultative" />
-                            <option value="Spéciale" />
+                            {commissionTypesList.map((t) => (
+                              <option key={t} value={t} />
+                            ))}
                           </datalist>
                         </div>
                       </div>
