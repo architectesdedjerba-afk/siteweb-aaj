@@ -488,6 +488,11 @@ function build_specs(): array
             // YYYY-MM-DD string (or null) — added by migration 009 for PAU docs.
             'approvalDate' => $r['approval_date'] ?? null,
             'fileType' => $r['file_type'],
+            // Archive flag (migration 011) — admins can hide a document from
+            // the member-facing list without deleting it.
+            'archived' => (bool)($r['archived'] ?? 0),
+            'archivedAt' => isset($r['archived_at']) && $r['archived_at']
+                ? iso_datetime($r['archived_at']) : null,
             'createdAt' => iso_datetime($r['created_at']),
         ],
         'toRow' => function (array $p) {
@@ -499,10 +504,21 @@ function build_specs(): array
             if (array_key_exists('subCategory', $p))  $row['sub_category'] = $p['subCategory'];
             if (array_key_exists('approvalDate', $p)) $row['approval_date'] = $p['approvalDate'] !== '' ? $p['approvalDate'] : null;
             if (array_key_exists('fileType', $p))     $row['file_type'] = $p['fileType'];
+            if (array_key_exists('archived', $p)) {
+                $row['archived']    = $p['archived'] ? 1 : 0;
+                $row['archived_at'] = $p['archived'] ? date('Y-m-d H:i:s') : null;
+            }
             return $row;
         },
+        // Members see the active library only; admins / library_manage roles
+        // see archived rows too (they need to restore or edit them).
+        'listFilter' => function (array $u, array $qs): array {
+            if (is_admin($u) || user_has_permission($u, 'library_manage')) return [];
+            return [['archived', '=', 0]];
+        },
         'canList' => fn(?array $u) => $u && $u['status'] === 'active',
-        'canGet'  => fn(?array $u, array $r) => $u && $u['status'] === 'active',
+        'canGet'  => fn(?array $u, array $r) => $u && $u['status'] === 'active'
+            && (!(int)($r['archived'] ?? 0) || is_admin($u) || user_has_permission($u, 'library_manage')),
         'canCreate' => fn(?array $u, array $p) => $u && (is_admin($u) || user_has_permission($u, 'library_manage')),
         'canUpdate' => fn(array $u, array $r, array $patch) => is_admin($u) || user_has_permission($u, 'library_manage'),
         'canDelete' => fn(array $u, array $r) => is_admin($u) || user_has_permission($u, 'library_manage'),

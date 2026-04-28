@@ -545,6 +545,26 @@ function migration_011_jobs_cv_fields(): void
     }
 }
 
+/**
+ * Migration 012 — add `archived` flag + `archived_at` timestamp to the
+ * library `documents` table. An archived document stays in the database
+ * (so admins can restore or audit it) but is hidden from the member-facing
+ * Bibliothèque listing. Idempotent: probes information_schema first.
+ */
+function migration_012_documents_archived_flag(): void
+{
+    $table = 'documents';
+    if (!table_exists($table)) return;
+    $pdo = db();
+
+    if (!column_exists($table, 'archived')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `archived` TINYINT(1) NOT NULL DEFAULT 0 AFTER `file_type`");
+    }
+    if (!column_exists($table, 'archived_at')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `archived_at` DATETIME NULL AFTER `archived`");
+    }
+}
+
 function run_auto_migrations(): void
 {
     try {
@@ -601,6 +621,11 @@ function run_auto_migrations(): void
     }
     try {
         migration_011_jobs_cv_fields();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_012_documents_archived_flag();
     } catch (Throwable $e) {
         error_log('[migrations] ' . $e->getMessage());
     }

@@ -140,9 +140,12 @@ CREATE TABLE IF NOT EXISTS documents (
   sub_category  VARCHAR(100) NULL,
   approval_date VARCHAR(10) NULL,
   file_type     VARCHAR(50) NULL,
+  archived      TINYINT(1) NOT NULL DEFAULT 0,
+  archived_at   DATETIME NULL,
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_docs_category (category),
+  KEY idx_docs_archived (archived),
   KEY idx_docs_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

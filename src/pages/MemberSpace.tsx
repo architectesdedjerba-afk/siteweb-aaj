@@ -55,6 +55,7 @@ import {
   GraduationCap,
   Clock,
   Calendar,
+  EyeOff,
 } from 'lucide-react';
 import {
   // auth API
@@ -984,6 +985,30 @@ export const MemberSpacePage = () => {
     fileName: '',
   });
 
+  // ---- Edit / archive state for the library admin panel ----
+  // `editingDoc` holds the in-progress patch when an admin clicks "Modifier"
+  // on a library row. Mirrors the shape of `newDoc` plus the original id and
+  // the existing fileId/url so we know whether to re-upload or keep them.
+  type EditingDocState = {
+    id: string;
+    name: string;
+    url: string;
+    category: string;
+    commune: string;
+    arrondissement: string;
+    approvalDate: string;
+    legalType: string;
+    fileType: string;
+    file: File | null;
+    fileName: string;
+    /** id of the file currently stored on disk (to delete if replaced). */
+    existingFileId: string | null;
+  };
+  const [editingDoc, setEditingDoc] = useState<EditingDocState | null>(null);
+  const editLibraryFileInputRef = useRef<HTMLInputElement>(null);
+  const [archivingDocId, setArchivingDocId] = useState<string | null>(null);
+  const [showArchivedDocs, setShowArchivedDocs] = useState(false);
+
   const handleLibraryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0]) return;
     const file = e.target.files[0];
@@ -1083,6 +1108,154 @@ export const MemberSpacePage = () => {
     } catch (err) {
       console.error('Error deleting document:', err);
       alert('Erreur lors de la suppression.');
+    }
+  };
+
+  /**
+   * Open the "Modifier le document" modal pre-filled with the row data.
+   * The admin can then change any field (and optionally replace the
+   * underlying file) before confirming.
+   */
+  const handleStartEditDocument = (docRecord: any) => {
+    if (!can('library_manage')) return;
+    // The doc may live under a "Plan d'Aménagement" subCategory shaped as
+    // "Commune - Arrondissement". Split it back so the form can edit each.
+    let commune = docRecord.commune || 'Houmt Souk';
+    let arrondissement = docRecord.arrondissement || '';
+    if (
+      docRecord.category === "Plan d'Aménagement" &&
+      typeof docRecord.subCategory === 'string' &&
+      docRecord.subCategory.includes(' - ') &&
+      !docRecord.commune
+    ) {
+      const [c, a] = docRecord.subCategory.split(' - ');
+      commune = c;
+      arrondissement = a || '';
+    }
+    setEditingDoc({
+      id: docRecord.id,
+      name: docRecord.name || '',
+      url: docRecord.url || '',
+      category: docRecord.category || "Plan d'Aménagement",
+      commune,
+      arrondissement,
+      approvalDate: docRecord.approvalDate || '',
+      legalType: docRecord.subCategory || 'Contrat',
+      fileType: docRecord.fileType || 'pdf',
+      file: null,
+      fileName: docRecord.fileName || '',
+      existingFileId: docRecord.fileId || null,
+    });
+  };
+
+  const handleEditLibraryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!editingDoc) return;
+    if (!e.target.files?.[0]) return;
+    const file = e.target.files[0];
+    setEditingDoc({
+      ...editingDoc,
+      file,
+      fileName: file.name,
+      fileType: file.name.split('.').pop()?.toLowerCase() || 'pdf',
+    });
+  };
+
+  /**
+   * Persist the patch from the edit modal. If the admin chose a new file we
+   * upload it first, swap the URL/fileId, and then delete the old blob to
+   * keep the disk tidy.
+   */
+  const handleUpdateDocument = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingDoc || !can('library_manage')) return;
+
+    setIsSaving(true);
+    let uploadedFileId: string | null = null;
+    let oldFileIdToDelete: string | null = null;
+    try {
+      const patch: any = {
+        name: editingDoc.name,
+        category: editingDoc.category,
+        fileType: editingDoc.fileType,
+      };
+
+      if (editingDoc.file) {
+        // New file → upload, point url+fileId at it, schedule the old blob
+        // for deletion after the DB write succeeds.
+        const result = await uploadFile(editingDoc.file, 'documents');
+        patch.url = result.url;
+        patch.fileId = result.path;
+        patch.fileName = editingDoc.file.name;
+        uploadedFileId = result.path;
+        oldFileIdToDelete = editingDoc.existingFileId;
+      } else if (editingDoc.url) {
+        patch.url = editingDoc.url;
+      }
+
+      if (editingDoc.category === "Plan d'Aménagement") {
+        patch.commune = editingDoc.commune;
+        patch.arrondissement = editingDoc.arrondissement;
+        patch.subCategory = `${editingDoc.commune}${
+          editingDoc.arrondissement ? ' - ' + editingDoc.arrondissement : ''
+        }`;
+        patch.approvalDate = editingDoc.approvalDate || '';
+      } else if (editingDoc.category === 'Cadre Contractuel & Légal') {
+        patch.subCategory = editingDoc.legalType;
+        // Drop approvalDate when the doc is no longer a PAU.
+        patch.approvalDate = '';
+      }
+
+      await updateDoc(doc(db, 'documents', editingDoc.id), patch);
+
+      // Old file cleanup (best-effort, after the DB has acknowledged the
+      // swap so a failure here doesn't strand the row pointing at nothing).
+      if (oldFileIdToDelete) {
+        try {
+          await deleteFile(oldFileIdToDelete);
+        } catch {
+          /* best-effort */
+        }
+      }
+
+      setEditingDoc(null);
+      if (editLibraryFileInputRef.current) editLibraryFileInputRef.current.value = '';
+    } catch (err) {
+      // If we uploaded a new file but the DB patch failed, drop the orphan.
+      if (uploadedFileId) {
+        try {
+          await deleteFile(uploadedFileId);
+        } catch {
+          /* best-effort */
+        }
+      }
+      console.error('Error updating document:', err);
+      const msg =
+        err instanceof Error && err.message
+          ? err.message
+          : 'Erreur lors de la mise à jour du document.';
+      alert(msg);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  /**
+   * Toggle the archived flag on a document. Archived rows stay in the DB
+   * (admins can restore them) but are filtered out of the member-facing
+   * library listing by the `documents` collection's listFilter on the API.
+   */
+  const handleToggleArchiveDocument = async (docId: string, currentlyArchived: boolean) => {
+    if (!can('library_manage')) return;
+    setArchivingDocId(docId);
+    try {
+      await updateDoc(doc(db, 'documents', docId), { archived: !currentlyArchived });
+    } catch (err) {
+      console.error('Error archiving document:', err);
+      alert(
+        currentlyArchived ? 'Erreur lors de la restauration.' : "Erreur lors de l'archivage."
+      );
+    } finally {
+      setArchivingDocId(null);
     }
   };
 
@@ -3458,7 +3631,7 @@ export const MemberSpacePage = () => {
                           </div>
                           <div className="space-y-3">
                             {libraryDocs
-                              .filter((d) => d.category === "Plan d'Aménagement")
+                              .filter((d) => d.category === "Plan d'Aménagement" && !d.archived)
                               .filter(
                                 (d) =>
                                   libraryFilterCommune === 'Toutes' ||
@@ -3510,7 +3683,7 @@ export const MemberSpacePage = () => {
                                   </div>
                                 </a>
                               ))}
-                            {libraryDocs.filter((d) => d.category === "Plan d'Aménagement")
+                            {libraryDocs.filter((d) => d.category === "Plan d'Aménagement" && !d.archived)
                               .length === 0 && (
                               <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest text-center py-4 italic">
                                 Aucun document disponible
@@ -3537,7 +3710,7 @@ export const MemberSpacePage = () => {
                           </div>
                           <div className="space-y-3">
                             {libraryDocs
-                              .filter((d) => d.category === 'Cadre Contractuel & Légal')
+                              .filter((d) => d.category === 'Cadre Contractuel & Légal' && !d.archived)
                               .filter(
                                 (d) =>
                                   libraryFilterLegal === 'Tous' ||
@@ -3582,7 +3755,7 @@ export const MemberSpacePage = () => {
                                   </div>
                                 </a>
                               ))}
-                            {libraryDocs.filter((d) => d.category === 'Cadre Contractuel & Légal')
+                            {libraryDocs.filter((d) => d.category === 'Cadre Contractuel & Légal' && !d.archived)
                               .length === 0 && (
                               <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest text-center py-4 italic">
                                 Aucun document disponible
@@ -3788,11 +3961,44 @@ export const MemberSpacePage = () => {
                         </div>
                       </form>
 
+                      {/* Filter bar — admin can flip between active rows and the
+                          full archive (incl. hidden docs). Shows live counts. */}
+                      <div className="flex items-center justify-between mb-6 px-1">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-aaj-gray">
+                          {(() => {
+                            const total = libraryDocs.length;
+                            const archived = libraryDocs.filter((d) => d.archived).length;
+                            const active = total - archived;
+                            return showArchivedDocs
+                              ? `${total} document${total > 1 ? 's' : ''} · ${archived} archivé${archived > 1 ? 's' : ''}`
+                              : `${active} document${active > 1 ? 's' : ''} actif${active > 1 ? 's' : ''}${archived ? ` · ${archived} archivé${archived > 1 ? 's' : ''}` : ''}`;
+                          })()}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowArchivedDocs((v) => !v)}
+                          className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded border transition-colors flex items-center gap-2 ${
+                            showArchivedDocs
+                              ? 'bg-aaj-royal text-white border-aaj-royal'
+                              : 'bg-white text-aaj-gray border-aaj-border hover:border-aaj-royal/40 hover:text-aaj-royal'
+                          }`}
+                        >
+                          {showArchivedDocs ? <Eye size={12} /> : <EyeOff size={12} />}
+                          {showArchivedDocs ? 'Tous (archives incluses)' : 'Actifs uniquement'}
+                        </button>
+                      </div>
+
                       <div className="grid grid-cols-1 gap-4">
-                        {libraryDocs.map((doc) => (
+                        {libraryDocs
+                          .filter((d) => showArchivedDocs || !d.archived)
+                          .map((doc) => (
                           <div
                             key={doc.id}
-                            className="flex items-center justify-between p-6 bg-white border border-aaj-border rounded hover:border-aaj-royal/30 transition-all"
+                            className={`flex items-center justify-between p-6 bg-white border rounded transition-all ${
+                              doc.archived
+                                ? 'border-slate-300 bg-slate-50/60 opacity-70 hover:opacity-100'
+                                : 'border-aaj-border hover:border-aaj-royal/30'
+                            }`}
                           >
                             <div className="flex items-center gap-6">
                               <div className="w-12 h-12 bg-slate-50 rounded flex items-center justify-center text-aaj-gray">
@@ -3809,6 +4015,12 @@ export const MemberSpacePage = () => {
                                   {doc.name}
                                 </h4>
                                 <div className="flex items-center gap-3 flex-wrap">
+                                  {doc.archived && (
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-700 bg-slate-200 border border-slate-300 px-2 py-0.5 rounded flex items-center gap-1">
+                                      <Archive size={9} />
+                                      Archivé
+                                    </span>
+                                  )}
                                   <span className="text-[9px] font-black uppercase tracking-widest text-aaj-royal bg-blue-50 px-2 py-0.5 rounded">
                                     {doc.category}
                                   </span>
@@ -3833,24 +4045,60 @@ export const MemberSpacePage = () => {
                                 </div>
                               </div>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2">
                               <a
                                 href={doc.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="p-2 text-aaj-gray hover:text-aaj-royal transition-colors"
+                                title="Télécharger"
                               >
                                 <Download size={18} />
                               </a>
                               <button
+                                onClick={() => handleStartEditDocument(doc)}
+                                className="p-2 text-aaj-gray hover:text-aaj-royal transition-colors"
+                                title="Modifier"
+                              >
+                                <Pencil size={18} />
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleToggleArchiveDocument(doc.id, !!doc.archived)
+                                }
+                                disabled={archivingDocId === doc.id}
+                                className={`p-2 transition-colors disabled:opacity-50 ${
+                                  doc.archived
+                                    ? 'text-emerald-600 hover:text-emerald-700'
+                                    : 'text-aaj-gray hover:text-amber-600'
+                                }`}
+                                title={doc.archived ? 'Restaurer' : 'Archiver'}
+                              >
+                                {archivingDocId === doc.id ? (
+                                  <Loader2 size={18} className="animate-spin" />
+                                ) : doc.archived ? (
+                                  <ArchiveRestore size={18} />
+                                ) : (
+                                  <Archive size={18} />
+                                )}
+                              </button>
+                              <button
                                 onClick={() => handleDeleteDocument(doc.id)}
                                 className="p-2 text-aaj-gray hover:text-red-500 transition-colors"
+                                title="Supprimer"
                               >
                                 <Trash2 size={18} />
                               </button>
                             </div>
                           </div>
                         ))}
+                        {libraryDocs.filter((d) => showArchivedDocs || !d.archived).length === 0 && (
+                          <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest text-center py-8 italic">
+                            {showArchivedDocs
+                              ? 'Aucun document dans la bibliothèque'
+                              : 'Aucun document actif. Activez "Tous" pour voir les archives.'}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </motion.div>
@@ -8089,6 +8337,253 @@ export const MemberSpacePage = () => {
                     Fermer
                   </button>
                 </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Edit Document modal — pre-filled with the existing row, lets the
+            admin tweak any field and optionally swap the underlying file.
+            Mirrors the "Ajouter" form one-to-one to keep both flows visually
+            consistent. */}
+        <AnimatePresence>
+          {editingDoc && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setEditingDoc(null)}
+                className="absolute inset-0 bg-aaj-dark/80 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative w-full max-w-3xl max-h-[90vh] bg-white rounded shadow-2xl overflow-hidden flex flex-col"
+              >
+                <div className="p-8 border-b border-aaj-border flex justify-between items-center bg-slate-50">
+                  <div>
+                    <h3 className="text-xl font-black uppercase tracking-tight text-aaj-dark">
+                      Modifier le document
+                    </h3>
+                    <p className="text-[10px] text-aaj-gray font-bold uppercase tracking-widest mt-1 truncate max-w-md">
+                      {editingDoc.name || '—'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setEditingDoc(null)}
+                    className="text-aaj-gray hover:text-aaj-dark transition-colors"
+                    aria-label="Fermer"
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+
+                <form
+                  onSubmit={handleUpdateDocument}
+                  className="flex-1 overflow-y-auto custom-scrollbar p-8 space-y-8"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-3">
+                      <label className="text-[10px] uppercase font-black tracking-widest text-aaj-gray ml-1">
+                        Nom du Document
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={editingDoc.name}
+                        onChange={(e) =>
+                          setEditingDoc({ ...editingDoc, name: e.target.value })
+                        }
+                        className="w-full bg-white border border-aaj-border rounded px-5 py-3.5 text-xs font-bold focus:ring-1 focus:ring-aaj-royal focus:border-aaj-royal outline-none transition-all"
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      <label className="text-[10px] uppercase font-black tracking-widest text-aaj-gray ml-1">
+                        Lien Document (Optionnel si fichier chargé)
+                      </label>
+                      <input
+                        type="url"
+                        value={editingDoc.url}
+                        onChange={(e) =>
+                          setEditingDoc({ ...editingDoc, url: e.target.value })
+                        }
+                        placeholder="https://..."
+                        className="w-full bg-white border border-aaj-border rounded px-5 py-3.5 text-xs font-bold focus:ring-1 focus:ring-aaj-royal focus:border-aaj-royal outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-3">
+                      <label className="text-[10px] uppercase font-black tracking-widest text-aaj-gray ml-1">
+                        Catégorie Utilité
+                      </label>
+                      <select
+                        value={editingDoc.category}
+                        onChange={(e) =>
+                          setEditingDoc({ ...editingDoc, category: e.target.value })
+                        }
+                        className="w-full bg-white border border-aaj-border rounded px-5 py-3.5 text-xs font-bold focus:ring-1 focus:ring-aaj-royal outline-none appearance-none cursor-pointer"
+                      >
+                        <option value="Plan d'Aménagement">Plan d&apos;Aménagement</option>
+                        <option value="Cadre Contractuel & Légal">
+                          Cadre Contractuel & Légal
+                        </option>
+                      </select>
+                    </div>
+                    <div className="space-y-3">
+                      <label className="text-[10px] uppercase font-black tracking-widest text-aaj-gray ml-1">
+                        Remplacer le fichier (Optionnel)
+                      </label>
+                      <div className="flex gap-4">
+                        <input
+                          type="file"
+                          ref={editLibraryFileInputRef}
+                          onChange={handleEditLibraryFileChange}
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => editLibraryFileInputRef.current?.click()}
+                          className="flex-1 bg-white border border-dashed border-aaj-border hover:border-aaj-royal hover:bg-white px-5 py-3.5 rounded text-left flex items-center justify-between group transition-all"
+                        >
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-aaj-gray group-hover:text-aaj-royal truncate">
+                            {editingDoc.file
+                              ? editingDoc.fileName
+                              : editingDoc.fileName
+                                ? `Conserver : ${editingDoc.fileName}`
+                                : 'Choisir un nouveau fichier...'}
+                          </span>
+                          <Upload
+                            size={14}
+                            className="text-aaj-gray group-hover:text-aaj-royal shrink-0"
+                          />
+                        </button>
+                        {editingDoc.file && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingDoc({
+                                ...editingDoc,
+                                file: null,
+                                fileName: '',
+                              });
+                              if (editLibraryFileInputRef.current) {
+                                editLibraryFileInputRef.current.value = '';
+                              }
+                            }}
+                            className="bg-red-50 text-red-500 px-4 rounded hover:bg-red-100 transition-colors"
+                            aria-label="Annuler le remplacement"
+                          >
+                            <XCircle size={16} />
+                          </button>
+                        )}
+                      </div>
+                      {editingDoc.existingFileId && !editingDoc.file && (
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-aaj-gray ml-1">
+                          Laissez vide pour conserver le fichier actuel.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {editingDoc.category === "Plan d'Aménagement" ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-slate-200">
+                      <div className="space-y-3">
+                        <label className="text-[10px] uppercase font-black tracking-widest text-aaj-gray ml-1">
+                          Commune
+                        </label>
+                        <select
+                          value={editingDoc.commune}
+                          onChange={(e) =>
+                            setEditingDoc({ ...editingDoc, commune: e.target.value })
+                          }
+                          className="w-full bg-white border border-aaj-border rounded px-5 py-3.5 text-xs font-bold focus:ring-1 focus:ring-aaj-royal outline-none"
+                        >
+                          <option value="Houmt Souk">Houmt Souk</option>
+                          <option value="Midoun">Midoun</option>
+                          <option value="Ajim">Ajim</option>
+                        </select>
+                      </div>
+                      <div className="space-y-3">
+                        <label className="text-[10px] uppercase font-black tracking-widest text-aaj-gray ml-1">
+                          Arrondissement (Optionnel)
+                        </label>
+                        <input
+                          type="text"
+                          value={editingDoc.arrondissement}
+                          onChange={(e) =>
+                            setEditingDoc({
+                              ...editingDoc,
+                              arrondissement: e.target.value,
+                            })
+                          }
+                          placeholder="Ex: Cedghiane, Erriadh..."
+                          className="w-full bg-white border border-aaj-border rounded px-5 py-3.5 text-xs font-bold focus:ring-1 focus:ring-aaj-royal outline-none"
+                        />
+                      </div>
+                      <div className="space-y-3 md:col-span-2">
+                        <label className="text-[10px] uppercase font-black tracking-widest text-aaj-gray ml-1 flex items-center gap-2">
+                          <Calendar size={11} className="text-aaj-royal" />
+                          Date d&apos;approbation du PAU (Optionnel)
+                        </label>
+                        <input
+                          type="date"
+                          value={editingDoc.approvalDate}
+                          onChange={(e) =>
+                            setEditingDoc({
+                              ...editingDoc,
+                              approvalDate: e.target.value,
+                            })
+                          }
+                          className="w-full bg-white border border-aaj-border rounded px-5 py-3.5 text-xs font-bold focus:ring-1 focus:ring-aaj-royal outline-none"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="pt-4 border-t border-slate-200">
+                      <div className="space-y-3 max-w-md">
+                        <label className="text-[10px] uppercase font-black tracking-widest text-aaj-gray ml-1">
+                          Type de Document
+                        </label>
+                        <select
+                          value={editingDoc.legalType}
+                          onChange={(e) =>
+                            setEditingDoc({ ...editingDoc, legalType: e.target.value })
+                          }
+                          className="w-full bg-white border border-aaj-border rounded px-5 py-3.5 text-xs font-bold focus:ring-1 focus:ring-aaj-royal outline-none appearance-none cursor-pointer"
+                        >
+                          <option value="Contrat">Contrat</option>
+                          <option value="Texte & Loi">Texte & Loi</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setEditingDoc(null)}
+                      className="px-8 border border-aaj-border rounded font-black uppercase tracking-widest text-[11px] text-aaj-gray hover:bg-slate-50 transition-all"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSaving}
+                      className="bg-aaj-dark text-white px-12 py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all flex items-center gap-3 shadow-lg shadow-aaj-dark/20 disabled:bg-aaj-gray"
+                    >
+                      {isSaving ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Save size={16} />
+                      )}
+                      Enregistrer
+                    </button>
+                  </div>
+                </form>
               </motion.div>
             </div>
           )}
