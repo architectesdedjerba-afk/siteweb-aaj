@@ -14,15 +14,9 @@ import { useAuth } from '../../lib/AuthContext';
 import { useChatBadge } from '../../lib/useChat';
 import { ChatPage } from './ChatPage';
 
-/** Distance (px) from viewport bottom when no footer is in view. Mirrors the
- *  contact-admin FAB behaviour in MemberSpace so the two FABs stack and lift
- *  together when the footer scrolls into view. */
-const DEFAULT_BOTTOM = 24;
-
 export function ChatFloatingWidget() {
   const [open, setOpen] = useState(false);
   const [maximized, setMaximized] = useState(false);
-  const [bottom, setBottom] = useState(DEFAULT_BOTTOM);
   const { user, isAdmin, can } = useAuth();
   const isModerator = isAdmin || can('chat_manage');
   const { totalUnread } = useChatBadge(user?.uid ?? null, isModerator);
@@ -39,26 +33,6 @@ export function ChatFloatingWidget() {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, maximized]);
 
-  // Lift the FAB when the page footer scrolls into view (same logic as the
-  // contact-admin FAB) so the button never sits on top of footer content.
-  useEffect(() => {
-    const handleScroll = () => {
-      const footer = document.querySelector('footer');
-      if (!footer) return;
-      const footerRect = footer.getBoundingClientRect();
-      const viewportHeight = window.innerHeight;
-      if (footerRect.top < viewportHeight) {
-        const overlap = viewportHeight - footerRect.top;
-        setBottom(overlap + 24);
-      } else {
-        setBottom(DEFAULT_BOTTOM);
-      }
-    };
-    handleScroll();
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
   // Hidden for anonymous visitors — chat is members-only
   if (!user) return null;
 
@@ -66,12 +40,15 @@ export function ChatFloatingWidget() {
 
   return (
     <>
-      {/* Floating action button — anchored bottom-right */}
+      {/* Floating action button — anchored bottom-right.
+          `focus-visible:outline-none` overrides the global square outline
+          from index.css so the focus ring follows the circular shape via
+          Tailwind's `ring` (which uses box-shadow and respects
+          border-radius). */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        style={{ bottom: `${bottom}px` }}
-        className="fixed right-6 z-[1100] w-14 h-14 rounded-full bg-aaj-royal text-white shadow-2xl hover:bg-aaj-dark active:scale-95 transition-all flex items-center justify-center group"
+        className="fixed bottom-6 right-6 z-[1100] w-14 h-14 rounded-full bg-aaj-royal text-white shadow-2xl hover:bg-aaj-dark active:scale-95 transition-all flex items-center justify-center group focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aaj-royal focus-visible:ring-offset-2"
         aria-label={open ? 'Fermer la messagerie' : 'Ouvrir la messagerie'}
       >
         <AnimatePresence mode="wait" initial={false}>

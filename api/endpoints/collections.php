@@ -151,7 +151,19 @@ function build_specs(): array
             'id' => $r['id'],
             'title' => $r['title'], 'content' => $r['content'],
             'date' => $r['date'], 'type' => $r['type'], 'category' => $r['category'],
-            'imageUrl' => $r['image_url'], 'fileBase64' => $r['file_url'], 'fileName' => $r['file_name'],
+            'imageUrl' => $r['image_url'],
+            // `file_url` historically held a base64 data URL; since the PR
+            // streaming uploads to /api/files it stores the public URL.
+            // Both render fine in <img src> / <a href>, so we expose them
+            // under the new `fileUrl` key and keep `fileBase64` for any
+            // legacy reader still around.
+            'fileUrl' => $r['file_url'],
+            'fileBase64' => $r['file_url'],
+            'fileName' => $r['file_name'],
+            'fileMimeType' => $r['file_mime_type'] ?? null,
+            'authorEmail' => $r['author_email'] ?? null,
+            'authorDisplayName' => $r['author_display_name'] ?? null,
+            'authorPhotoBase64' => $r['author_photo_base64'] ?? null,
             'createdAt' => iso_datetime($r['created_at']),
         ],
         'toRow' => function (array $p) {
@@ -160,8 +172,15 @@ function build_specs(): array
                 if (array_key_exists($k, $p)) $row[$k] = $p[$k];
             }
             if (array_key_exists('imageUrl', $p))   $row['image_url'] = $p['imageUrl'];
-            if (array_key_exists('fileBase64', $p)) $row['file_url'] = $p['fileBase64'];
+            // Accept the new `fileUrl` payload key (post /api/files migration)
+            // and keep the legacy `fileBase64` mapping for older callers.
+            if (array_key_exists('fileUrl', $p))    $row['file_url'] = $p['fileUrl'];
+            elseif (array_key_exists('fileBase64', $p)) $row['file_url'] = $p['fileBase64'];
             if (array_key_exists('fileName', $p))   $row['file_name'] = $p['fileName'];
+            if (array_key_exists('fileMimeType', $p)) $row['file_mime_type'] = $p['fileMimeType'];
+            if (array_key_exists('authorEmail', $p)) $row['author_email'] = $p['authorEmail'];
+            if (array_key_exists('authorDisplayName', $p)) $row['author_display_name'] = $p['authorDisplayName'];
+            if (array_key_exists('authorPhotoBase64', $p)) $row['author_photo_base64'] = $p['authorPhotoBase64'];
             return $row;
         },
         'afterInsert' => function (array $row, array $view, array $payload): void {
@@ -317,6 +336,8 @@ function build_specs(): array
             'authorPhone' => $r['author_phone'],
             'source' => $r['source'],
             'status' => $r['status'],
+            'cvFileId' => $r['cv_file_id'] ?? null,
+            'cvFileName' => $r['cv_file_name'] ?? null,
             'createdAt' => iso_datetime($r['created_at']),
         ],
         'toRow' => function (array $p) {
@@ -334,6 +355,8 @@ function build_specs(): array
             if (array_key_exists('authorPhone', $p))  $row['author_phone'] = $p['authorPhone'];
             if (array_key_exists('source', $p))       $row['source'] = (string)$p['source'];
             if (array_key_exists('status', $p))       $row['status'] = (string)$p['status'];
+            if (array_key_exists('cvFileId', $p))     $row['cv_file_id'] = $p['cvFileId'];
+            if (array_key_exists('cvFileName', $p))   $row['cv_file_name'] = $p['cvFileName'];
             return $row;
         },
         'validateCreate' => function (array $p): void {
@@ -462,17 +485,20 @@ function build_specs(): array
             'fileBase64' => $r['url'], // compat alias for legacy frontend code
             'category' => $r['category'],
             'subCategory' => $r['sub_category'],
+            // YYYY-MM-DD string (or null) — added by migration 009 for PAU docs.
+            'approvalDate' => $r['approval_date'] ?? null,
             'fileType' => $r['file_type'],
             'createdAt' => iso_datetime($r['created_at']),
         ],
         'toRow' => function (array $p) {
             $row = [];
-            if (array_key_exists('name', $p))        $row['name'] = $p['name'];
-            if (array_key_exists('url', $p))         $row['url'] = $p['url'];
-            if (array_key_exists('fileBase64', $p))  $row['url'] = $p['fileBase64'];
-            if (array_key_exists('category', $p))    $row['category'] = $p['category'];
-            if (array_key_exists('subCategory', $p)) $row['sub_category'] = $p['subCategory'];
-            if (array_key_exists('fileType', $p))    $row['file_type'] = $p['fileType'];
+            if (array_key_exists('name', $p))         $row['name'] = $p['name'];
+            if (array_key_exists('url', $p))          $row['url'] = $p['url'];
+            if (array_key_exists('fileBase64', $p))   $row['url'] = $p['fileBase64'];
+            if (array_key_exists('category', $p))     $row['category'] = $p['category'];
+            if (array_key_exists('subCategory', $p))  $row['sub_category'] = $p['subCategory'];
+            if (array_key_exists('approvalDate', $p)) $row['approval_date'] = $p['approvalDate'] !== '' ? $p['approvalDate'] : null;
+            if (array_key_exists('fileType', $p))     $row['file_type'] = $p['fileType'];
             return $row;
         },
         'canList' => fn(?array $u) => $u && $u['status'] === 'active',

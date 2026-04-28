@@ -10,10 +10,12 @@ import {
   Building2,
   CheckCircle2,
   Clock,
+  FileText,
   GraduationCap,
   Loader2,
   Mail,
   MapPin,
+  Paperclip,
   Phone,
   Search,
   SendHorizonal,
@@ -21,7 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   addDoc,
   collection,
@@ -44,6 +46,7 @@ import {
 } from '../lib/validation';
 import { DEFAULT_VILLES, loadVilles } from '../lib/memberConfig';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { uploadFile } from '../lib/storage';
 
 type JobKind = 'offer' | 'request';
 type JobContractType = 'Stage' | 'CDI' | 'CDD' | 'Freelance' | 'Apprentissage' | 'Autre';
@@ -61,6 +64,8 @@ interface JobItem {
   authorPhone?: string;
   authorRole?: string;
   status?: 'pending' | 'approved' | 'rejected';
+  cvFileId?: string | null;
+  cvFileName?: string | null;
   createdAt?: { toDate?: () => Date } | string;
 }
 
@@ -121,6 +126,42 @@ export const JobsPage = () => {
     authorRole: '',
   });
   const [errors, setErrors] = useState<ValidationErrors<RequestForm>>({});
+  const [cvFile, setCvFile] = useState<File | null>(null);
+  const [cvError, setCvError] = useState<string | null>(null);
+  const cvInputRef = useRef<HTMLInputElement>(null);
+
+  const MAX_CV_BYTES = 10 * 1024 * 1024; // 10 MB
+  const isCvAccepted = (f: File) =>
+    f.type === 'application/pdf' || f.type.startsWith('image/');
+
+  const handleCvChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] ?? null;
+    if (!f) {
+      setCvFile(null);
+      setCvError(null);
+      return;
+    }
+    if (!isCvAccepted(f)) {
+      setCvError('Format non accepté. Seuls les PDF et les images sont autorisés.');
+      setCvFile(null);
+      if (cvInputRef.current) cvInputRef.current.value = '';
+      return;
+    }
+    if (f.size > MAX_CV_BYTES) {
+      setCvError('Fichier trop volumineux (10 Mo max).');
+      setCvFile(null);
+      if (cvInputRef.current) cvInputRef.current.value = '';
+      return;
+    }
+    setCvError(null);
+    setCvFile(f);
+  };
+
+  const removeCv = () => {
+    setCvFile(null);
+    setCvError(null);
+    if (cvInputRef.current) cvInputRef.current.value = '';
+  };
 
   useEffect(() => {
     loadVilles()
@@ -176,12 +217,26 @@ export const JobsPage = () => {
     e.preventDefault();
     const errs = validate(form);
     setErrors(errs);
-    if (hasErrors(errs)) {
+    if (hasErrors(errs) || cvError) {
       toast.error('Veuillez corriger les erreurs du formulaire.');
       return;
     }
     setSubmitting(true);
     try {
+      let cvFileId: string | null = null;
+      let cvFileName: string | null = null;
+      if (cvFile) {
+        try {
+          const up = await uploadFile(cvFile, 'jobs_cv');
+          cvFileId = up.path;
+          cvFileName = cvFile.name;
+        } catch (err) {
+          console.error('CV upload error:', err);
+          toast.error("Échec de l'envoi du CV. Réessayez.");
+          setSubmitting(false);
+          return;
+        }
+      }
       await addDoc(collection(db, 'jobs'), {
         kind: 'request',
         contractType: form.contractType,
@@ -192,6 +247,8 @@ export const JobsPage = () => {
         authorEmail: form.authorEmail.trim(),
         authorPhone: form.authorPhone.trim(),
         authorRole: form.authorRole.trim(),
+        cvFileId,
+        cvFileName,
         source: 'public',
         status: 'pending',
         createdAt: serverTimestamp(),
@@ -218,6 +275,9 @@ export const JobsPage = () => {
       authorRole: '',
     });
     setErrors({});
+    setCvFile(null);
+    setCvError(null);
+    if (cvInputRef.current) cvInputRef.current.value = '';
     setSubmitted(false);
     setShowRequestForm(false);
   };
@@ -580,6 +640,52 @@ export const JobsPage = () => {
                     </div>
                   </div>
 
+                  <div className="border-t border-aaj-border pt-6 space-y-3">
+                    <h3 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-royal">
+                      CV / Portfolio (optionnel)
+                    </h3>
+                    <p className="text-[11px] text-aaj-gray font-medium leading-relaxed">
+                      Joignez un PDF ou une image (10 Mo max). Visible uniquement par les
+                      adhérents et l&apos;administration après validation.
+                    </p>
+                    <input
+                      ref={cvInputRef}
+                      type="file"
+                      accept="application/pdf,image/*"
+                      onChange={handleCvChange}
+                      className="hidden"
+                      id="job-request-cv"
+                    />
+                    {cvFile ? (
+                      <div className="flex items-center gap-3 border border-aaj-border rounded px-4 py-3 bg-slate-50">
+                        <FileText size={16} className="text-aaj-royal shrink-0" aria-hidden="true" />
+                        <span className="text-xs font-bold text-aaj-dark truncate flex-1">
+                          {cvFile.name}
+                        </span>
+                        <span className="text-[10px] font-bold text-aaj-gray uppercase tracking-widest">
+                          {(cvFile.size / 1024).toFixed(0)} Ko
+                        </span>
+                        <button
+                          type="button"
+                          onClick={removeCv}
+                          className="p-1 text-aaj-gray hover:text-red-600"
+                          aria-label="Retirer le fichier"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <label
+                        htmlFor="job-request-cv"
+                        className="inline-flex items-center gap-2 border border-dashed border-aaj-border rounded px-4 py-3 text-[11px] font-black uppercase tracking-widest text-aaj-gray hover:border-aaj-royal hover:text-aaj-royal cursor-pointer transition-all"
+                      >
+                        <Paperclip size={14} aria-hidden="true" />
+                        Choisir un fichier
+                      </label>
+                    )}
+                    {cvError && <p className="text-xs text-red-600">{cvError}</p>}
+                  </div>
+
                   <div className="pt-4 flex gap-3 justify-end">
                     <button
                       type="button"
@@ -775,6 +881,22 @@ const JobDetailModal = ({ item, onClose }: { item: JobItem; onClose: () => void 
                   >
                     {item.authorPhone}
                   </a>
+                </div>
+              )}
+              {item.cvFileId && (
+                <div className="flex items-center gap-3">
+                  <FileText size={14} className="text-aaj-royal" aria-hidden="true" />
+                  <a
+                    href={`/api/files/${encodeURIComponent(item.cvFileId)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-bold text-aaj-royal hover:underline"
+                  >
+                    {item.cvFileName || 'CV / Portfolio'}
+                  </a>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-aaj-gray">
+                    Réservé adhérents
+                  </span>
                 </div>
               )}
             </div>

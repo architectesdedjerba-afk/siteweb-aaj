@@ -484,6 +484,67 @@ function migration_008_jobs_default_perms(): void
     }
 }
 
+/**
+ * Migration 009 — add `approval_date` to the documents (library) table so
+ * Plans d'Aménagement can carry the date the PAU was officially approved.
+ * Stored as VARCHAR(10) to match the YYYY-MM-DD value emitted by the
+ * <input type="date"> element on the frontend (no timezone shenanigans).
+ */
+function migration_009_documents_approval_date(): void
+{
+    $table = 'documents';
+    if (!table_exists($table)) return;
+    if (!column_exists($table, 'approval_date')) {
+        db()->exec("ALTER TABLE `$table` ADD COLUMN `approval_date` VARCHAR(10) NULL AFTER `sub_category`");
+    }
+}
+
+/**
+ * Migration 010 — extend the `news` table so an annonce can carry the
+ * uploaded file's mime type (needed to decide inline image preview vs.
+ * download tile) and the author identity (avatar + display name shown
+ * in the Facebook-style card). All idempotent.
+ */
+function migration_010_news_attachment_and_author_fields(): void
+{
+    $table = 'news';
+    if (!table_exists($table)) return;
+    $pdo = db();
+
+    if (!column_exists($table, 'file_mime_type')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `file_mime_type` VARCHAR(100) NULL AFTER `file_name`");
+    }
+    if (!column_exists($table, 'author_email')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `author_email` VARCHAR(200) NULL AFTER `file_mime_type`");
+    }
+    if (!column_exists($table, 'author_display_name')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `author_display_name` VARCHAR(200) NULL AFTER `author_email`");
+    }
+    if (!column_exists($table, 'author_photo_base64')) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `author_photo_base64` LONGTEXT NULL AFTER `author_display_name`");
+    }
+}
+
+/**
+ * Migration 011 — Jobs CV / portfolio attachment fields.
+ *
+ * Public visitors submitting a job/internship request now attach an optional
+ * CV/portfolio file (PDF or image) uploaded to /api/files (folder=jobs_cv).
+ * Two columns store the file id (download lookup) and the original filename
+ * (display in the moderation panel + detail modal). Idempotent.
+ */
+function migration_011_jobs_cv_fields(): void
+{
+    if (!table_exists('jobs')) return;
+    $pdo = db();
+    if (!column_exists('jobs', 'cv_file_id')) {
+        $pdo->exec("ALTER TABLE `jobs` ADD COLUMN `cv_file_id` VARCHAR(64) NULL AFTER `status`");
+    }
+    if (!column_exists('jobs', 'cv_file_name')) {
+        $pdo->exec("ALTER TABLE `jobs` ADD COLUMN `cv_file_name` VARCHAR(255) NULL AFTER `cv_file_id`");
+    }
+}
+
 function run_auto_migrations(): void
 {
     try {
@@ -525,6 +586,21 @@ function run_auto_migrations(): void
     }
     try {
         migration_008_jobs_default_perms();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_009_documents_approval_date();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_010_news_attachment_and_author_fields();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_011_jobs_cv_fields();
     } catch (Throwable $e) {
         error_log('[migrations] ' . $e->getMessage());
     }

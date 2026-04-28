@@ -62,16 +62,20 @@ CREATE TABLE IF NOT EXISTS users (
 -- news
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS news (
-  id         VARCHAR(64) NOT NULL,
-  title      VARCHAR(300) NOT NULL,
-  content    TEXT NOT NULL,
-  date       VARCHAR(32) NULL,
-  type       VARCHAR(32) NULL,
-  category   VARCHAR(100) NULL,
-  image_url  TEXT NULL,
-  file_url   TEXT NULL,
-  file_name  VARCHAR(255) NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id                  VARCHAR(64) NOT NULL,
+  title               VARCHAR(300) NOT NULL,
+  content             TEXT NOT NULL,
+  date                VARCHAR(32) NULL,
+  type                VARCHAR(32) NULL,
+  category            VARCHAR(100) NULL,
+  image_url           TEXT NULL,
+  file_url            TEXT NULL,
+  file_name           VARCHAR(255) NULL,
+  file_mime_type      VARCHAR(100) NULL,
+  author_email        VARCHAR(200) NULL,
+  author_display_name VARCHAR(200) NULL,
+  author_photo_base64 LONGTEXT NULL,
+  created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_news_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -129,13 +133,14 @@ CREATE TABLE IF NOT EXISTS contact_messages (
 -- documents (library)
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS documents (
-  id           VARCHAR(64) NOT NULL,
-  name         VARCHAR(300) NOT NULL,
-  url          TEXT NULL,
-  category     VARCHAR(100) NOT NULL DEFAULT '',
-  sub_category VARCHAR(100) NULL,
-  file_type    VARCHAR(50) NULL,
-  created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id            VARCHAR(64) NOT NULL,
+  name          VARCHAR(300) NOT NULL,
+  url           TEXT NULL,
+  category      VARCHAR(100) NOT NULL DEFAULT '',
+  sub_category  VARCHAR(100) NULL,
+  approval_date VARCHAR(10) NULL,
+  file_type     VARCHAR(50) NULL,
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_docs_category (category),
   KEY idx_docs_created_at (created_at)
@@ -240,6 +245,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   author_phone  VARCHAR(50)  NULL,
   source        VARCHAR(16)  NOT NULL DEFAULT 'member',
   status        VARCHAR(16)  NOT NULL DEFAULT 'pending',
+  cv_file_id    VARCHAR(64)  NULL,
+  cv_file_name  VARCHAR(255) NULL,
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_jobs_status (status),
