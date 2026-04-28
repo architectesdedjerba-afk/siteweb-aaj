@@ -449,6 +449,52 @@ export const MemberSpacePage = () => {
     });
   };
 
+  /**
+   * Compresse une image (typiquement une photo de téléphone 3-5 Mo) avant
+   * conversion base64. Redimensionne à `maxDim` px sur le plus grand côté,
+   * exporte en JPEG `quality`. Une photo de profil ressort en général entre
+   * 30 et 150 Ko en base64, ce qui évite de saturer la colonne MySQL et de
+   * balader des Mo dans la liste des membres.
+   */
+  const compressImageToBase64 = (
+    file: File,
+    maxDim = 600,
+    quality = 0.85
+  ): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Lecture du fichier impossible.'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Image illisible.'));
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width >= height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Canvas non disponible.'));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   useEffect(() => {
     if (!user) return;
 
@@ -880,14 +926,20 @@ export const MemberSpacePage = () => {
     if (!user || !e.target.files?.[0]) return;
     const file = e.target.files[0];
 
-    if (file.size > 2 * 1024 * 1024) {
-      alert("L'image est trop lourde (max 2Mo).");
+    // Garde-fou contre des fichiers énormes (raw JPEG/HEIC d'appareil photo
+    // pro). 20 Mo en entrée, on compresse ensuite à ~100 Ko.
+    if (file.size > 20 * 1024 * 1024) {
+      alert("L'image est trop lourde (max 20 Mo en entrée).");
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      alert('Veuillez choisir un fichier image.');
       return;
     }
 
     try {
       setIsSaving(true);
-      const base64 = await fileToBase64(file);
+      const base64 = await compressImageToBase64(file, 600, 0.85);
       await setDoc(
         doc(db, 'users', user.uid),
         {
