@@ -565,6 +565,31 @@ function migration_012_documents_archived_flag(): void
     }
 }
 
+/**
+ * Migration 013 — widen `users.photo_url` from TEXT (≤64 KB) to MEDIUMTEXT
+ * (≤16 MB) so profile photos uploaded as base64 data URLs no longer error
+ * out with `Data too long for column`. Phone-camera JPGs land around 2-5 MB,
+ * which becomes ~3-7 MB once base64-encoded — well over the TEXT ceiling.
+ * Idempotent: read information_schema and only ALTER if still TEXT.
+ */
+function migration_013_user_photo_url_mediumtext(): void
+{
+    $pdo = db();
+    $stmt = $pdo->prepare(
+        'SELECT DATA_TYPE
+           FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME   = :t
+            AND COLUMN_NAME  = :c
+          LIMIT 1'
+    );
+    $stmt->execute([':t' => 'users', ':c' => 'photo_url']);
+    $type = strtolower((string)$stmt->fetchColumn());
+    if ($type === 'text') {
+        $pdo->exec('ALTER TABLE `users` MODIFY COLUMN `photo_url` MEDIUMTEXT NULL');
+    }
+}
+
 function run_auto_migrations(): void
 {
     try {
@@ -626,6 +651,11 @@ function run_auto_migrations(): void
     }
     try {
         migration_012_documents_archived_flag();
+    } catch (Throwable $e) {
+        error_log('[migrations] ' . $e->getMessage());
+    }
+    try {
+        migration_013_user_photo_url_mediumtext();
     } catch (Throwable $e) {
         error_log('[migrations] ' . $e->getMessage());
     }

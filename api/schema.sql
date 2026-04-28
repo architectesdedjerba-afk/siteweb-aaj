@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS users (
   license_number      VARCHAR(100) NULL,
   mobile              VARCHAR(50)  NULL,
   address             VARCHAR(200) NULL,
-  photo_url           TEXT NULL,
+  photo_url           MEDIUMTEXT NULL,
   cotisations         JSON NULL,
   created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   archived_at         DATETIME NULL,
