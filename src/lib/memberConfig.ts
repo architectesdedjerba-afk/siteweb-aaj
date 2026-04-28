@@ -24,7 +24,21 @@ export const DEFAULT_VILLES: string[] = Array.from(new Set(TUNISIAN_DELEGATIONS)
 export const VILLES_DOC_PATH = { col: 'config', id: 'villes' } as const;
 export const MEMBER_TYPES_DOC_PATH = { col: 'config', id: 'memberTypes' } as const;
 export const COMMISSION_COLORS_DOC_PATH = { col: 'config', id: 'commissionColors' } as const;
+export const COMMISSION_TYPES_DOC_PATH = { col: 'config', id: 'commissionTypes' } as const;
 export const NEWS_CATEGORIES_DOC_PATH = { col: 'config', id: 'newsCategories' } as const;
+
+/**
+ * Default labels offered for the "Type de commission" field on the
+ * Avis Commissions form. Admin can customise the list from the
+ * Paramètres tab. Stored as plain strings so the UI stays a simple
+ * datalist + free-text input — admins can still type anything.
+ */
+export const DEFAULT_COMMISSION_TYPES: string[] = [
+  'Ordinaire',
+  'Extraordinaire',
+  'Consultative',
+  'Spéciale',
+];
 
 export const DEFAULT_NEWS_CATEGORIES: string[] = [
   'Information générale',
@@ -212,6 +226,34 @@ export async function saveCommissionColors(colors: Record<string, string>): Prom
   await setDoc(
     doc(db, COMMISSION_COLORS_DOC_PATH.col, COMMISSION_COLORS_DOC_PATH.id),
     { colors: cleaned, updatedAt: serverTimestamp() },
+    { merge: true }
+  );
+}
+
+export async function loadCommissionTypes(): Promise<string[]> {
+  try {
+    const snap = await getDoc(
+      doc(db, COMMISSION_TYPES_DOC_PATH.col, COMMISSION_TYPES_DOC_PATH.id)
+    );
+    if (snap.exists()) {
+      const data = snap.data() as { list?: string[] };
+      if (Array.isArray(data.list) && data.list.length > 0) {
+        return data.list.filter((t) => typeof t === 'string' && t.trim().length > 0);
+      }
+    }
+  } catch (err) {
+    console.warn('loadCommissionTypes fallback to defaults:', err);
+  }
+  return [...DEFAULT_COMMISSION_TYPES];
+}
+
+export async function saveCommissionTypes(list: string[]): Promise<void> {
+  const cleaned = Array.from(
+    new Set(list.map((t) => (t || '').trim()).filter((t) => t.length > 0))
+  );
+  await setDoc(
+    doc(db, COMMISSION_TYPES_DOC_PATH.col, COMMISSION_TYPES_DOC_PATH.id),
+    { list: cleaned, updatedAt: serverTimestamp() },
     { merge: true }
   );
 }

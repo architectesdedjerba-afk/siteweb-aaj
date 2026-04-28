@@ -30,5 +30,8 @@ RewriteRule ^.*$ index.php [QSA,L]
 
 # Security headers
 Header always set X-Content-Type-Options "nosniff"
-Header always set X-Frame-Options "DENY"
+# SAMEORIGIN (not DENY) so the SPA can embed its own served files in an
+# <iframe> for in-page previews (e.g. PV PDFs in the Avis Commissions
+# screen). Cross-origin framing remains blocked.
+Header always set X-Frame-Options "SAMEORIGIN"
 Header always set Referrer-Policy "strict-origin-when-cross-origin"
