@@ -467,7 +467,7 @@ function KmzMultiSelect({
         <ChevronDown size={14} />
       </button>
       {open && (
-        <div className="absolute z-[500] mt-1 w-72 border border-aaj-border bg-white shadow-lg rounded overflow-hidden">
+        <div className="absolute z-[1100] mt-1 w-72 border border-aaj-border bg-white shadow-lg rounded overflow-hidden">
           <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-aaj-border bg-slate-50">
             <button
               type="button"
