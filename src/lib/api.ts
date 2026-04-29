@@ -81,6 +81,7 @@ export const api = {
     mobile?: string;
     address?: string;
     cotisations?: Record<string, any>;
+    trialStartedAt?: string;
   }) =>
     http<{ ok: true; user: any; emailSent: boolean; tempPassword?: string }>('/auth/accounts', {
       method: 'POST',

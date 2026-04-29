@@ -233,6 +233,17 @@ function auth_create_account(): void
     $uid = new_id(24);
     $letter = $body['memberTypeLetter'] ?? null;
     if ($letter !== null) $letter = strtoupper(substr((string)$letter, 0, 1));
+
+    // 24h trial flag — when set, the new account starts the trial countdown
+    // on first dashboard use. The column is created on demand for legacy DBs.
+    $trialStartedAt = null;
+    if (!empty($body['trialStartedAt'])) {
+        ensure_column('users', 'trial_started_at', 'DATETIME NULL');
+        ensure_column('users', 'trial_first_used_at', 'DATETIME NULL');
+        $ts = strtotime((string)$body['trialStartedAt']);
+        $trialStartedAt = $ts ? gmdate('Y-m-d H:i:s', $ts) : gmdate('Y-m-d H:i:s');
+    }
+
     $pdo->prepare(
         'INSERT INTO users
             (uid, email, password_hash, must_reset, display_name, first_name, last_name,
@@ -260,6 +271,11 @@ function auth_create_account(): void
         ':address' => $body['address'] ?? null,
         ':cotisations' => isset($body['cotisations']) ? json_encode($body['cotisations'], JSON_UNESCAPED_UNICODE) : null,
     ]);
+
+    if ($trialStartedAt !== null) {
+        $pdo->prepare('UPDATE users SET trial_started_at = ? WHERE uid = ?')
+            ->execute([$trialStartedAt, $uid]);
+    }
 
     $emailSent = send_welcome_email($email, $displayName, $tempPassword);
 

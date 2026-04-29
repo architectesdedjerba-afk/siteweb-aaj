@@ -308,6 +308,61 @@ export const MemberSpacePage = () => {
   const isAdmin = userProfile?.role === 'admin' || isSuperAdmin;
   const isRepresentative = userProfile?.role === 'representative' || isAdmin;
 
+  // 24h trial access — the admin grants the trial when validating an
+  // adhesion request before the cotisation is paid. The countdown starts on
+  // the user's first dashboard load (after the forced password change) and
+  // the welcome reminder keeps showing until the cotisation for the current
+  // year is marked paid by a super-admin. Admins/representatives are never
+  // subjected to the trial gate.
+  const trialState = (() => {
+    if (!userProfile || mustChangePassword) return 'none' as const;
+    if (isAdmin || isRepresentative) return 'none' as const;
+    const startedAtRaw = userProfile.trialStartedAt;
+    if (!startedAtRaw) return 'none' as const;
+    const yearLabel = String(new Date().getFullYear());
+    const currentYearPaid = !!userProfile.cotisations?.[yearLabel]?.paid;
+    if (currentYearPaid) return 'none' as const;
+    const firstUsedRaw = userProfile.trialFirstUsedAt;
+    if (!firstUsedRaw) return 'pre-use' as const;
+    const firstUsedMs = new Date(firstUsedRaw).getTime();
+    if (!Number.isFinite(firstUsedMs)) return 'pre-use' as const;
+    const expiresMs = firstUsedMs + 24 * 60 * 60 * 1000;
+    return Date.now() < expiresMs ? ('in-trial' as const) : ('expired' as const);
+  })();
+  const trialExpiresAtMs =
+    userProfile?.trialFirstUsedAt
+      ? new Date(userProfile.trialFirstUsedAt).getTime() + 24 * 60 * 60 * 1000
+      : null;
+
+  // Stamp trial_first_used_at the first time the dashboard renders for a
+  // user whose admin granted them the 24h trial. Done after the forced
+  // password change so the first-login modal doesn't burn part of the 24h.
+  useEffect(() => {
+    if (trialState !== 'pre-use') return;
+    const uid = userProfile?.uid;
+    if (!uid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await updateDoc(doc(db, 'users', uid), {
+          trialFirstUsedAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        if (!cancelled) console.error('Could not stamp trial first-use:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [trialState, userProfile?.uid]);
+
+  // Welcome / cotisation reminder banner — visible while a trial is active
+  // (pre-use, in-trial). The user can dismiss it for the current session;
+  // it reappears on every fresh login until the cotisation is paid.
+  const [welcomeBannerDismissed, setWelcomeBannerDismissed] = useState(false);
+  const showWelcomeBanner =
+    (trialState === 'pre-use' || trialState === 'in-trial') && !welcomeBannerDismissed;
+
   const can = (key: string): boolean => {
     if (isSuperAdmin) return true;
     return userRole?.permissions?.[key] === true;
@@ -2214,7 +2269,10 @@ export const MemberSpacePage = () => {
     }
   };
 
-  const handleApproveApplication = async (app: any) => {
+  const approveApplication = async (
+    app: any,
+    options: { trial?: boolean } = {}
+  ): Promise<void> => {
     if (!can('members_manage')) return;
     if (!app.birthDate || !app.memberTypeLetter) {
       alert(
@@ -2222,13 +2280,12 @@ export const MemberSpacePage = () => {
       );
       return;
     }
-    if (
-      !window.confirm(
-        `Valider la demande de ${app.firstName || app.fullName} ${app.lastName || ''} ?\nUn compte adhérent sera créé et un email contenant le mot de passe temporaire lui sera envoyé.`
-      )
-    ) {
-      return;
-    }
+    const fullName = `${app.firstName || app.fullName} ${app.lastName || ''}`.trim();
+    const confirmMessage = options.trial
+      ? `Accorder un accès d'essai de 24h à ${fullName} ?\nUn compte adhérent sera créé et un email contenant le mot de passe temporaire lui sera envoyé. Le compteur de 24h démarre à sa première connexion.`
+      : `Valider la demande de ${fullName} ?\nUn compte adhérent sera créé et un email contenant le mot de passe temporaire lui sera envoyé.`;
+    if (!window.confirm(confirmMessage)) return;
+
     setApprovingApplicationId(app.id);
     try {
       const existing = allUsers
@@ -2257,6 +2314,7 @@ export const MemberSpacePage = () => {
         address: app.city,
         role: 'member',
         status: 'active',
+        ...(options.trial ? { trialStartedAt: new Date().toISOString() } : {}),
       });
 
       await updateDoc(doc(db, 'membership_applications', app.id), {
@@ -2273,11 +2331,18 @@ export const MemberSpacePage = () => {
       });
     } catch (err) {
       console.error('Error approving application:', err);
-      alert('Erreur lors de la validation de la demande.');
+      alert(
+        options.trial
+          ? "Erreur lors de l'octroi de l'essai de 24h."
+          : 'Erreur lors de la validation de la demande.'
+      );
     } finally {
       setApprovingApplicationId(null);
     }
   };
+
+  const handleApproveApplication = (app: any) => approveApplication(app, { trial: false });
+  const handleGrantTrialApplication = (app: any) => approveApplication(app, { trial: true });
 
   const handleRejectApplication = async (app: any) => {
     if (!can('members_manage')) return;
@@ -2975,6 +3040,155 @@ export const MemberSpacePage = () => {
                   Se déconnecter
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+        {showWelcomeBanner && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-aaj-dark/80 backdrop-blur-sm" />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="relative bg-white w-full max-w-lg shadow-2xl rounded overflow-hidden"
+            >
+              <div className="p-8 border-b border-aaj-border bg-gradient-to-br from-aaj-soft to-white">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 bg-aaj-royal/10 rounded flex items-center justify-center text-aaj-royal flex-shrink-0">
+                    <Clock size={24} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase tracking-[3px] text-aaj-royal font-black block">
+                      Accès d&apos;essai gratuit — 24h
+                    </span>
+                    <h3 className="text-xl font-black uppercase tracking-tight text-aaj-dark mt-1">
+                      Bienvenue sur la plateforme AAJ
+                    </h3>
+                    {trialExpiresAtMs && trialState === 'in-trial' && (() => {
+                      const remainingMs = trialExpiresAtMs - Date.now();
+                      const hours = Math.max(0, Math.floor(remainingMs / 3_600_000));
+                      const minutes = Math.max(
+                        0,
+                        Math.floor((remainingMs % 3_600_000) / 60_000)
+                      );
+                      return (
+                        <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-aaj-gray">
+                          Temps restant : {hours}h {String(minutes).padStart(2, '0')}min
+                        </p>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+              <div className="p-8 space-y-5 text-sm text-aaj-dark">
+                <p className="leading-relaxed">
+                  Pour continuer après cette période, merci de régler votre cotisation
+                  annuelle :
+                </p>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[2px] text-aaj-royal mb-2">
+                    Trésoriers AAJ
+                  </p>
+                  <ul className="space-y-1.5 text-sm">
+                    <li className="flex items-center gap-2">
+                      <span className="font-bold">M. Salah Najaa</span>
+                      <span className="text-aaj-gray">(Houmt Souk)</span>
+                      <span className="ml-auto inline-flex items-center gap-1 text-aaj-royal font-bold">
+                        <Phone size={12} /> 52 655 382
+                      </span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="font-bold">Mme Oumayma Engadi</span>
+                      <span className="text-aaj-gray">(Midoun)</span>
+                      <span className="ml-auto inline-flex items-center gap-1 text-aaj-royal font-bold">
+                        <Phone size={12} /> 94 053 286
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+                <div className="border border-aaj-border rounded p-4 bg-slate-50/50">
+                  <p className="text-[10px] font-black uppercase tracking-[2px] text-aaj-royal mb-2">
+                    Virement bancaire — BNA
+                  </p>
+                  <p className="font-mono text-sm tracking-wide">
+                    RIB : 03 902 013 0101 106688 12
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWelcomeBannerDismissed(true)}
+                  className="w-full bg-aaj-dark text-white py-3 rounded font-black uppercase tracking-[3px] text-xs hover:bg-aaj-royal transition-all active:scale-[0.98]"
+                >
+                  J&apos;ai compris — accéder à la plateforme
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+        {trialState === 'expired' && (
+          <div className="fixed inset-0 z-[180] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-aaj-dark/95 backdrop-blur-sm" />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="relative bg-white w-full max-w-lg shadow-2xl rounded overflow-hidden"
+            >
+              <div className="p-8 border-b border-aaj-border bg-red-50/60">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 bg-red-100 rounded flex items-center justify-center text-red-600 flex-shrink-0">
+                    <XCircle size={24} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase tracking-[3px] text-red-600 font-black block">
+                      Période d&apos;essai expirée
+                    </span>
+                    <h3 className="text-xl font-black uppercase tracking-tight text-aaj-dark mt-1">
+                      Cotisation requise pour continuer
+                    </h3>
+                    <p className="text-[11px] text-aaj-gray font-bold uppercase tracking-widest mt-2 leading-relaxed">
+                      Vos 24h d&apos;accès d&apos;essai sont écoulées. Réglez votre
+                      cotisation annuelle pour réactiver votre compte.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-8 space-y-5 text-sm text-aaj-dark">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[2px] text-aaj-royal mb-2">
+                    Trésoriers AAJ
+                  </p>
+                  <ul className="space-y-1.5 text-sm">
+                    <li className="flex items-center gap-2">
+                      <span className="font-bold">M. Salah Najaa</span>
+                      <span className="text-aaj-gray">(Houmt Souk)</span>
+                      <span className="ml-auto inline-flex items-center gap-1 text-aaj-royal font-bold">
+                        <Phone size={12} /> 52 655 382
+                      </span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="font-bold">Mme Oumayma Engadi</span>
+                      <span className="text-aaj-gray">(Midoun)</span>
+                      <span className="ml-auto inline-flex items-center gap-1 text-aaj-royal font-bold">
+                        <Phone size={12} /> 94 053 286
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+                <div className="border border-aaj-border rounded p-4 bg-slate-50/50">
+                  <p className="text-[10px] font-black uppercase tracking-[2px] text-aaj-royal mb-2">
+                    Virement bancaire — BNA
+                  </p>
+                  <p className="font-mono text-sm tracking-wide">
+                    RIB : 03 902 013 0101 106688 12
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="w-full bg-aaj-dark text-white py-3 rounded font-black uppercase tracking-[3px] text-xs hover:bg-aaj-royal transition-all active:scale-[0.98] flex items-center justify-center gap-3"
+                >
+                  <LogOut size={16} /> Se déconnecter
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
@@ -4690,7 +4904,7 @@ export const MemberSpacePage = () => {
                                       )}
                                     </div>
                                   </div>
-                                  <div className="flex gap-2 flex-shrink-0">
+                                  <div className="flex gap-2 flex-shrink-0 flex-wrap">
                                     <button
                                       onClick={() => handleApproveApplication(app)}
                                       disabled={approvingApplicationId === app.id}
@@ -4702,6 +4916,15 @@ export const MemberSpacePage = () => {
                                         <CheckCircle2 size={12} />
                                       )}
                                       Valider
+                                    </button>
+                                    <button
+                                      onClick={() => handleGrantTrialApplication(app)}
+                                      disabled={approvingApplicationId === app.id}
+                                      title="Créer le compte avec un accès d'essai de 24h à partir de la première connexion"
+                                      className="px-4 py-2 bg-aaj-royal text-white rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-dark transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    >
+                                      <Clock size={12} />
+                                      Essai 24h
                                     </button>
                                     <button
                                       onClick={() => handleRejectApplication(app)}

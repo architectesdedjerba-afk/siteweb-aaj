@@ -83,6 +83,16 @@ function build_specs(): array
             if (array_key_exists('address', $p))           $row['address'] = $p['address'];
             if (array_key_exists('photoBase64', $p))       $row['photo_url'] = $p['photoBase64'];
             if (array_key_exists('cotisations', $p))       $row['cotisations'] = $p['cotisations'] === null ? null : json_encode($p['cotisations'], JSON_UNESCAPED_UNICODE);
+            foreach (['trialStartedAt' => 'trial_started_at', 'trialFirstUsedAt' => 'trial_first_used_at'] as $jsonKey => $col) {
+                if (!array_key_exists($jsonKey, $p)) continue;
+                ensure_column('users', $col, 'DATETIME NULL');
+                if ($p[$jsonKey] === null || $p[$jsonKey] === '') {
+                    $row[$col] = null;
+                } else {
+                    $ts = strtotime((string)$p[$jsonKey]);
+                    $row[$col] = $ts ? gmdate('Y-m-d H:i:s', $ts) : null;
+                }
+            }
             if (array_key_exists('archivedAt', $p)) {
                 // Self-healing : crée la colonne `users.archived_at` si elle
                 // manque encore (migration automatique au premier archivage).

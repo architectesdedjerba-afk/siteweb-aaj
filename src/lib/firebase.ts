@@ -207,6 +207,7 @@ export async function adminCreateAccount(payload: {
   mobile?: string;
   address?: string;
   cotisations?: Record<string, any>;
+  trialStartedAt?: string;
 }): Promise<{ user: User; emailSent: boolean; tempPassword?: string }> {
   const res = await api.createAccount(payload);
   return {

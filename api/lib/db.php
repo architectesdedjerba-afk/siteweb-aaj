@@ -41,7 +41,9 @@ function ensure_column(string $table, string $column, string $definition): void
     // Prevents this helper from being abused to run arbitrary DDL.
     static $allowed = [
         'users' => [
-            'archived_at' => 'DATETIME NULL',
+            'archived_at'         => 'DATETIME NULL',
+            'trial_started_at'    => 'DATETIME NULL',
+            'trial_first_used_at' => 'DATETIME NULL',
         ],
         'commission_pvs' => [
             'files'       => 'JSON NULL',

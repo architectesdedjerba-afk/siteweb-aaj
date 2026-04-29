@@ -44,6 +44,12 @@ export interface UserProfile {
   photoBase64?: string;
   createdAt?: Timestamp | string;
   cotisations?: Record<string, Cotisation>;
+  // 24h trial access — `trialStartedAt` is set when an admin grants the
+  // trial; `trialFirstUsedAt` is stamped on the first dashboard load and
+  // starts the 24h countdown. Both are null/undefined when no trial is in
+  // play.
+  trialStartedAt?: string | null;
+  trialFirstUsedAt?: string | null;
 }
 
 export type EventType = 'Past' | 'Future';
