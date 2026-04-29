@@ -122,6 +122,7 @@ import { NotificationSettingsPanel } from '../components/NotificationSettingsPan
 import { DocumentThumbnail } from '../components/DocumentThumbnail';
 import { uploadFile, deleteFile } from '../lib/storage';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { PhotoCropperModal } from '../components/PhotoCropperModal';
 import { ChannelApprovals } from '../components/chat/ChannelApprovals';
 import { ChatFloatingWidget } from '../components/chat/ChatFloatingWidget';
 import { useChatBadge } from '../lib/useChat';
@@ -501,52 +502,6 @@ export const MemberSpacePage = () => {
       reader.readAsDataURL(file);
       reader.onload = () => resolve(reader.result as string);
       reader.onerror = (error) => reject(error);
-    });
-  };
-
-  /**
-   * Compresse une image (typiquement une photo de téléphone 3-5 Mo) avant
-   * conversion base64. Redimensionne à `maxDim` px sur le plus grand côté,
-   * exporte en JPEG `quality`. Une photo de profil ressort en général entre
-   * 30 et 150 Ko en base64, ce qui évite de saturer la colonne MySQL et de
-   * balader des Mo dans la liste des membres.
-   */
-  const compressImageToBase64 = (
-    file: File,
-    maxDim = 600,
-    quality = 0.85
-  ): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error('Lecture du fichier impossible.'));
-      reader.onload = () => {
-        const img = new Image();
-        img.onerror = () => reject(new Error('Image illisible.'));
-        img.onload = () => {
-          let { width, height } = img;
-          if (width > maxDim || height > maxDim) {
-            if (width >= height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            reject(new Error('Canvas non disponible.'));
-            return;
-          }
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', quality));
-        };
-        img.src = reader.result as string;
-      };
-      reader.readAsDataURL(file);
     });
   };
 
@@ -977,7 +932,10 @@ export const MemberSpacePage = () => {
     return () => unsubscribe();
   }, [userProfile?.role]);
 
-  const handleUpdatePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Fichier en attente de recadrage. Quand non-null, on affiche la modal.
+  const [pendingCropFile, setPendingCropFile] = useState<File | null>(null);
+
+  const handleUpdatePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!user || !e.target.files?.[0]) return;
     const file = e.target.files[0];
 
@@ -985,20 +943,30 @@ export const MemberSpacePage = () => {
     // pro). 20 Mo en entrée, on compresse ensuite à ~100 Ko.
     if (file.size > 20 * 1024 * 1024) {
       alert("L'image est trop lourde (max 20 Mo en entrée).");
+      e.target.value = '';
       return;
     }
     if (!file.type.startsWith('image/')) {
       alert('Veuillez choisir un fichier image.');
+      e.target.value = '';
       return;
     }
 
+    setPendingCropFile(file);
+    // Reset l'input pour que choisir le même fichier deux fois de suite
+    // re-déclenche bien onChange.
+    e.target.value = '';
+  };
+
+  const handleCroppedPhotoConfirm = async (dataUrl: string) => {
+    if (!user) return;
+    setPendingCropFile(null);
     try {
       setIsSaving(true);
-      const base64 = await compressImageToBase64(file, 600, 0.85);
       await setDoc(
         doc(db, 'users', user.uid),
         {
-          photoBase64: base64,
+          photoBase64: dataUrl,
         },
         { merge: true }
       );
@@ -7538,6 +7506,15 @@ export const MemberSpacePage = () => {
             </main>
           </div>
         </div>
+
+        {/* Photo Cropper Modal — recadrage / zoom avant upload */}
+        <AnimatePresence>
+          <PhotoCropperModal
+            file={pendingCropFile}
+            onCancel={() => setPendingCropFile(null)}
+            onConfirm={handleCroppedPhotoConfirm}
+          />
+        </AnimatePresence>
 
         {/* Profile Change Request Modal */}
         <AnimatePresence>
