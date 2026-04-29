@@ -4758,7 +4758,7 @@ export const MemberSpacePage = () => {
                           <div>
                             <label className="text-[10px] uppercase font-black tracking-widest text-aaj-gray ml-1">
                               {userProfile?.category === 'Architecte'
-                                ? 'Matricule Ordre'
+                                ? 'Matricule AAJ'
                                 : 'Matricule Étudiant'}
                             </label>
                             <p className="mt-2 text-sm font-bold uppercase border-b border-slate-100 pb-2">
@@ -7632,7 +7632,7 @@ export const MemberSpacePage = () => {
                       <div className="space-y-2">
                         <label className="text-[10px] uppercase font-black tracking-widest text-aaj-gray ml-1">
                           {profileForm.category === 'Architecte'
-                            ? 'Matricule Ordre'
+                            ? 'Matricule AAJ'
                             : 'Matricule Étudiant'}
                         </label>
                         <input
