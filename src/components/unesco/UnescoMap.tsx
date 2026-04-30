@@ -179,18 +179,45 @@ export function UnescoMap({
       className: 'unesco-hybrid-osm',
       attribution: OSMFR_ATTRIBUTION,
     });
-    const hybrid = L.layerGroup([hybridImagery, hybridOsmHalo, hybridOsm]);
+    // Hybride is composed of THREE tile layers (satellite + halo + ink),
+    // but we deliberately don't register them as a layerGroup with
+    // L.Control.Layers. When several inner tile layers share a group,
+    // every inner-layer `layeradd` (e.g. on a zoom-triggered tile
+    // reload, or when the marker / GeoJSON layer mutates) flows through
+    // the control's `_onLayerChange`, which can re-run `_update()`
+    // against a transient `map._layers` snapshot and pick the wrong
+    // base layer's radio (we saw it flip to "Plan" on zoom). We
+    // register an empty `hybridSentinel` instead, and toggle the real
+    // tile layers ourselves on `baselayerchange`. The control's tracked
+    // list is then only `[hybridSentinel, imagery, osm]`, so the inner
+    // tiles can come and go without confusing it.
+    const hybridSentinel = L.layerGroup();
+    const setHybridVisible = (on: boolean) => {
+      if (on) {
+        if (!map.hasLayer(hybridImagery)) hybridImagery.addTo(map);
+        if (!map.hasLayer(hybridOsmHalo)) hybridOsmHalo.addTo(map);
+        if (!map.hasLayer(hybridOsm)) hybridOsm.addTo(map);
+      } else {
+        if (map.hasLayer(hybridImagery)) map.removeLayer(hybridImagery);
+        if (map.hasLayer(hybridOsmHalo)) map.removeLayer(hybridOsmHalo);
+        if (map.hasLayer(hybridOsm)) map.removeLayer(hybridOsm);
+      }
+    };
 
     // Default = Hybride (satellite + labels), matching the Google-Maps
     // satellite experience. Users can switch to plain satellite or OSM.
-    hybrid.addTo(map);
+    setHybridVisible(true);
+    hybridSentinel.addTo(map);
     L.control
       .layers(
-        { Hybride: hybrid, Satellite: imagery, Plan: osm },
+        { Hybride: hybridSentinel, Satellite: imagery, Plan: osm },
         {},
         { position: 'topright' }
       )
       .addTo(map);
+    map.on('baselayerchange', (e: L.LayersControlEvent) => {
+      setHybridVisible(e.layer === hybridSentinel);
+    });
 
     map.on('click', (e: L.LeafletMouseEvent) => {
       // When `onZoneClick` is set, zone clicks stop propagation so this
