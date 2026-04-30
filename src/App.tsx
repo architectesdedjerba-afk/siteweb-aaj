@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { AnimatePresence } from "motion/react";
 import { Navbar } from "./components/Navbar";
 import { Footer } from "./components/Footer";
 import { HomePage } from "./pages/Home";
@@ -21,6 +22,7 @@ import { NotFoundPage } from "./pages/NotFound";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { CookieBanner } from "./components/CookieBanner";
+import { ScrollProgress, CustomCursor, LoadingScreen } from "./components/motion";
 import { AuthProvider, useAuth } from "./lib/AuthContext";
 import { NotificationProvider } from "./lib/NotificationContext";
 import { ToastProvider } from "./lib/toast";
@@ -64,13 +66,35 @@ function BackToTopButton() {
     <button
       onClick={goToTop}
       style={{ bottom: `${bottomOffset}px` }}
-      className={`fixed right-6 md:right-8 z-[100] w-12 h-12 bg-aaj-dark text-white border border-white/10 flex items-center justify-center transition-all hover:bg-aaj-royal ${
+      className={`fixed right-6 md:right-8 z-[100] w-12 h-12 bg-aaj-cyan text-aaj-night border border-aaj-cyan flex items-center justify-center transition-all hover:bg-white rounded-full shadow-[0_0_30px_rgba(0,229,255,0.4)] ${
         showTopBtn ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10 pointer-events-none"
       }`}
       aria-label="Retour en haut"
     >
-      <ArrowUp size={20} aria-hidden="true" />
+      <ArrowUp size={18} aria-hidden="true" />
     </button>
+  );
+}
+
+function AnimatedRoutes() {
+  const location = useLocation();
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/aaj" element={<AboutPage />} />
+        <Route path="/evennements" element={<NewsPage />} />
+        <Route path="/partenaires" element={<PartnersPage />} />
+        <Route path="/emplois" element={<JobsPage />} />
+        <Route path="/espace-adherents" element={<MemberSpacePage />} />
+        <Route path="/inscription-evenement" element={<EventRegistrationPage />} />
+        <Route path="/demander-adhesion" element={<MembershipApplicationPage />} />
+        <Route path="/devenir-partenaire" element={<PartnerApplicationPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/mentions-legales" element={<LegalNoticePage />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </AnimatePresence>
   );
 }
 
@@ -81,37 +105,27 @@ export default function App() {
         <ToastProvider>
           <AuthProvider>
             <NotificationProvider>
-            <BrowserRouter>
-            <ScrollToTop />
-            <a
-              href="#main-content"
-              className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[200] focus:bg-aaj-dark focus:text-white focus:px-6 focus:py-3 focus:text-[11px] focus:font-black focus:uppercase focus:tracking-[3px]"
-            >
-              Aller au contenu principal
-            </a>
-            <div className="flex flex-col min-h-screen selection:bg-aaj-royal selection:text-white bg-white">
-              <Navbar />
-              <main id="main-content" className="grow" tabIndex={-1}>
-                <Routes>
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/aaj" element={<AboutPage />} />
-                  <Route path="/evennements" element={<NewsPage />} />
-                  <Route path="/partenaires" element={<PartnersPage />} />
-                  <Route path="/emplois" element={<JobsPage />} />
-                  <Route path="/espace-adherents" element={<MemberSpacePage />} />
-                  <Route path="/inscription-evenement" element={<EventRegistrationPage />} />
-                  <Route path="/demander-adhesion" element={<MembershipApplicationPage />} />
-                  <Route path="/devenir-partenaire" element={<PartnerApplicationPage />} />
-                  <Route path="/reset-password" element={<ResetPasswordPage />} />
-                  <Route path="/mentions-legales" element={<LegalNoticePage />} />
-                  <Route path="*" element={<NotFoundPage />} />
-                </Routes>
-              </main>
-              <Footer />
-              <CookieBanner />
-              <BackToTopButton />
-            </div>
-            </BrowserRouter>
+              <BrowserRouter>
+                <ScrollToTop />
+                <LoadingScreen />
+                <ScrollProgress />
+                <CustomCursor />
+                <a
+                  href="#main-content"
+                  className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[200] focus:bg-aaj-cyan focus:text-aaj-night focus:px-6 focus:py-3 focus:text-[11px] focus:font-black focus:uppercase focus:tracking-[3px] focus:rounded-full"
+                >
+                  Aller au contenu principal
+                </a>
+                <div className="flex flex-col min-h-screen selection:bg-aaj-cyan selection:text-aaj-night bg-aaj-night">
+                  <Navbar />
+                  <main id="main-content" className="grow" tabIndex={-1}>
+                    <AnimatedRoutes />
+                  </main>
+                  <Footer />
+                  <CookieBanner />
+                  <BackToTopButton />
+                </div>
+              </BrowserRouter>
             </NotificationProvider>
           </AuthProvider>
         </ToastProvider>

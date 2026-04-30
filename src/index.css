@@ -1,15 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Montserrat", sans-serif;
+  --font-display: "Space Grotesk", "Montserrat", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", monospace;
 
   --color-aaj-dark: #0A192F;
   --color-aaj-royal: #0047AB;
   --color-aaj-soft: #E6F0FF;
-  --color-aaj-gray: #3F4A5C; /* WCAG AAA ~8.7:1 on white */
-  --color-aaj-gray-light: #6B7689; /* placeholders / tertiary text */
+  --color-aaj-gray: #3F4A5C;
+  --color-aaj-gray-light: #6B7689;
   --color-aaj-border: #D8E2EF;
 
   --color-aaj-success: #059669;
@@ -18,6 +20,21 @@
   --color-aaj-error-soft: #FEE2E2;
   --color-aaj-warning: #D97706;
   --color-aaj-warning-soft: #FEF3C7;
+
+  /* New dark cinematic palette */
+  --color-aaj-night: #050816;
+  --color-aaj-deep: #0A1428;
+  --color-aaj-surface: #0F1B36;
+  --color-aaj-surface-2: #16244A;
+  --color-aaj-line: rgba(255, 255, 255, 0.08);
+  --color-aaj-line-strong: rgba(255, 255, 255, 0.16);
+
+  /* Vibrant accents */
+  --color-aaj-cyan: #00E5FF;
+  --color-aaj-cyan-soft: rgba(0, 229, 255, 0.12);
+  --color-aaj-amber: #FFC371;
+  --color-aaj-magenta: #FF3D71;
+  --color-aaj-electric: #4D7FFF;
 }
 
 @layer base {
@@ -117,6 +134,175 @@
   .reveal.is-visible {
     opacity: 1;
     transform: translateY(0);
+  }
+
+  /* ====================================================================
+     Dark cinematic surface — public pages root.
+     Wrap a page section with `.aaj-dark-surface` to inherit the dark
+     ambient (deep navy with low-contrast scanline + halo).
+     ==================================================================== */
+  .aaj-dark-surface {
+    background-color: var(--color-aaj-night);
+    color: rgba(255, 255, 255, 0.92);
+    position: relative;
+    isolation: isolate;
+  }
+  .aaj-dark-surface::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      radial-gradient(800px 600px at 15% -10%, rgba(0, 229, 255, 0.10), transparent 60%),
+      radial-gradient(900px 700px at 110% 20%, rgba(77, 127, 255, 0.10), transparent 65%),
+      radial-gradient(700px 500px at 50% 110%, rgba(255, 195, 113, 0.06), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .aaj-dark-surface > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Subtle vertical gradient for hero sections within dark surface */
+  .aaj-hero-vignette {
+    background:
+      linear-gradient(180deg, transparent 0%, transparent 70%, rgba(5, 8, 22, 0.9) 100%),
+      radial-gradient(ellipse at 50% 30%, rgba(0, 229, 255, 0.08), transparent 60%);
+  }
+
+  /* Glassy card look for dark mode */
+  .aaj-glass {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
+    border: 1px solid var(--color-aaj-line);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .aaj-glass-strong {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+    border: 1px solid var(--color-aaj-line-strong);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  /* Glow utilities */
+  .aaj-glow-cyan {
+    box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.25), 0 8px 40px -8px rgba(0, 229, 255, 0.4);
+  }
+  .aaj-glow-amber {
+    box-shadow: 0 0 0 1px rgba(255, 195, 113, 0.25), 0 8px 40px -8px rgba(255, 195, 113, 0.4);
+  }
+  .aaj-text-glow-cyan {
+    text-shadow: 0 0 20px rgba(0, 229, 255, 0.5), 0 0 40px rgba(0, 229, 255, 0.25);
+  }
+
+  /* Text gradient utilities */
+  .aaj-text-gradient {
+    background: linear-gradient(135deg, #ffffff 0%, #ffffff 40%, var(--color-aaj-cyan) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+  .aaj-text-gradient-vibrant {
+    background: linear-gradient(135deg, var(--color-aaj-cyan) 0%, #ffffff 50%, var(--color-aaj-amber) 100%);
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: aaj-gradient-shift 8s ease-in-out infinite;
+  }
+  @keyframes aaj-gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+
+  /* Marquee — pure CSS infinite scroll. The wrapper must have overflow:
+     hidden and a fixed track width. Track contains the same content
+     duplicated; we translate -50% over the duration. */
+  .aaj-marquee {
+    overflow: hidden;
+    mask-image: linear-gradient(90deg, transparent 0%, black 8%, black 92%, transparent 100%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 8%, black 92%, transparent 100%);
+  }
+  .aaj-marquee-track {
+    display: flex;
+    width: max-content;
+    animation: aaj-marquee 40s linear infinite;
+  }
+  .aaj-marquee:hover .aaj-marquee-track {
+    animation-play-state: paused;
+  }
+  @keyframes aaj-marquee {
+    from { transform: translate3d(0, 0, 0); }
+    to   { transform: translate3d(-50%, 0, 0); }
+  }
+
+  /* Animated underline reveal on hover */
+  .aaj-link-underline {
+    position: relative;
+    display: inline-block;
+  }
+  .aaj-link-underline::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: -2px;
+    width: 100%;
+    height: 1px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform 0.5s cubic-bezier(0.7, 0, 0.2, 1);
+  }
+  .aaj-link-underline:hover::after {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+
+  /* Tilt card glow follow — driven by JS via --x/--y CSS vars */
+  .aaj-tilt-glow {
+    position: relative;
+    overflow: hidden;
+  }
+  .aaj-tilt-glow::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+      400px circle at var(--x, 50%) var(--y, 50%),
+      rgba(0, 229, 255, 0.15),
+      transparent 40%
+    );
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+  }
+  .aaj-tilt-glow:hover::before {
+    opacity: 1;
+  }
+
+  /* Custom cursor base — only shown on devices with fine pointer */
+  @media (pointer: fine) {
+    .aaj-cursor-active,
+    .aaj-cursor-active * {
+      cursor: none !important;
+    }
+  }
+
+  /* Hide scrollbars only on the body when loading */
+  body.aaj-loading {
+    overflow: hidden;
+  }
+
+  /* Particle canvas: ensure it never blocks pointer events */
+  .aaj-particles-canvas {
+    pointer-events: none;
+  }
+
+  /* Performance: hint compositor on top-level animated nodes */
+  .aaj-will-animate {
+    will-change: transform, opacity;
   }
 
   /* UNESCO map: hybrid layer = Esri satellite + OSM-FR labels.
