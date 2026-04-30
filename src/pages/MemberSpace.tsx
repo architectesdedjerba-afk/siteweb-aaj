@@ -42,7 +42,6 @@ import {
   MessagesSquare,
   Landmark,
   MapPinned,
-  FileCheck,
   ClipboardList,
   Pin,
   PinOff,
@@ -150,9 +149,6 @@ const UnescoMemberView = lazy(() =>
 );
 const UnescoAdminParams = lazy(() =>
   import('../components/unesco/UnescoAdminParams').then((m) => ({ default: m.UnescoAdminParams }))
-);
-const UnescoAdminPermits = lazy(() =>
-  import('../components/unesco/UnescoAdminPermits').then((m) => ({ default: m.UnescoAdminPermits }))
 );
 const UnescoAdminRequests = lazy(() =>
   import('../components/unesco/UnescoAdminRequests').then((m) => ({
@@ -481,7 +477,10 @@ export const MemberSpacePage = () => {
 
   // Lit ?tab=... au chargement (ex: lien depuis le drawer cloche).
   useEffect(() => {
-    const tab = searchParams.get('tab');
+    let tab = searchParams.get('tab');
+    // Backward compat: l'ancien onglet "Instruction UNESCO" a fusionné
+    // dans "Demandes UNESCO". Redirige les liens / bookmarks éventuels.
+    if (tab === 'admin-unesco-permits') tab = 'admin-unesco-requests';
     if (tab && tab !== activeTab) setActiveTab(tab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
@@ -3001,14 +3000,13 @@ export const MemberSpacePage = () => {
               perm: 'unesco_requests_manage',
               badge: unescoPendingReview,
             },
-            {
-              id: 'admin-unesco-permits',
-              icon: <FileCheck size={18} />,
-              label: 'Instruction UNESCO',
-              perm: 'unesco_permits_review',
-              badge: unescoPendingReview,
-            },
-          ].filter((item) => can(item.perm));
+          ].filter((item) =>
+            // Special-case: the merged Demandes UNESCO tab is also accessible
+            // to anyone who held the legacy unesco_permits_review permission.
+            item.id === 'admin-unesco-requests'
+              ? can('unesco_requests_manage') || can('unesco_permits_review')
+              : can(item.perm)
+          );
 
           if (adminItems.length === 0) return null;
 
@@ -7693,29 +7691,16 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'admin-unesco-requests' && can('unesco_requests_manage') && (
-                  <motion.div
-                    key="admin-unesco-requests"
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
-                  >
-                    <Suspense fallback={<TabLoader />}>
-                      <UnescoAdminRequests />
-                    </Suspense>
-                  </motion.div>
-                )}
-
-                {activeTab === 'admin-unesco-permits' &&
-                  (can('unesco_permits_review') || can('unesco_manage')) && (
+                {activeTab === 'admin-unesco-requests' &&
+                  (can('unesco_requests_manage') || can('unesco_permits_review')) && (
                     <motion.div
-                      key="admin-unesco-permits"
+                      key="admin-unesco-requests"
                       initial={{ opacity: 0, x: 10 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -10 }}
                     >
                       <Suspense fallback={<TabLoader />}>
-                        <UnescoAdminPermits />
+                        <UnescoAdminRequests />
                       </Suspense>
                     </motion.div>
                   )}
