@@ -45,7 +45,6 @@ import {
 import {
   useNotifications,
   Notification,
-  NOTIFICATION_TYPES,
   getNotificationTypeMeta,
 } from '../../lib/NotificationContext';
 import { useNavigate } from 'react-router-dom';
