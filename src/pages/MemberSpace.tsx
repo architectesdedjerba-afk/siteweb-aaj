@@ -420,6 +420,46 @@ export const MemberSpacePage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  // Fallback: si l'onglet courant n'est plus accessible (rôle restreint qui
+  // n'a pas dashboard_view, par ex.), bascule sur le premier onglet autorisé.
+  useEffect(() => {
+    if (!userRole) return;
+    const tabPerm: Record<string, string | null> = {
+      dashboard: 'dashboard_view',
+      commissions: 'commissions_view',
+      bibliotheque: 'library_view',
+      documents: 'messages_send',
+      'member-partners': 'partners_view',
+      annuaire: 'annuaire_view',
+      jobs: 'jobs_view',
+      unesco: 'unesco_view',
+      notifications: null,
+      'notifications-prefs': null,
+      settings: null,
+    };
+    const currentPerm = tabPerm[activeTab];
+    if (currentPerm === undefined) return; // admin tabs handled by their own can() guards
+    if (currentPerm === null || can(currentPerm)) return;
+    const fallbackOrder = [
+      'dashboard',
+      'commissions',
+      'bibliotheque',
+      'annuaire',
+      'member-partners',
+      'jobs',
+      'unesco',
+      'documents',
+      'notifications',
+      'settings',
+    ];
+    const next = fallbackOrder.find((id) => {
+      const p = tabPerm[id];
+      return p === null || can(p);
+    });
+    if (next && next !== activeTab) setActiveTab(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, userRole]);
+
   const canReviewUnesco =
     isAdmin ||
     userRole?.permissions?.unesco_manage === true ||
@@ -2789,20 +2829,18 @@ export const MemberSpacePage = () => {
         </div>
         <nav className="space-y-1">
           {[
-            { id: 'dashboard', icon: <LayoutDashboard size={18} />, label: "Vue d'ensemble", badge: 0 },
-            { id: 'commissions', icon: <Building2 size={18} />, label: 'Avis Commissions', badge: 0 },
-            { id: 'bibliotheque', icon: <BookOpen size={18} />, label: 'Bibliothèque', badge: 0 },
-            { id: 'documents', icon: <MessageSquare size={18} />, label: 'Messages Admins', badge: 0 },
-            { id: 'member-partners', icon: <Shield size={18} />, label: 'Nos Partenaires', badge: 0 },
-            { id: 'annuaire', icon: <Users size={18} />, label: 'Annuaire des Membres', badge: 0 },
-            { id: 'jobs', icon: <Briefcase size={18} />, label: 'Emplois & Stages', badge: 0 },
-            ...(can('unesco_view')
-              ? [{ id: 'unesco', icon: <Landmark size={18} />, label: 'Djerba UNESCO', badge: 0 }]
-              : []),
-            { id: 'notifications', icon: <Bell size={18} />, label: 'Notifications', badge: notifUnreadCount },
-            { id: 'notifications-prefs', icon: <SlidersHorizontal size={18} />, label: 'Préférences notifs', badge: 0 },
-            { id: 'settings', icon: <Settings size={18} />, label: 'Mon Profil', badge: 0 },
-          ].map((item) => (
+            { id: 'dashboard', icon: <LayoutDashboard size={18} />, label: "Vue d'ensemble", badge: 0, perm: 'dashboard_view' },
+            { id: 'commissions', icon: <Building2 size={18} />, label: 'Avis Commissions', badge: 0, perm: 'commissions_view' },
+            { id: 'bibliotheque', icon: <BookOpen size={18} />, label: 'Bibliothèque', badge: 0, perm: 'library_view' },
+            { id: 'documents', icon: <MessageSquare size={18} />, label: 'Messages Admins', badge: 0, perm: 'messages_send' },
+            { id: 'member-partners', icon: <Shield size={18} />, label: 'Nos Partenaires', badge: 0, perm: 'partners_view' },
+            { id: 'annuaire', icon: <Users size={18} />, label: 'Annuaire des Membres', badge: 0, perm: 'annuaire_view' },
+            { id: 'jobs', icon: <Briefcase size={18} />, label: 'Emplois & Stages', badge: 0, perm: 'jobs_view' },
+            { id: 'unesco', icon: <Landmark size={18} />, label: 'Djerba UNESCO', badge: 0, perm: 'unesco_view' },
+            { id: 'notifications', icon: <Bell size={18} />, label: 'Notifications', badge: notifUnreadCount, perm: null },
+            { id: 'notifications-prefs', icon: <SlidersHorizontal size={18} />, label: 'Préférences notifs', badge: 0, perm: null },
+            { id: 'settings', icon: <Settings size={18} />, label: 'Mon Profil', badge: 0, perm: null },
+          ].filter((item) => item.perm === null || can(item.perm)).map((item) => (
             <button
               key={item.id}
               onClick={() => selectTab(item.id)}
@@ -3239,7 +3277,7 @@ export const MemberSpacePage = () => {
               }
             >
               <AnimatePresence mode="wait">
-                {activeTab === 'dashboard' && (
+                {activeTab === 'dashboard' && can('dashboard_view') && (
                   <motion.div
                     key="dashboard"
                     initial={{ opacity: 0, x: 10 }}
@@ -3365,7 +3403,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'annuaire' && (
+                {activeTab === 'annuaire' && can('annuaire_view') && (
                   <motion.div
                     key="annuaire"
                     initial={{ opacity: 0, x: 10 }}
@@ -3517,7 +3555,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'commissions' && (
+                {activeTab === 'commissions' && can('commissions_view') && (
                   <motion.div
                     key="commissions"
                     initial={{ opacity: 0, x: 10 }}
@@ -3926,7 +3964,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'bibliotheque' && (
+                {activeTab === 'bibliotheque' && can('library_view') && (
                   <motion.div
                     key="bibliotheque"
                     initial={{ opacity: 0, x: 10 }}
@@ -4456,7 +4494,7 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'documents' && (
+                {activeTab === 'documents' && can('messages_send') && (
                   <motion.div
                     key="documents"
                     initial={{ opacity: 0, x: 10 }}
@@ -7359,7 +7397,7 @@ export const MemberSpacePage = () => {
                     </div>
                   </motion.div>
                 )}
-                {activeTab === 'member-partners' && (
+                {activeTab === 'member-partners' && can('partners_view') && (
                   <motion.div
                     key="member-partners"
                     initial={{ opacity: 0, x: 10 }}
