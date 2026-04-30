@@ -131,6 +131,11 @@ import { UnescoMemberView } from '../components/unesco/UnescoMemberView';
 import { UnescoAdminParams } from '../components/unesco/UnescoAdminParams';
 import { UnescoAdminPermits } from '../components/unesco/UnescoAdminPermits';
 import { UnescoAdminRequests } from '../components/unesco/UnescoAdminRequests';
+import {
+  HomePageEditor,
+  AboutPageEditor,
+  PartnersPageEditor,
+} from '../components/admin/PageContentEditors';
 import { api as apiClient } from '../lib/api';
 import { useNotifications } from '../lib/NotificationContext';
 import { NotificationsList } from '../components/notifications/NotificationsList';
@@ -2910,6 +2915,9 @@ export const MemberSpacePage = () => {
               badge: jobItems.filter((j) => (j.status || 'pending') === 'pending').length,
             },
             { id: 'admin-news', icon: <FileText size={18} />, label: 'Actions & Infos', perm: 'news_manage' },
+            { id: 'admin-page-home', icon: <LayoutDashboard size={18} />, label: "Page d'Accueil", perm: 'config_manage' },
+            { id: 'admin-page-about', icon: <BookOpen size={18} />, label: 'Page À Propos', perm: 'config_manage' },
+            { id: 'admin-page-partners', icon: <Shield size={18} />, label: 'Page Partenaires', perm: 'config_manage' },
             {
               id: 'admin-messages',
               icon: <Mail size={18} />,
@@ -7396,6 +7404,15 @@ export const MemberSpacePage = () => {
                       </div>
                     </div>
                   </motion.div>
+                )}
+                {activeTab === 'admin-page-home' && can('config_manage') && (
+                  <HomePageEditor />
+                )}
+                {activeTab === 'admin-page-about' && can('config_manage') && (
+                  <AboutPageEditor />
+                )}
+                {activeTab === 'admin-page-partners' && can('config_manage') && (
+                  <PartnersPageEditor />
                 )}
                 {activeTab === 'member-partners' && can('partners_view') && (
                   <motion.div

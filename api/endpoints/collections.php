@@ -727,6 +727,10 @@ function build_specs(): array
     //   config/memberTypes  → { list: { letter, label }[] }
     // Each document id is a well-known key; the JSON payload is spread
     // onto the view so the frontend can read item.list directly.
+    //
+    // IDs prefixed with `page` (pageHome, pageAbout, pagePartners, ...) hold
+    // editable content for the public-facing pages and must be readable
+    // without a session. Writes always require super-admin / config_manage.
     $specs['config'] = [
         'table' => 'config',
         'idColumn' => 'id',
@@ -745,7 +749,7 @@ function build_specs(): array
             return ['value' => json_encode($value, JSON_UNESCAPED_UNICODE)];
         },
         'canList' => fn(?array $u) => (bool)$u,
-        'canGet'  => fn(?array $u, array $r) => (bool)$u,
+        'canGet'  => fn(?array $u, array $r) => (bool)$u || (isset($r['id']) && is_string($r['id']) && strpos($r['id'], 'page') === 0),
         'canCreate' => fn(?array $u, array $p) => $u && (is_super_admin($u) || user_has_permission($u, 'config_manage')),
         'canUpdate' => fn(array $u, array $r, array $patch) => is_super_admin($u) || user_has_permission($u, 'config_manage'),
         'canDelete' => fn(array $u, array $r) => is_super_admin($u) || user_has_permission($u, 'config_manage'),

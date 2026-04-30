@@ -3,30 +3,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { ArrowRight, Users, Award, Landmark, Calendar } from "lucide-react";
 import heroImage from "../img/logo.png";
+import { DEFAULT_PAGE_HOME, loadPageHome, type PageHomeContent } from "../lib/pageContent";
 
-const STATS = [
-  { value: "120+", label: "Architectes adhérents", Icon: Users },
-  { value: "15", label: "Années d'engagement", Icon: Award },
-  { value: "30+", label: "Projets patrimoniaux", Icon: Landmark },
-  { value: "50+", label: "Évènements organisés", Icon: Calendar },
-];
+const STAT_ICONS = [Users, Award, Landmark, Calendar];
 
-const EVENTS_PREVIEW = [
-  { d: "22", m: "Oct", t: "Colloque International d'Architecture", loc: "Houmt Souk — 09:00" },
-  { d: "15", m: "Nov", t: "Patrimoine & Modernité", loc: "Centre Culturel de Jerba" },
-];
-
-const SPONSORS = [
-  { name: "Platine", bg: "bg-aaj-dark" },
-  { name: "Or", bg: "bg-aaj-royal" },
-  { name: "Argent", bg: "bg-aaj-gray" },
-];
+const SPONSOR_BACKGROUNDS = ["bg-aaj-dark", "bg-aaj-royal", "bg-aaj-gray"];
 
 export const HomePage = () => {
+  const [content, setContent] = useState<PageHomeContent>(DEFAULT_PAGE_HOME);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadPageHome().then((c) => {
+      if (!cancelled) setContent(c);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="pt-16 min-h-screen bg-white">
       <div className="max-w-7xl mx-auto px-6 md:px-10">
@@ -41,17 +41,15 @@ export const HomePage = () => {
                 className="relative"
               >
                 <span className="text-[10px] uppercase tracking-[4px] text-aaj-royal font-black mb-6 block">
-                  Association des Architectes de Jerba
+                  {content.hero.eyebrow}
                 </span>
                 <h1 className="text-4xl lg:text-5xl xl:text-7xl leading-[0.95] font-black mb-8 text-aaj-dark uppercase tracking-tighter lg:w-[150%] relative z-20 mix-blend-multiply lg:mix-blend-normal text-balance">
-                  L'excellence <br />
-                  <span className="text-aaj-royal">Architecturale</span> <br />
-                  à Djerba.
+                  {content.hero.titleLine1} <br />
+                  <span className="text-aaj-royal">{content.hero.titleHighlight}</span> <br />
+                  {content.hero.titleLine3}
                 </h1>
                 <p className="text-sm lg:text-base leading-relaxed text-aaj-gray mb-10 max-w-sm font-medium uppercase tracking-wide">
-                  L'AAJ s'engage pour une architecture qui respecte l'âme
-                  millénaire de l'île tout en embrassant l'innovation
-                  contemporaine.
+                  {content.hero.subtitle}
                 </p>
 
                 <div className="flex flex-wrap gap-4 mb-8">
@@ -59,7 +57,7 @@ export const HomePage = () => {
                     to="/aaj"
                     className="inline-flex items-center gap-3 bg-aaj-dark text-white px-7 py-4 text-[10px] font-black uppercase tracking-[3px] hover:bg-aaj-royal transition-all active:scale-[0.98]"
                   >
-                    Découvrir l'AAJ <ArrowRight size={14} aria-hidden="true" />
+                    {content.hero.ctaLabel} <ArrowRight size={14} aria-hidden="true" />
                   </Link>
                 </div>
 
@@ -92,22 +90,25 @@ export const HomePage = () => {
 
           {/* Stats Strip */}
           <section className="grid grid-cols-2 md:grid-cols-4 border-b border-aaj-border">
-            {STATS.map(({ value, label, Icon }, i) => (
-              <div
-                key={i}
-                className={`p-8 lg:p-10 flex flex-col items-center text-center ${
-                  i < STATS.length - 1 ? "border-b md:border-b-0 md:border-r border-aaj-border" : ""
-                } ${i < 2 ? "border-b md:border-b-0" : ""}`}
-              >
-                <Icon size={20} className="text-aaj-royal mb-4" aria-hidden="true" />
-                <div className="text-3xl lg:text-4xl font-black text-aaj-dark tracking-tighter mb-2">
-                  {value}
+            {content.stats.map(({ value, label }, i) => {
+              const Icon = STAT_ICONS[i % STAT_ICONS.length];
+              return (
+                <div
+                  key={i}
+                  className={`p-8 lg:p-10 flex flex-col items-center text-center ${
+                    i < content.stats.length - 1 ? "border-b md:border-b-0 md:border-r border-aaj-border" : ""
+                  } ${i < 2 ? "border-b md:border-b-0" : ""}`}
+                >
+                  <Icon size={20} className="text-aaj-royal mb-4" aria-hidden="true" />
+                  <div className="text-3xl lg:text-4xl font-black text-aaj-dark tracking-tighter mb-2">
+                    {value}
+                  </div>
+                  <span className="text-[9px] uppercase tracking-[2px] text-aaj-gray font-bold">
+                    {label}
+                  </span>
                 </div>
-                <span className="text-[9px] uppercase tracking-[2px] text-aaj-gray font-bold">
-                  {label}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </section>
 
           {/* Quick Access Panes */}
@@ -115,10 +116,10 @@ export const HomePage = () => {
             {/* Events Pane */}
             <div className="p-10 lg:p-14 border-b md:border-b-0 md:border-r border-aaj-border flex flex-col">
               <h2 className="text-[10px] uppercase tracking-[3px] text-aaj-gray font-black mb-12 flex items-center gap-4">
-                Évènements <span className="h-px flex-1 bg-aaj-border" aria-hidden="true"></span>
+                {content.eventsTitle} <span className="h-px flex-1 bg-aaj-border" aria-hidden="true"></span>
               </h2>
               <div className="space-y-8 flex-1">
-                {EVENTS_PREVIEW.map((ev, i) => (
+                {content.events.map((ev, i) => (
                   <Link
                     to="/evennements"
                     key={i}
@@ -147,20 +148,20 @@ export const HomePage = () => {
                 to="/evennements"
                 className="mt-12 inline-flex items-center gap-3 text-[10px] font-black text-aaj-royal uppercase tracking-[3px] hover:gap-4 transition-all"
               >
-                Tous les évènements <ArrowRight size={14} aria-hidden="true" />
+                {content.eventsCta} <ArrowRight size={14} aria-hidden="true" />
               </Link>
             </div>
 
             {/* Sponsoring Pane */}
             <div className="p-10 lg:p-14 flex flex-col">
               <h2 className="text-[10px] uppercase tracking-[3px] text-aaj-gray font-black mb-12 flex items-center gap-4">
-                Partenariats <span className="h-px flex-1 bg-aaj-border" aria-hidden="true"></span>
+                {content.sponsorsTitle} <span className="h-px flex-1 bg-aaj-border" aria-hidden="true"></span>
               </h2>
               <div className="grid grid-cols-3 gap-1 mb-10">
-                {SPONSORS.map((s, i) => (
+                {content.sponsors.map((s, i) => (
                   <div
                     key={i}
-                    className={`${s.bg} text-white aspect-square flex flex-col items-center justify-center p-2`}
+                    className={`${SPONSOR_BACKGROUNDS[i % SPONSOR_BACKGROUNDS.length]} text-white aspect-square flex flex-col items-center justify-center p-2`}
                   >
                     <span className="block text-[8px] uppercase tracking-[2px] font-black opacity-60 mb-1">
                       {s.name}
@@ -171,15 +172,14 @@ export const HomePage = () => {
               </div>
 
               <p className="text-[11px] text-aaj-gray font-bold uppercase tracking-widest leading-loose mb-10">
-                L'AAJ remercie ses partenaires pour leur engagement constant
-                envers le développement de notre profession.
+                {content.sponsorsBlurb}
               </p>
 
               <Link
                 to="/partenaires"
                 className="mt-auto inline-flex items-center gap-3 text-[10px] font-black text-aaj-royal uppercase tracking-[3px] hover:gap-4 transition-all"
               >
-                Devenir Partenaire <ArrowRight size={14} aria-hidden="true" />
+                {content.sponsorsCta} <ArrowRight size={14} aria-hidden="true" />
               </Link>
             </div>
           </section>
@@ -189,10 +189,10 @@ export const HomePage = () => {
             <div className="grid grid-cols-1 md:grid-cols-12 gap-10 items-center">
               <div className="md:col-span-8">
                 <span className="text-[10px] uppercase tracking-[3px] text-aaj-royal font-black mb-4 block">
-                  Rejoignez le mouvement
+                  {content.cta.eyebrow}
                 </span>
                 <h2 className="text-3xl md:text-4xl lg:text-5xl font-black uppercase tracking-tighter leading-[0.95] text-balance">
-                  Façonnez l'avenir de l'architecture à Djerba.
+                  {content.cta.title}
                 </h2>
               </div>
               <div className="md:col-span-4 flex flex-col gap-4">
@@ -200,7 +200,7 @@ export const HomePage = () => {
                   to="/devenir-partenaire"
                   className="w-full bg-white text-aaj-dark px-6 py-4 text-[10px] font-black uppercase tracking-[3px] hover:bg-aaj-royal hover:text-white transition-all text-center"
                 >
-                  Devenir partenaire
+                  {content.cta.buttonLabel}
                 </Link>
               </div>
             </div>
