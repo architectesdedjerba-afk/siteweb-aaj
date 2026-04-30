@@ -27,6 +27,48 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!--
+      Self-healing cache-bust : après un déploiement non-atomique sur cPanel,
+      certains navigateurs gardent un index.html en cache pointant vers des
+      hashes d'assets qui n'existent plus → la page rend sans CSS. Ce script
+      détecte l'absence de feuille de style chargée et force un rechargement
+      avec un cache-bust unique. La sentinelle sessionStorage évite la
+      boucle si le serveur est réellement cassé.
+    -->
+    <script>
+      (function () {
+        window.addEventListener('load', function () {
+          setTimeout(function () {
+            var cssLoaded = false;
+            for (var i = 0; i < document.styleSheets.length; i++) {
+              var s = document.styleSheets[i];
+              if (!s.href || s.href.indexOf('/assets/') === -1) continue;
+              try {
+                if (s.cssRules && s.cssRules.length > 0) {
+                  cssLoaded = true;
+                  break;
+                }
+              } catch (e) { /* CORS-protected stylesheet — treat as loaded */
+                cssLoaded = true;
+                break;
+              }
+            }
+            var KEY = 'aaj-asset-recover';
+            if (!cssLoaded) {
+              if (!sessionStorage.getItem(KEY)) {
+                sessionStorage.setItem(KEY, String(Date.now()));
+                var url = new URL(window.location.href);
+                url.searchParams.set('_cb', Date.now().toString(36));
+                window.location.replace(url.toString());
+              }
+            } else {
+              sessionStorage.removeItem(KEY);
+            }
+          }, 600);
+        });
+      })();
+    </script>
   </head>
   <body>
     <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:bg-white focus:text-aaj-dark focus:px-4 focus:py-2 focus:border focus:border-aaj-royal">
