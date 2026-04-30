@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, FormEvent, useRef, Fragment } from 'react';
+import { useState, useEffect, FormEvent, useRef, Fragment, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
@@ -57,6 +57,9 @@ import {
   Clock,
   Calendar,
   EyeOff,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from 'lucide-react';
 import {
   // auth API
@@ -114,7 +117,11 @@ import {
   saveVilles,
   type MemberType,
 } from '../lib/memberConfig';
-import CommissionCalendar from '../components/CommissionCalendar';
+// Composants lourds chargés paresseusement — chacun se retrouve dans son
+// propre chunk, ce qui retire ~plusieurs centaines de KB du bundle initial
+// de MemberSpace. Chaque usage est enveloppé dans un <Suspense
+// fallback={<TabLoader />}> au point d'utilisation.
+const CommissionCalendar = lazy(() => import('../components/CommissionCalendar'));
 import FilePreview, { type PreviewFile } from '../components/FilePreview';
 import { imagesToPdfBlob } from '../lib/imagesToPdf';
 import { NewsPostCard } from '../components/NewsPostCard';
@@ -124,22 +131,65 @@ import { DocumentThumbnail } from '../components/DocumentThumbnail';
 import { uploadFile, deleteFile } from '../lib/storage';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { PhotoCropperModal } from '../components/PhotoCropperModal';
-import { ChannelApprovals } from '../components/chat/ChannelApprovals';
-import { ChatFloatingWidget } from '../components/chat/ChatFloatingWidget';
+const ChannelApprovals = lazy(() =>
+  import('../components/chat/ChannelApprovals').then((m) => ({ default: m.ChannelApprovals }))
+);
+const ChatFloatingWidget = lazy(() =>
+  import('../components/chat/ChatFloatingWidget').then((m) => ({ default: m.ChatFloatingWidget }))
+);
 import { useChatBadge } from '../lib/useChat';
-import { UnescoMemberView } from '../components/unesco/UnescoMemberView';
-import { UnescoAdminParams } from '../components/unesco/UnescoAdminParams';
-import { UnescoAdminPermits } from '../components/unesco/UnescoAdminPermits';
-import { UnescoAdminRequests } from '../components/unesco/UnescoAdminRequests';
-import {
-  HomePageEditor,
-  AboutPageEditor,
-  PartnersPageEditor,
-} from '../components/admin/PageContentEditors';
+const UnescoMemberView = lazy(() =>
+  import('../components/unesco/UnescoMemberView').then((m) => ({ default: m.UnescoMemberView }))
+);
+const UnescoAdminParams = lazy(() =>
+  import('../components/unesco/UnescoAdminParams').then((m) => ({ default: m.UnescoAdminParams }))
+);
+const UnescoAdminPermits = lazy(() =>
+  import('../components/unesco/UnescoAdminPermits').then((m) => ({ default: m.UnescoAdminPermits }))
+);
+const UnescoAdminRequests = lazy(() =>
+  import('../components/unesco/UnescoAdminRequests').then((m) => ({
+    default: m.UnescoAdminRequests,
+  }))
+);
+// Page-content editors (admin only) — tab-gated, also lazy.
+const HomePageEditor = lazy(() =>
+  import('../components/admin/PageContentEditors').then((m) => ({ default: m.HomePageEditor }))
+);
+const AboutPageEditor = lazy(() =>
+  import('../components/admin/PageContentEditors').then((m) => ({ default: m.AboutPageEditor }))
+);
+const PartnersPageEditor = lazy(() =>
+  import('../components/admin/PageContentEditors').then((m) => ({ default: m.PartnersPageEditor }))
+);
 import { api as apiClient } from '../lib/api';
 import { useNotifications } from '../lib/NotificationContext';
-import { NotificationsList } from '../components/notifications/NotificationsList';
-import { NotificationPreferences } from '../components/notifications/NotificationPreferences';
+const NotificationsList = lazy(() =>
+  import('../components/notifications/NotificationsList').then((m) => ({
+    default: m.NotificationsList,
+  }))
+);
+const NotificationPreferences = lazy(() =>
+  import('../components/notifications/NotificationPreferences').then((m) => ({
+    default: m.NotificationPreferences,
+  }))
+);
+
+/**
+ * Petit fallback affiché pendant le chargement async d'un onglet/composant
+ * lourd. Hauteur volontairement modeste — pour les vues chat, calendar,
+ * UNESCO, notif. Le `aria-live="polite"` permet aux lecteurs d'écran
+ * d'annoncer le chargement.
+ */
+const TabLoader = () => (
+  <div
+    className="flex items-center justify-center py-12"
+    role="status"
+    aria-live="polite"
+  >
+    <Loader2 className="animate-spin text-aaj-royal" size={24} aria-label="Chargement" />
+  </div>
+);
 
 /**
  * Format a contact-message reply timestamp. The firebase shim wraps `*At`
@@ -202,6 +252,10 @@ export const MemberSpacePage = () => {
   >('all');
   const [adminMembersCategoryFilter, setAdminMembersCategoryFilter] = useState<string>('all');
   const [adminMembersCityFilter, setAdminMembersCityFilter] = useState<string>('all');
+  const [adminMembersSort, setAdminMembersSort] = useState<{
+    key: 'name' | 'status' | 'cotisation';
+    dir: 'asc' | 'desc';
+  }>({ key: 'name', dir: 'asc' });
   const [profileRequests, setProfileRequests] = useState<any[]>([]);
   const [membershipApplications, setMembershipApplications] = useState<any[]>([]);
   const [approvingApplicationId, setApprovingApplicationId] = useState<string | null>(null);
@@ -3914,20 +3968,22 @@ export const MemberSpacePage = () => {
                           })}
                         </div>
 
-                        <CommissionCalendar
-                          events={commissionPVs.map((pv) => ({
-                            date: pv.date,
-                            town: pv.town,
-                            type: pv.type || '',
-                            count: parseInt(pv.count) || 0,
-                          }))}
-                          colors={commissionColors}
-                          onDayClick={(_date, evs) => {
-                            // If all events on that day belong to the same town, jump to it.
-                            const towns = Array.from(new Set(evs.map((e) => e.town)));
-                            if (towns.length === 1) setSelectedCommune(towns[0]);
-                          }}
-                        />
+                        <Suspense fallback={<TabLoader />}>
+                          <CommissionCalendar
+                            events={commissionPVs.map((pv) => ({
+                              date: pv.date,
+                              town: pv.town,
+                              type: pv.type || '',
+                              count: parseInt(pv.count) || 0,
+                            }))}
+                            colors={commissionColors}
+                            onDayClick={(_date, evs) => {
+                              // If all events on that day belong to the same town, jump to it.
+                              const towns = Array.from(new Set(evs.map((e) => e.town)));
+                              if (towns.length === 1) setSelectedCommune(towns[0]);
+                            }}
+                          />
+                        </Suspense>
                       </div>
                     )}
                   </motion.div>
@@ -4498,7 +4554,11 @@ export const MemberSpacePage = () => {
                         Approuvez ou rejetez les demandes de canaux soumises par les adhérents.
                       </p>
                     </div>
-                    {user?.uid && <ChannelApprovals currentUid={user.uid} />}
+                    {user?.uid && (
+                      <Suspense fallback={<TabLoader />}>
+                        <ChannelApprovals currentUid={user.uid} />
+                      </Suspense>
+                    )}
                   </motion.div>
                 )}
 
@@ -4657,7 +4717,9 @@ export const MemberSpacePage = () => {
                       </div>
                     </div>
                     <div className="rounded-lg border border-aaj-border bg-white overflow-hidden">
-                      <NotificationsList maxHeight="70vh" />
+                      <Suspense fallback={<TabLoader />}>
+                        <NotificationsList maxHeight="70vh" />
+                      </Suspense>
                     </div>
                   </motion.div>
                 )}
@@ -4678,7 +4740,9 @@ export const MemberSpacePage = () => {
                         Adaptez la fréquence et les canaux pour ne recevoir que ce qui compte.
                       </p>
                     </div>
-                    <NotificationPreferences />
+                    <Suspense fallback={<TabLoader />}>
+                      <NotificationPreferences />
+                    </Suspense>
                   </motion.div>
                 )}
 
@@ -5150,6 +5214,29 @@ export const MemberSpacePage = () => {
                         return true;
                       });
 
+                      // Tri par colonne — clic sur l'en-tête.
+                      const compareName = (a: any, b: any) =>
+                        (a.displayName || '').localeCompare(b.displayName || '', 'fr', {
+                          sensitivity: 'base',
+                        });
+                      const statusOrder = (m: any) =>
+                        m.status === 'archived' ? 2 : m.status === 'suspended' ? 1 : 0;
+                      const paidOrder = (m: any) =>
+                        m.cotisations?.[currentYearLabel]?.paid ? 1 : 0;
+                      filteredMembers.sort((a, b) => {
+                        let cmp = 0;
+                        if (adminMembersSort.key === 'name') {
+                          cmp = compareName(a, b);
+                        } else if (adminMembersSort.key === 'status') {
+                          cmp = statusOrder(a) - statusOrder(b);
+                          if (cmp === 0) cmp = compareName(a, b);
+                        } else if (adminMembersSort.key === 'cotisation') {
+                          cmp = paidOrder(a) - paidOrder(b);
+                          if (cmp === 0) cmp = compareName(a, b);
+                        }
+                        return adminMembersSort.dir === 'asc' ? cmp : -cmp;
+                      });
+
                       const totalForView = allUsers.filter((m) =>
                         showArchivedMembers
                           ? m.status === 'archived'
@@ -5168,15 +5255,48 @@ export const MemberSpacePage = () => {
                             <table className="w-full text-left border-collapse">
                               <thead className="bg-slate-50 border-b border-aaj-border">
                                 <tr>
-                                  <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
-                                    Architecte
-                                  </th>
-                                  <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
-                                    Statut
-                                  </th>
-                                  <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
-                                    Cotisation
-                                  </th>
+                                  {(
+                                    [
+                                      { key: 'name', label: 'Architecte' },
+                                      { key: 'status', label: 'Statut' },
+                                      { key: 'cotisation', label: 'Cotisation' },
+                                    ] as const
+                                  ).map(({ key, label }) => {
+                                    const active = adminMembersSort.key === key;
+                                    const Icon = !active
+                                      ? ArrowUpDown
+                                      : adminMembersSort.dir === 'asc'
+                                        ? ArrowUp
+                                        : ArrowDown;
+                                    return (
+                                      <th
+                                        key={key}
+                                        className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray"
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setAdminMembersSort((prev) =>
+                                              prev.key === key
+                                                ? {
+                                                    key,
+                                                    dir: prev.dir === 'asc' ? 'desc' : 'asc',
+                                                  }
+                                                : { key, dir: 'asc' }
+                                            )
+                                          }
+                                          className={`flex items-center gap-1.5 hover:text-aaj-royal transition-colors ${active ? 'text-aaj-royal' : ''}`}
+                                          aria-label={`Trier par ${label}`}
+                                        >
+                                          <span>{label}</span>
+                                          <Icon
+                                            size={12}
+                                            className={active ? 'opacity-100' : 'opacity-40'}
+                                          />
+                                        </button>
+                                      </th>
+                                    );
+                                  })}
                                   <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray text-right">
                                     Actions
                                   </th>
@@ -7406,13 +7526,19 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
                 {activeTab === 'admin-page-home' && can('config_manage') && (
-                  <HomePageEditor />
+                  <Suspense fallback={<TabLoader />}>
+                    <HomePageEditor />
+                  </Suspense>
                 )}
                 {activeTab === 'admin-page-about' && can('config_manage') && (
-                  <AboutPageEditor />
+                  <Suspense fallback={<TabLoader />}>
+                    <AboutPageEditor />
+                  </Suspense>
                 )}
                 {activeTab === 'admin-page-partners' && can('config_manage') && (
-                  <PartnersPageEditor />
+                  <Suspense fallback={<TabLoader />}>
+                    <PartnersPageEditor />
+                  </Suspense>
                 )}
                 {activeTab === 'member-partners' && can('partners_view') && (
                   <motion.div
@@ -7541,7 +7667,9 @@ export const MemberSpacePage = () => {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -10 }}
                   >
-                    <UnescoMemberView canSubmit={can('unesco_permits_submit') || isAdmin} />
+                    <Suspense fallback={<TabLoader />}>
+                      <UnescoMemberView canSubmit={can('unesco_permits_submit') || isAdmin} />
+                    </Suspense>
                   </motion.div>
                 )}
 
@@ -7552,7 +7680,9 @@ export const MemberSpacePage = () => {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -10 }}
                   >
-                    <UnescoAdminParams />
+                    <Suspense fallback={<TabLoader />}>
+                      <UnescoAdminParams />
+                    </Suspense>
                   </motion.div>
                 )}
 
@@ -7563,7 +7693,9 @@ export const MemberSpacePage = () => {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -10 }}
                   >
-                    <UnescoAdminRequests />
+                    <Suspense fallback={<TabLoader />}>
+                      <UnescoAdminRequests />
+                    </Suspense>
                   </motion.div>
                 )}
 
@@ -7575,7 +7707,9 @@ export const MemberSpacePage = () => {
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -10 }}
                     >
-                      <UnescoAdminPermits />
+                      <Suspense fallback={<TabLoader />}>
+                        <UnescoAdminPermits />
+                      </Suspense>
                     </motion.div>
                   )}
               </AnimatePresence>
@@ -9074,8 +9208,12 @@ export const MemberSpacePage = () => {
 
         {/* Floating chat widget — sole bottom-right FAB. The "Contacter
             l'administration" entry now lives in the sidebar to avoid stacking
-            two near-identical messaging icons. */}
-        <ChatFloatingWidget />
+            two near-identical messaging icons. Lazy-loaded : pas de fallback
+            visible (le widget est en bas-droite, son apparition différée
+            d'~50ms est invisible). */}
+        <Suspense fallback={null}>
+          <ChatFloatingWidget />
+        </Suspense>
 
         {/* Overlay sidebar — portaled to <body> so `position: fixed`
             anchors to the viewport regardless of any transform / filter /

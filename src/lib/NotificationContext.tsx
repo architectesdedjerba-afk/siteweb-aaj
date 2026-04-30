@@ -413,6 +413,12 @@ export interface NotificationTypeMeta {
   label: string;
   description: string;
   icon: string;
+  /**
+   * Si d\u00e9fini, l'utilisateur doit poss\u00e9der au moins une de ces permissions
+   * pour que ce type soit pertinent (ex. masquer les notifications admin
+   * aux membres simples). Absence = visible par tous.
+   */
+  requiresAnyPermission?: string[];
 }
 
 export const NOTIFICATION_TYPES: NotificationTypeMeta[] = [
@@ -421,30 +427,35 @@ export const NOTIFICATION_TYPES: NotificationTypeMeta[] = [
     label: 'Demandes d\u2019adh\u00e9sion',
     description: 'Quand une nouvelle demande d\u2019adh\u00e9sion arrive (admin).',
     icon: 'user-plus',
+    requiresAnyPermission: ['members_manage'],
   },
   {
     type: 'partner_application',
     label: 'Demandes de partenariat',
     description: 'Quand un partenaire potentiel se manifeste (admin).',
     icon: 'briefcase',
+    requiresAnyPermission: ['partners_manage'],
   },
   {
     type: 'profile_update_request',
     label: 'Demandes de mise \u00e0 jour de profil',
     description: 'Quand un membre demande \u00e0 modifier son profil (admin).',
     icon: 'user-cog',
+    requiresAnyPermission: ['profileRequests_manage'],
   },
   {
     type: 'contact_message',
     label: 'Messages internes',
     description: 'Nouveau message envoy\u00e9 via le formulaire de contact (admin).',
     icon: 'mail',
+    requiresAnyPermission: ['messages_inbox'],
   },
   {
     type: 'commission_pv',
     label: 'Avis de commission',
     description: 'Nouvel avis de commission technique d\u00e9pos\u00e9.',
     icon: 'clipboard-list',
+    requiresAnyPermission: ['commissions_view'],
   },
   {
     type: 'news',
@@ -457,12 +468,14 @@ export const NOTIFICATION_TYPES: NotificationTypeMeta[] = [
     label: 'Demandes de permis UNESCO',
     description: 'Nouveau dossier UNESCO d\u00e9pos\u00e9 (instructeurs).',
     icon: 'file-check',
+    requiresAnyPermission: ['unesco_permits_review', 'unesco_requests_manage'],
   },
   {
     type: 'unesco_permit_status',
     label: 'Statut de mes permis UNESCO',
     description: 'Avancement des d\u00e9cisions sur vos demandes UNESCO.',
     icon: 'file-check',
+    requiresAnyPermission: ['unesco_permits_submit'],
   },
   {
     type: 'broadcast',
@@ -477,6 +490,22 @@ export const NOTIFICATION_TYPES: NotificationTypeMeta[] = [
     icon: 'info',
   },
 ];
+
+/**
+ * Filtre les types de notifications selon les permissions de l'utilisateur :
+ * un type sans `requiresAnyPermission` est toujours visible ; sinon il faut
+ * matcher au moins une permission. Le super-admin voit tout.
+ */
+export const filterNotificationTypesForUser = (
+  types: NotificationTypeMeta[],
+  ctx: { isSuperAdmin?: boolean; can: (key: string) => boolean },
+): NotificationTypeMeta[] => {
+  if (ctx.isSuperAdmin) return types;
+  return types.filter((t) => {
+    if (!t.requiresAnyPermission || t.requiresAnyPermission.length === 0) return true;
+    return t.requiresAnyPermission.some((p) => ctx.can(p));
+  });
+};
 
 export const getNotificationTypeMeta = (type: string): NotificationTypeMeta => {
   return (
