@@ -162,12 +162,24 @@ export function UnescoMap({
       maxZoom: 19,
       attribution: ESRI_ATTRIBUTION,
     });
+    // The OSM-FR overlay is rendered TWICE: a blurred "halo" pass
+    // (`screen`-blended, light pixels) sits underneath a crisp "ink"
+    // pass (`multiply`-blended, dark pixels). The halo brightens the
+    // satellite around every label so the dark text on top stays
+    // readable on dark imagery (roads, vegetation, shadows) — without
+    // the halo, labels like "Mosquée Midoun" disappear into the
+    // tarmac. CSS for both classes is in `src/index.css`.
+    const hybridOsmHalo = L.tileLayer(OSMFR_URL, {
+      maxZoom: 19,
+      className: 'unesco-hybrid-osm-halo',
+      // Attribution lives on the ink layer below so it's not duplicated.
+    });
     const hybridOsm = L.tileLayer(OSMFR_URL, {
       maxZoom: 19,
       className: 'unesco-hybrid-osm',
       attribution: OSMFR_ATTRIBUTION,
     });
-    const hybrid = L.layerGroup([hybridImagery, hybridOsm]);
+    const hybrid = L.layerGroup([hybridImagery, hybridOsmHalo, hybridOsm]);
 
     // Default = Hybride (satellite + labels), matching the Google-Maps
     // satellite experience. Users can switch to plain satellite or OSM.
