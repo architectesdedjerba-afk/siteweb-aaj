@@ -216,13 +216,16 @@ export function MessageBubble({
             )}
           </div>
 
-          {/* Action toolbar — visible on hover (desktop) and when any popover
-              is open. On touch devices the always-visible mobile button below
-              gives access without hovering. */}
+          {/* Action toolbar — sits as a single pill on the bubble's top edge
+              instead of beside it. Anchored to the bubble's left/right edge
+              (not extending past it) so the third icon ("plus d'actions")
+              cannot be clipped by the popup's right edge, even when an
+              image preview makes the bubble wide. Hover-revealed on
+              desktop. */}
           <div
-            className={`hidden sm:flex absolute top-0 ${
-              isMine ? 'right-full mr-2' : 'left-full ml-2'
-            } items-center gap-1 transition-opacity ${
+            className={`hidden sm:flex absolute -top-3.5 z-10 ${
+              isMine ? 'left-1' : 'right-1'
+            } items-center gap-0.5 bg-white border border-aaj-border rounded-full shadow-md px-1 py-0.5 transition-opacity ${
               showReactions || showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
             }`}
           >
@@ -257,18 +260,19 @@ export function MessageBubble({
             )}
           </div>
 
-          {/* Mobile-only: a single always-visible toggle next to the bubble
-              that opens the action menu. Hover doesn't work on touch devices,
-              so users need a tap-target. */}
+          {/* Mobile-only: a single always-visible toggle on the bubble's
+              top corner. Hover doesn't work on touch devices, so users
+              need a tap-target — placed inside the bubble's horizontal
+              footprint so it never overflows. */}
           <button
             type="button"
             onClick={() => {
               setShowReactions(false);
               setShowMenu((s) => !s);
             }}
-            className={`sm:hidden absolute top-1 ${
-              isMine ? 'right-full mr-1' : 'left-full ml-1'
-            } w-7 h-7 bg-white border border-aaj-border rounded-full flex items-center justify-center text-aaj-gray active:bg-aaj-soft`}
+            className={`sm:hidden absolute -top-2 z-10 ${
+              isMine ? 'left-1' : 'right-1'
+            } w-7 h-7 bg-white border border-aaj-border rounded-full flex items-center justify-center text-aaj-gray shadow-sm active:bg-aaj-soft`}
             aria-label="Actions du message"
           >
             <MoreVertical size={14} />
@@ -377,7 +381,9 @@ function ToolbarButton({
     <button
       type="button"
       onClick={onClick}
-      className="w-7 h-7 bg-white border border-aaj-border rounded-full flex items-center justify-center hover:bg-aaj-soft hover:text-aaj-royal text-aaj-gray transition-colors shadow-sm"
+      // No individual border/shadow — these buttons live inside a single
+      // rounded pill that provides the surrounding affordance.
+      className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-aaj-soft hover:text-aaj-royal text-aaj-gray transition-colors"
       title={title}
       aria-label={ariaLabel}
     >
