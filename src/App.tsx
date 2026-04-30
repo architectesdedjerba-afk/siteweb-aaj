@@ -21,18 +21,25 @@ import { NotFoundPage } from "./pages/NotFound";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { CookieBanner } from "./components/CookieBanner";
-import { AuthProvider } from "./lib/AuthContext";
+import { AuthProvider, useAuth } from "./lib/AuthContext";
 import { NotificationProvider } from "./lib/NotificationContext";
 import { ToastProvider } from "./lib/toast";
 import { I18nProvider } from "./lib/i18n";
 import { ArrowUp } from "lucide-react";
 import { useState, useEffect } from "react";
 
-export default function App() {
+// Chat bubble = bottom-6 (24px) + h-14 (56px) = 80px tall stack starting at
+// the bottom edge. When the user is logged in, the back-to-top button must
+// clear that stack so the two don't overlap in the bottom-right corner.
+const CHAT_BUBBLE_RESERVED = 88; // 80px + 8px gap
+
+function BackToTopButton() {
+  const { user } = useAuth();
   const [showTopBtn, setShowTopBtn] = useState(false);
   const [bottomOffset, setBottomOffset] = useState(32);
 
   useEffect(() => {
+    const baseOffset = user ? CHAT_BUBBLE_RESERVED : 32;
     const handleScroll = () => {
       setShowTopBtn(window.scrollY > 400);
 
@@ -40,16 +47,34 @@ export default function App() {
       if (footer) {
         const rect = footer.getBoundingClientRect();
         const vh = window.innerHeight;
-        setBottomOffset(rect.top < vh ? vh - rect.top + 20 : 32);
+        setBottomOffset(rect.top < vh ? vh - rect.top + 20 : baseOffset);
+      } else {
+        setBottomOffset(baseOffset);
       }
     };
 
+    handleScroll();
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [user]);
 
   const goToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
 
+  return (
+    <button
+      onClick={goToTop}
+      style={{ bottom: `${bottomOffset}px` }}
+      className={`fixed right-6 md:right-8 z-[100] w-12 h-12 bg-aaj-dark text-white border border-white/10 flex items-center justify-center transition-all hover:bg-aaj-royal ${
+        showTopBtn ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10 pointer-events-none"
+      }`}
+      aria-label="Retour en haut"
+    >
+      <ArrowUp size={20} aria-hidden="true" />
+    </button>
+  );
+}
+
+export default function App() {
   return (
     <ErrorBoundary>
       <I18nProvider>
@@ -84,17 +109,7 @@ export default function App() {
               </main>
               <Footer />
               <CookieBanner />
-
-              <button
-                onClick={goToTop}
-                style={{ bottom: `${bottomOffset}px` }}
-                className={`fixed right-6 md:right-8 z-[100] w-12 h-12 bg-aaj-dark text-white border border-white/10 flex items-center justify-center transition-all hover:bg-aaj-royal ${
-                  showTopBtn ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10 pointer-events-none"
-                }`}
-                aria-label="Retour en haut"
-              >
-                <ArrowUp size={20} aria-hidden="true" />
-              </button>
+              <BackToTopButton />
             </div>
             </BrowserRouter>
             </NotificationProvider>
