@@ -34,31 +34,46 @@ import {
 } from 'lucide-react';
 import { api, type UnescoPermit, type UnescoPermitStatus, type UnescoZone } from '../../lib/api';
 import {
-  PERMIT_NEXT_STATUSES,
-  PERMIT_STATUS_LABELS,
+  PermitStatusesProvider,
   StatusBadge,
   formatDate,
   formatDateTime,
+  permitNextStatuses,
+  permitStatusLabel,
+  useFetchPermitStatuses,
+  usePermitStatuses,
   zoneTypeLabel,
 } from './UnescoCommon';
 
 type StatusFilter = 'all' | UnescoPermitStatus;
 
-const STATUS_FILTERS: Array<{ key: StatusFilter; label: string }> = [
-  { key: 'all', label: 'Toutes' },
-  { key: 'submitted', label: 'Déposées' },
-  { key: 'under_review', label: 'En instruction' },
-  { key: 'info_requested', label: 'Complément demandé' },
-  { key: 'decision_pending', label: 'Décision en attente' },
-  { key: 'approved', label: 'Favorables' },
-  { key: 'rejected', label: 'Défavorables' },
-  { key: 'withdrawn', label: 'Retirées' },
-];
-
 type SortKey = 'submittedAt' | 'updatedAt' | 'title' | 'applicant' | 'status' | 'city';
 type SortDir = 'asc' | 'desc';
 
 export function UnescoAdminRequests() {
+  const fetched = useFetchPermitStatuses();
+  return (
+    <PermitStatusesProvider statuses={fetched}>
+      <UnescoAdminRequestsInner />
+    </PermitStatusesProvider>
+  );
+}
+
+function UnescoAdminRequestsInner() {
+  const statuses = usePermitStatuses();
+  // Filter chips are derived from the live status list — admin renames
+  // and custom statuses surface here without code changes. Initial
+  // statuses (drafts) are hidden because this view scopes to deposited
+  // requests only.
+  const statusFilters = useMemo<Array<{ key: StatusFilter; label: string }>>(
+    () => [
+      { key: 'all', label: 'Toutes' },
+      ...statuses
+        .filter((s) => s.isActive && !s.isInitial)
+        .map((s) => ({ key: s.key as StatusFilter, label: s.label })),
+    ],
+    [statuses]
+  );
   const [permits, setPermits] = useState<UnescoPermit[]>([]);
   const [zones, setZones] = useState<UnescoZone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -238,7 +253,7 @@ export function UnescoAdminRequests() {
         p.surfaceSqm,
         p.floorsCount,
         zone?.name || '',
-        PERMIT_STATUS_LABELS[p.status] || p.status,
+        permitStatusLabel(p.status, statuses),
         formatDate(p.submittedAt),
         formatDate(p.updatedAt),
       ].map(escape).join(',');
@@ -307,7 +322,7 @@ export function UnescoAdminRequests() {
       {/* Barre filtres + recherche + actions */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-6">
         <div className="flex flex-wrap gap-2">
-          {STATUS_FILTERS.map((f) => {
+          {statusFilters.map((f) => {
             const count = f.key === 'all' ? permits.length : counts[f.key] || 0;
             return (
               <button
@@ -597,9 +612,8 @@ function RequestDetailDrawer({
 
   if (!permit && !loading) return null;
 
-  const nextChoices: UnescoPermitStatus[] = permit
-    ? PERMIT_NEXT_STATUSES[permit.status] ?? []
-    : [];
+  const statuses = usePermitStatuses();
+  const nextChoices = permit ? permitNextStatuses(permit.status, statuses) : [];
 
   const zone =
     permit && permit.finalZoneId
@@ -782,8 +796,8 @@ function RequestDetailDrawer({
                   >
                     <option value="">— Conserver le statut actuel —</option>
                     {nextChoices.map((s) => (
-                      <option key={s} value={s}>
-                        {PERMIT_STATUS_LABELS[s]}
+                      <option key={s.key} value={s.key}>
+                        {s.label}
                       </option>
                     ))}
                   </select>
