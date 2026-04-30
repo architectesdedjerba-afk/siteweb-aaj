@@ -3277,14 +3277,14 @@ export const MemberSpacePage = () => {
             </motion.div>
           </div>
         )}
-        <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 py-4 md:py-6">
           {/* Header Dashboard */}
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 pb-4 border-b border-aaj-border">
             <div>
               <span className="text-[10px] uppercase tracking-[3px] text-aaj-royal font-black mb-1 block">
                 Espace Privé
               </span>
-              <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tighter leading-none">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-black uppercase tracking-tighter leading-tight break-words">
                 Bienvenue, {userProfile?.displayName || 'Cher Confrère'}
               </h1>
             </div>
@@ -4916,14 +4916,14 @@ export const MemberSpacePage = () => {
                     exit={{ opacity: 0, x: -10 }}
                     className="space-y-8"
                   >
-                    <div className="flex justify-between items-center">
-                      <h2 className="text-2xl font-black uppercase tracking-tighter">
+                    <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 md:gap-4">
+                      <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tighter break-words">
                         Gestion des Adhésions
                       </h2>
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-2 md:gap-3">
                         <button
                           onClick={() => setShowArchivedMembers((v) => !v)}
-                          className={`px-4 py-3 rounded text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border ${
+                          className={`px-3 sm:px-4 py-2.5 sm:py-3 rounded text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border ${
                             showArchivedMembers
                               ? 'bg-slate-200 text-aaj-dark border-slate-300'
                               : 'bg-white text-aaj-gray border-aaj-border hover:text-aaj-dark'
@@ -4940,7 +4940,7 @@ export const MemberSpacePage = () => {
                         </button>
                         <button
                           onClick={() => setIsAddMemberModalOpen(true)}
-                          className="bg-aaj-dark text-white px-6 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center gap-2"
+                          className="bg-aaj-dark text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center gap-2"
                         >
                           <Plus size={14} /> Ajouter un Membre
                         </button>
@@ -5046,10 +5046,10 @@ export const MemberSpacePage = () => {
                     })()}
 
                     {/* Recherche & filtres */}
-                    <div className="border border-aaj-border rounded p-4 bg-slate-50/50 space-y-3">
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                    <div className="border border-aaj-border rounded p-3 sm:p-4 bg-slate-50/50 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
                         {/* Barre de recherche */}
-                        <div className="md:col-span-4 relative">
+                        <div className="sm:col-span-2 lg:col-span-4 relative">
                           <Search
                             size={14}
                             className="absolute left-3 top-1/2 -translate-y-1/2 text-aaj-gray pointer-events-none"
@@ -5073,7 +5073,7 @@ export const MemberSpacePage = () => {
                         </div>
 
                         {/* Filtre statut */}
-                        <div className="md:col-span-2">
+                        <div className="lg:col-span-2">
                           <select
                             value={adminMembersStatusFilter}
                             onChange={(e) =>
@@ -5090,7 +5090,7 @@ export const MemberSpacePage = () => {
                         </div>
 
                         {/* Filtre cotisation */}
-                        <div className="md:col-span-2">
+                        <div className="lg:col-span-2">
                           <select
                             value={adminMembersCotisationFilter}
                             onChange={(e) =>
@@ -5107,7 +5107,7 @@ export const MemberSpacePage = () => {
                         </div>
 
                         {/* Filtre catégorie */}
-                        <div className="md:col-span-2">
+                        <div className="lg:col-span-2">
                           <select
                             value={adminMembersCategoryFilter}
                             onChange={(e) => setAdminMembersCategoryFilter(e.target.value)}
@@ -5123,7 +5123,7 @@ export const MemberSpacePage = () => {
                         </div>
 
                         {/* Filtre ville */}
-                        <div className="md:col-span-2">
+                        <div className="lg:col-span-2">
                           <select
                             value={adminMembersCityFilter}
                             onChange={(e) => setAdminMembersCityFilter(e.target.value)}
@@ -5258,8 +5258,8 @@ export const MemberSpacePage = () => {
                               {showArchivedMembers ? 'membre(s) archivé(s)' : 'membre(s)'}
                             </span>
                           </div>
-                          <div className="border border-aaj-border rounded overflow-hidden">
-                            <table className="w-full text-left border-collapse">
+                          <div className="border border-aaj-border rounded overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[820px]">
                               <thead className="bg-slate-50 border-b border-aaj-border">
                                 <tr>
                                   {(
