@@ -119,22 +119,30 @@
     transform: translateY(0);
   }
 
-  /* UNESCO map: hybrid layer = Esri satellite + OSM-FR labels.
-     OSM-FR is the only provider with rich Djerba data, but it renders
-     everything in light pastels (max RGB ~180 even for "dark" labels)
-     which is brighter than typical Djerba satellite imagery (RGB
-     ~205,185,155). Plain blend modes can't darken features below the
-     sandy satellite tone, so labels stay invisible.
-     The fix: pre-process the OSM tile with `filter` before blending.
-       brightness(0.7) → drops everything below 128
-       contrast(3)    → pushes values away from middle gray (light bg
-                        clamps to 255, dark features clamp to 0)
-       brightness(1.3) → recovers the bg back toward white
-     Net effect: cream bg becomes near-white (satellite shows through
-     unchanged in `multiply`) and feature pixels become near-black
-     (multiply darkens the satellite to make them visible). Verified
-     against actual Djerba tiles at zoom 14-16.
-     The per-tile rule must out-specify Leaflet's built-in
+  /* UNESCO map: Hybride = Esri satellite + OSM-FR overlay rendered
+     as Google-Maps-style "ink + halo".
+     OSM-FR is the only free provider with rich Djerba data, but it
+     ships full-colour rasters (cream bg, red village labels, yellow
+     road fills) — none of which compose readably with the tan
+     satellite. The fix is to BINARIZE the OSM-FR tile before blending
+     so we end up with pure black features on a fully transparent (to
+     `multiply`) background:
+       saturate(0)   → grayscale, so red labels and yellow roads no
+                       longer compete with the sandy satellite by hue
+       brightness(0.8) → shifts cream bg below middle gray
+       contrast(10)  → binarises: anything that was a feature clamps
+                       to 0 (black), anything that was bg clamps to 1
+                       (white)
+     Combined with `mix-blend-mode: multiply`, white bg = identity
+     (satellite shows through unchanged) and black features fully
+     darken the satellite, so labels read like crisp printed ink even
+     on bright sand.
+     A second pass (`unesco-hybrid-osm-halo`) inverts and blurs the
+     same tile and `screen`-blends a soft white halo around every
+     feature, so labels stay readable even on dark imagery (tarmac,
+     vegetation, shadows in palm groves) where pure-black ink would
+     disappear.
+     The per-tile rules must out-specify Leaflet's built-in
      `.leaflet-container img.leaflet-tile { mix-blend-mode: plus-lighter }`
      (specificity 0,2,1) that ships with leaflet.css 1.9 — without
      `.leaflet-container` and `img.leaflet-tile` qualifiers, Leaflet's
@@ -143,23 +151,14 @@
     mix-blend-mode: multiply;
   }
   .leaflet-container .unesco-hybrid-osm img.leaflet-tile {
-    filter: brightness(0.7) contrast(3) brightness(1.3);
+    filter: saturate(0) brightness(0.8) contrast(10);
     mix-blend-mode: multiply;
   }
-  /* Halo pass for the Hybride OSM overlay. Same tile as
-     `.unesco-hybrid-osm`, but inverted + heavily brightened + blurred
-     so feature pixels (text, road outlines) become a soft white glow
-     while the cream bg becomes near-black. Composited with `screen`,
-     the dark bg disappears (screen of black is identity) and the
-     glow brightens the satellite around every label — so the dark
-     text rendered on top by `.unesco-hybrid-osm` reads cleanly even
-     against tarmac, vegetation or shadows. The same specificity hack
-     as above is needed to defeat Leaflet's default `plus-lighter`. */
   .unesco-hybrid-osm-halo {
     mix-blend-mode: screen;
   }
   .leaflet-container .unesco-hybrid-osm-halo img.leaflet-tile {
-    filter: invert(1) brightness(2) contrast(3) blur(2px);
+    filter: invert(1) saturate(0) brightness(2) contrast(6) blur(1.5px);
     mix-blend-mode: screen;
   }
 
