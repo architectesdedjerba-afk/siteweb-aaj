@@ -37,12 +37,13 @@ function handle_unesco(string $method, array $rest): void
     $root = $rest[0] ?? '';
     $sub = array_slice($rest, 1);
     switch ($root) {
-        case 'geojson':       unesco_geojson(); return;
-        case 'kmz-sources':   unesco_kmz_route($method, $sub); return;
-        case 'zones':         unesco_zones_route($method, $sub); return;
-        case 'documents':     unesco_documents_route($method, $sub); return;
-        case 'permits':       unesco_permits_route($method, $sub); return;
-        case 'status-counts': unesco_status_counts(); return;
+        case 'geojson':         unesco_geojson(); return;
+        case 'kmz-sources':     unesco_kmz_route($method, $sub); return;
+        case 'zones':           unesco_zones_route($method, $sub); return;
+        case 'documents':       unesco_documents_route($method, $sub); return;
+        case 'permits':         unesco_permits_route($method, $sub); return;
+        case 'permit-statuses': unesco_statuses_route($method, $sub); return;
+        case 'status-counts':   unesco_status_counts(); return;
     }
     json_error('not_found', 'Endpoint UNESCO inconnu.', 404);
 }
@@ -665,6 +666,240 @@ function unesco_document_delete(string $id): void
 // Permits
 // ----------------------------------------------------------------------
 
+// ----------------------------------------------------------------------
+// Permit statuses (admin-managed list backing every status badge,
+// dropdown and transition rule used in the permit workflow).
+// ----------------------------------------------------------------------
+
+function unesco_status_view(array $row): array
+{
+    $next = [];
+    if (!empty($row['next_statuses'])) {
+        $decoded = json_decode((string)$row['next_statuses'], true);
+        if (is_array($decoded)) {
+            $next = array_values(array_filter($decoded, 'is_string'));
+        }
+    }
+    return [
+        'key' => (string)$row['status_key'],
+        'label' => (string)$row['label'],
+        'colorClass' => (string)$row['color_class'],
+        'sortOrder' => (int)($row['sort_order'] ?? 0),
+        'isSystem' => (bool)($row['is_system'] ?? 0),
+        'isInitial' => (bool)($row['is_initial'] ?? 0),
+        'isTerminal' => (bool)($row['is_terminal'] ?? 0),
+        'allowsApplicantEdit' => (bool)($row['allows_applicant_edit'] ?? 0),
+        'isApplicantWithdrawTarget' => (bool)($row['is_applicant_withdraw_target'] ?? 0),
+        'nextStatuses' => $next,
+        'isActive' => (bool)($row['is_active'] ?? 1),
+        'createdAt' => iso_datetime($row['created_at'] ?? null),
+        'updatedAt' => iso_datetime($row['updated_at'] ?? null),
+    ];
+}
+
+function unesco_statuses_all(): array
+{
+    $rows = db()->query(
+        'SELECT * FROM unesco_permit_statuses ORDER BY sort_order ASC, status_key ASC'
+    )->fetchAll();
+    return array_map('unesco_status_view', $rows);
+}
+
+function unesco_statuses_active_keys(): array
+{
+    $rows = db()->query(
+        'SELECT status_key FROM unesco_permit_statuses WHERE is_active = 1'
+    )->fetchAll();
+    return array_map(fn($r) => (string)$r['status_key'], $rows);
+}
+
+function unesco_status_get(string $key): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM unesco_permit_statuses WHERE status_key = ? LIMIT 1');
+    $stmt->execute([$key]);
+    $row = $stmt->fetch();
+    return $row ? unesco_status_view($row) : null;
+}
+
+function unesco_statuses_route(string $method, array $rest): void
+{
+    $key = $rest[0] ?? null;
+    if ($method === 'GET' && $key === null) { unesco_statuses_list(); return; }
+    if ($method === 'POST' && $key === null) { unesco_status_create(); return; }
+    if ($method === 'PUT' && $key !== null) { unesco_status_update($key); return; }
+    if ($method === 'DELETE' && $key !== null) { unesco_status_delete($key); return; }
+    json_error('method_not_allowed', 'Méthode non autorisée.', 405);
+}
+
+function unesco_statuses_list(): void
+{
+    // Any authenticated UNESCO viewer needs the list to render badges
+    // and the admin filter. Admin gates are on write endpoints.
+    unesco_require_view();
+    $rows = db()->query(
+        'SELECT * FROM unesco_permit_statuses ORDER BY sort_order ASC, status_key ASC'
+    )->fetchAll();
+    json_response(['items' => array_map('unesco_status_view', $rows)]);
+}
+
+function unesco_status_sanitize_key(string $raw): string
+{
+    $k = strtolower(trim($raw));
+    $k = preg_replace('/[^a-z0-9_]+/u', '_', $k) ?? '';
+    $k = trim($k, '_');
+    return $k;
+}
+
+function unesco_status_validate_next(array $next, string $selfKey, ?string $previousKey = null): array
+{
+    $valid = [];
+    $known = [];
+    foreach (db()->query('SELECT status_key FROM unesco_permit_statuses')->fetchAll() as $r) {
+        $known[(string)$r['status_key']] = true;
+    }
+    if ($previousKey !== null) $known[$previousKey] = true; // tolerate self-rename in PUT
+    foreach ($next as $k) {
+        if (!is_string($k)) continue;
+        $k = trim($k);
+        if ($k === '' || $k === $selfKey) continue;
+        if (!isset($known[$k])) continue;
+        $valid[$k] = true;
+    }
+    return array_keys($valid);
+}
+
+function unesco_status_create(): void
+{
+    unesco_require_manage();
+    $body = read_json_body();
+    $rawKey = (string)($body['key'] ?? '');
+    $key = unesco_status_sanitize_key($rawKey);
+    if ($key === '') json_error('key_required', 'Clé technique invalide.', 400);
+
+    $exists = db()->prepare('SELECT 1 FROM unesco_permit_statuses WHERE status_key = ? LIMIT 1');
+    $exists->execute([$key]);
+    if ($exists->fetchColumn()) json_error('key_conflict', 'Cette clé existe déjà.', 409);
+
+    $label = trim((string)($body['label'] ?? ''));
+    if ($label === '') json_error('label_required', 'Libellé obligatoire.', 400);
+
+    $color = trim((string)($body['colorClass'] ?? ''))
+        ?: 'bg-slate-100 text-slate-700 border-slate-200';
+    $sort = isset($body['sortOrder']) ? (int)$body['sortOrder'] : 100;
+    $isActive = array_key_exists('isActive', $body) ? !empty($body['isActive']) : true;
+    // Custom statuses are intermediate by design — semantic flags are
+    // reserved for the system seeds so the PHP state machine invariants
+    // (initial=draft, terminal=approved/rejected/withdrawn) keep holding.
+    $next = is_array($body['nextStatuses'] ?? null) ? $body['nextStatuses'] : [];
+    $next = unesco_status_validate_next($next, $key);
+
+    db()->prepare(
+        'INSERT INTO unesco_permit_statuses
+            (status_key, label, color_class, sort_order, is_system,
+             is_initial, is_terminal, allows_applicant_edit, is_applicant_withdraw_target,
+             next_statuses, is_active)
+         VALUES (?, ?, ?, ?, 0, 0, 0, 0, 0, ?, ?)'
+    )->execute([
+        $key, $label, $color, $sort,
+        json_encode($next, JSON_UNESCAPED_UNICODE),
+        $isActive ? 1 : 0,
+    ]);
+
+    $row = db()->prepare('SELECT * FROM unesco_permit_statuses WHERE status_key = ?');
+    $row->execute([$key]);
+    json_response(['item' => unesco_status_view($row->fetch())]);
+}
+
+function unesco_status_update(string $key): void
+{
+    unesco_require_manage();
+    $cur = db()->prepare('SELECT * FROM unesco_permit_statuses WHERE status_key = ? LIMIT 1');
+    $cur->execute([$key]);
+    $row = $cur->fetch();
+    if (!$row) json_error('not_found', 'Statut introuvable.', 404);
+
+    $body = read_json_body();
+    $sets = [];
+    $args = [];
+
+    if (array_key_exists('label', $body)) {
+        $label = trim((string)$body['label']);
+        if ($label === '') json_error('label_required', 'Libellé obligatoire.', 400);
+        $sets[] = 'label = ?';
+        $args[] = $label;
+    }
+    if (array_key_exists('colorClass', $body)) {
+        $sets[] = 'color_class = ?';
+        $args[] = trim((string)$body['colorClass']) ?: 'bg-slate-100 text-slate-700 border-slate-200';
+    }
+    if (array_key_exists('sortOrder', $body)) {
+        $sets[] = 'sort_order = ?';
+        $args[] = (int)$body['sortOrder'];
+    }
+    if (array_key_exists('isActive', $body)) {
+        // System statuses cannot be deactivated — they are referenced by
+        // the PHP state machine (decision_at trigger, withdrawal target).
+        if ((int)$row['is_system'] === 1 && empty($body['isActive'])) {
+            json_error('forbidden', 'Un statut système ne peut pas être désactivé.', 403);
+        }
+        $sets[] = 'is_active = ?';
+        $args[] = !empty($body['isActive']) ? 1 : 0;
+    }
+    if (array_key_exists('nextStatuses', $body)) {
+        $next = is_array($body['nextStatuses']) ? $body['nextStatuses'] : [];
+        $next = unesco_status_validate_next($next, $key, $key);
+        // Terminal statuses must keep an empty transition list — they
+        // close the case in the workflow.
+        if ((int)$row['is_terminal'] === 1 && $next) {
+            json_error('forbidden', 'Un statut terminal ne peut pas avoir de transition sortante.', 400);
+        }
+        $sets[] = 'next_statuses = ?';
+        $args[] = json_encode($next, JSON_UNESCAPED_UNICODE);
+    }
+
+    if (!$sets) json_error('nothing_to_update', 'Aucun champ modifiable fourni.', 400);
+    $args[] = $key;
+    db()->prepare('UPDATE unesco_permit_statuses SET ' . implode(', ', $sets) . ' WHERE status_key = ?')
+        ->execute($args);
+
+    $cur->execute([$key]);
+    json_response(['item' => unesco_status_view($cur->fetch())]);
+}
+
+function unesco_status_delete(string $key): void
+{
+    unesco_require_manage();
+    $cur = db()->prepare('SELECT * FROM unesco_permit_statuses WHERE status_key = ? LIMIT 1');
+    $cur->execute([$key]);
+    $row = $cur->fetch();
+    if (!$row) json_error('not_found', 'Statut introuvable.', 404);
+    if ((int)$row['is_system'] === 1) {
+        json_error('forbidden', 'Un statut système ne peut pas être supprimé.', 403);
+    }
+
+    // Refuse if any permit currently uses this status — preserves audit trail.
+    $used = db()->prepare('SELECT 1 FROM unesco_permits WHERE status = ? LIMIT 1');
+    $used->execute([$key]);
+    if ($used->fetchColumn()) {
+        json_error('in_use', 'Ce statut est encore utilisé par au moins une demande.', 409);
+    }
+
+    db()->prepare('DELETE FROM unesco_permit_statuses WHERE status_key = ?')->execute([$key]);
+
+    // Strip the deleted key from any remaining transition lists.
+    foreach (db()->query('SELECT status_key, next_statuses FROM unesco_permit_statuses')->fetchAll() as $r) {
+        $list = json_decode((string)($r['next_statuses'] ?? '[]'), true) ?: [];
+        if (!is_array($list)) continue;
+        $clean = array_values(array_filter($list, fn($k) => $k !== $key));
+        if (count($clean) !== count($list)) {
+            db()->prepare('UPDATE unesco_permit_statuses SET next_statuses = ? WHERE status_key = ?')
+                ->execute([json_encode($clean, JSON_UNESCAPED_UNICODE), $r['status_key']]);
+        }
+    }
+
+    json_response(['ok' => true]);
+}
+
 function unesco_permits_route(string $method, array $rest): void
 {
     $id = $rest[0] ?? null;
@@ -716,7 +951,7 @@ function unesco_permits_list(): void
         $where[] = 'applicant_uid = ?';
         $args[] = $user['uid'];
     }
-    if ($status !== '' && in_array($status, ['draft','submitted','under_review','info_requested','decision_pending','approved','rejected','withdrawn'], true)) {
+    if ($status !== '' && unesco_status_get($status) !== null) {
         $where[] = 'status = ?';
         $args[] = $status;
     }
@@ -913,24 +1148,40 @@ function unesco_permit_event_add(string $id): void
     $isInternal = !empty($body['isInternal']);
     $kind = $toStatus ? 'status' : 'note';
 
-    $allowedStatuses = ['submitted','under_review','info_requested','decision_pending','approved','rejected','withdrawn'];
-    if ($toStatus !== null && !in_array($toStatus, $allowedStatuses, true)) {
-        json_error('invalid_status', 'Statut cible invalide.', 400);
+    // The whitelist of valid target statuses comes from the
+    // unesco_permit_statuses table (see migration 014). Only active rows
+    // can be reached via a transition. Initial statuses (draft) cannot
+    // be re-entered through an event — the permit was already created
+    // in that state.
+    $targetDef = $toStatus !== null ? unesco_status_get($toStatus) : null;
+    if ($toStatus !== null) {
+        if ($targetDef === null || empty($targetDef['isActive']) || !empty($targetDef['isInitial'])) {
+            json_error('invalid_status', 'Statut cible invalide.', 400);
+        }
     }
 
-    // Owner-side rules: can only add `withdraw` events while not decided.
+    // Owner-side rules: can only add the configured "withdraw target"
+    // event while the case is still open (non-terminal).
     if (!$ctx['isReviewer']) {
-        if ($toStatus !== 'withdrawn') json_error('forbidden', 'Seul le retrait est autorisé côté demandeur.', 403);
-        if (in_array($row['status'], ['approved','rejected','withdrawn'], true)) {
+        if ($targetDef === null || empty($targetDef['isApplicantWithdrawTarget'])) {
+            json_error('forbidden', 'Seul le retrait est autorisé côté demandeur.', 403);
+        }
+        $currentDef = unesco_status_get((string)$row['status']);
+        if ($currentDef !== null && !empty($currentDef['isTerminal'])) {
             json_error('invalid_state', 'Demande déjà close.', 409);
         }
     }
 
     // Persist status transition.
-    if ($toStatus !== null) {
+    if ($toStatus !== null && $targetDef !== null) {
         $fields = ['status = ?'];
         $args = [$toStatus];
-        if ($toStatus === 'approved' || $toStatus === 'rejected') {
+        // A terminal-but-not-withdrawal status is by definition a final
+        // ruling (avis favorable / défavorable, or any custom verdict an
+        // admin adds later) — stamp decision_at + carry the comment as
+        // the decision note.
+        $isVerdict = !empty($targetDef['isTerminal']) && empty($targetDef['isApplicantWithdrawTarget']);
+        if ($isVerdict) {
             $fields[] = 'decision_at = UTC_TIMESTAMP()';
             if ($message !== '' && empty($body['keepDecisionNote'])) {
                 $fields[] = 'decision_note = ?';
@@ -1245,16 +1496,11 @@ function unesco_permit_notify_applicant(string $permitId, string $toStatus, stri
         $row = $stmt->fetch();
         if (!$row || empty($row['applicant_email'])) return;
 
-        $labels = [
-            'submitted' => 'Demande reçue',
-            'under_review' => 'Demande en cours d\'instruction',
-            'info_requested' => 'Complément d\'information demandé',
-            'decision_pending' => 'Décision en attente',
-            'approved' => 'Avis favorable',
-            'rejected' => 'Avis défavorable',
-            'withdrawn' => 'Demande retirée',
-        ];
-        $label = $labels[$toStatus] ?? $toStatus;
+        // Resolve the display label from the admin-managed status table
+        // so renamed labels (e.g. "Avis favorable" → "Décision positive")
+        // flow into emails and in-app notifications without code changes.
+        $def = unesco_status_get($toStatus);
+        $label = $def['label'] ?? $toStatus;
 
         $vars = [
             'name'        => (string)($row['applicant_name'] ?? ''),
@@ -1268,9 +1514,15 @@ function unesco_permit_notify_applicant(string $permitId, string $toStatus, stri
 
         @send_mail((string)$row['applicant_email'], (string)($row['applicant_name'] ?? ''), $subject, $html);
 
-        // In-app notification au demandeur.
-        $priority = in_array($toStatus, ['approved', 'rejected'], true) ? 'high' : 'normal';
-        $icon = $toStatus === 'approved' ? 'check-circle' : ($toStatus === 'rejected' ? 'x-circle' : 'file-check');
+        // In-app notification au demandeur. Terminal verdicts (any
+        // non-withdrawal terminal status, including custom ones added via
+        // Paramètres) get high priority so they surface above routine
+        // workflow updates.
+        $isVerdict = $def !== null && !empty($def['isTerminal']) && empty($def['isApplicantWithdrawTarget']);
+        $priority = $isVerdict ? 'high' : 'normal';
+        $icon = $toStatus === 'approved'
+            ? 'check-circle'
+            : ($toStatus === 'rejected' ? 'x-circle' : 'file-check');
         create_notification((string)$row['applicant_uid'], [
             'type'     => 'unesco_permit_status',
             'title'    => $label,
@@ -1303,7 +1555,16 @@ function unesco_status_counts(): void
     }
     $counts = [];
     foreach ($stmt->fetchAll() as $r) $counts[$r['status']] = (int)$r['c'];
-    $pendingReview = ($counts['submitted'] ?? 0) + ($counts['under_review'] ?? 0) + ($counts['info_requested'] ?? 0) + ($counts['decision_pending'] ?? 0);
+
+    // "Pending review" = anything that's not the initial state (draft) and
+    // not a terminal state (verdict / withdrawal). Computed from the
+    // admin-managed status table so adding a custom intermediate status
+    // automatically rolls into the badge counter.
+    $pendingReview = 0;
+    foreach (unesco_statuses_all() as $def) {
+        if (!empty($def['isInitial']) || !empty($def['isTerminal'])) continue;
+        $pendingReview += (int)($counts[$def['key']] ?? 0);
+    }
     json_response([
         'counts' => $counts,
         'pendingReview' => $pendingReview,

@@ -47,9 +47,12 @@ import {
   DOCUMENT_CATEGORIES,
   LAND_TYPES,
   PERMIT_MAIN_UPLOAD_SLOTS,
+  PermitStatusesProvider,
   StatusBadge,
   documentCategoryLabel,
   formatDateTime,
+  useFetchPermitStatuses,
+  usePermitStatuses,
   zoneTypeLabel,
 } from './UnescoCommon';
 
@@ -60,6 +63,15 @@ interface UnescoMemberViewProps {
 }
 
 export function UnescoMemberView({ canSubmit }: UnescoMemberViewProps) {
+  const statuses = useFetchPermitStatuses();
+  return (
+    <PermitStatusesProvider statuses={statuses}>
+      <UnescoMemberViewInner canSubmit={canSubmit} />
+    </PermitStatusesProvider>
+  );
+}
+
+function UnescoMemberViewInner({ canSubmit }: UnescoMemberViewProps) {
   const [tab, setTab] = useState<SubTab>('map');
   const [geojson, setGeojson] = useState<UnescoGeoJson | null>(null);
   const [zones, setZones] = useState<UnescoZone[]>([]);
@@ -1441,16 +1453,24 @@ function PermitDetailMember({
       ? zonesById[permit.autoZoneId]
       : null;
 
-  const canEdit = permit.status === 'draft';
-  const canWithdraw = !['approved', 'rejected', 'withdrawn', 'draft'].includes(permit.status);
-  const canDelete = permit.status === 'draft';
+  // Edit/withdraw/delete affordances follow the live status flags so a
+  // renamed "Brouillon" → "Ébauche" or a new applicant-editable
+  // intermediate status keeps working without touching this component.
+  const statusList = usePermitStatuses();
+  const currentDef = statusList.find((s) => s.key === permit.status);
+  const withdrawTarget = statusList.find((s) => s.isApplicantWithdrawTarget && s.isActive);
+  const canEdit = !!currentDef?.allowsApplicantEdit;
+  const canWithdraw =
+    !!withdrawTarget && !!currentDef && !currentDef.isInitial && !currentDef.isTerminal;
+  const canDelete = !!currentDef?.isInitial;
 
   const handleWithdraw = async () => {
+    if (!withdrawTarget) return;
     if (!window.confirm('Retirer cette demande ? Cette action est définitive.')) return;
     setWithdrawing(true);
     try {
       await api.unesco.addPermitEvent(permit.id, {
-        toStatus: 'withdrawn',
+        toStatus: withdrawTarget.key,
         message: 'Demande retirée par le demandeur.',
       });
       await onReload();
@@ -1564,7 +1584,7 @@ function PermitDetailMember({
           <InfoCard
             title="Pièces jointes"
             action={
-              canEdit || permit.status === 'info_requested' ? (
+              canEdit ? (
                 <>
                   <button
                     type="button"
