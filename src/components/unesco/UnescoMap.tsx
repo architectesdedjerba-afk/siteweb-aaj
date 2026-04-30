@@ -148,16 +148,18 @@ export function UnescoMap({
     // (red text like "Guellala"), road numbers, building outlines
     // and parcel boundaries.
     //
-    // The catch: OSM-FR renders everything in light pastels — even
-    // dark-looking labels max around RGB(180, 80, 100), still brighter
-    // than typical satellite (RGB ~205, 185, 155). Plain `multiply`
-    // or `darken` had nothing to bite into. The CSS rule for
-    // `.unesco-hybrid-osm` in index.css applies `filter: brightness(0.7)
-    // contrast(3) brightness(1.3)` to push the cream bg toward white
-    // (so satellite shows through unchanged in `multiply`) and feature
-    // pixels toward black (so labels and roads visibly darken the
-    // satellite). Verified empirically against zoom 14-16 tiles for
-    // the Djerba UNESCO perimeter.
+    // The catch: OSM-FR renders everything in light pastels — red
+    // village labels, yellow road fills, cream background. None of
+    // these compose readably with the tan satellite via plain blend
+    // modes. The CSS rule for `.unesco-hybrid-osm` in index.css
+    // binarises the tile (`saturate(0) brightness(0.8) contrast(10)`)
+    // so features clamp to pure black and bg clamps to pure white,
+    // then `multiply`-blends — black features fully darken the
+    // satellite, white bg shows it through unchanged. A second pass
+    // (`.unesco-hybrid-osm-halo`) inverts and blurs the same tile
+    // and `screen`-blends a soft white halo, so the black labels
+    // stay readable even on dark imagery (tarmac, vegetation,
+    // shadows). End result reads like Google Maps' Hybrid mode.
     const hybridImagery = L.tileLayer(ESRI_IMAGERY_URL, {
       maxZoom: 19,
       attribution: ESRI_ATTRIBUTION,
