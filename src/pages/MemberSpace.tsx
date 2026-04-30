@@ -57,6 +57,9 @@ import {
   Clock,
   Calendar,
   EyeOff,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from 'lucide-react';
 import {
   // auth API
@@ -202,6 +205,10 @@ export const MemberSpacePage = () => {
   >('all');
   const [adminMembersCategoryFilter, setAdminMembersCategoryFilter] = useState<string>('all');
   const [adminMembersCityFilter, setAdminMembersCityFilter] = useState<string>('all');
+  const [adminMembersSort, setAdminMembersSort] = useState<{
+    key: 'name' | 'status' | 'cotisation';
+    dir: 'asc' | 'desc';
+  }>({ key: 'name', dir: 'asc' });
   const [profileRequests, setProfileRequests] = useState<any[]>([]);
   const [membershipApplications, setMembershipApplications] = useState<any[]>([]);
   const [approvingApplicationId, setApprovingApplicationId] = useState<string | null>(null);
@@ -5150,6 +5157,29 @@ export const MemberSpacePage = () => {
                         return true;
                       });
 
+                      // Tri par colonne — clic sur l'en-tête.
+                      const compareName = (a: any, b: any) =>
+                        (a.displayName || '').localeCompare(b.displayName || '', 'fr', {
+                          sensitivity: 'base',
+                        });
+                      const statusOrder = (m: any) =>
+                        m.status === 'archived' ? 2 : m.status === 'suspended' ? 1 : 0;
+                      const paidOrder = (m: any) =>
+                        m.cotisations?.[currentYearLabel]?.paid ? 1 : 0;
+                      filteredMembers.sort((a, b) => {
+                        let cmp = 0;
+                        if (adminMembersSort.key === 'name') {
+                          cmp = compareName(a, b);
+                        } else if (adminMembersSort.key === 'status') {
+                          cmp = statusOrder(a) - statusOrder(b);
+                          if (cmp === 0) cmp = compareName(a, b);
+                        } else if (adminMembersSort.key === 'cotisation') {
+                          cmp = paidOrder(a) - paidOrder(b);
+                          if (cmp === 0) cmp = compareName(a, b);
+                        }
+                        return adminMembersSort.dir === 'asc' ? cmp : -cmp;
+                      });
+
                       const totalForView = allUsers.filter((m) =>
                         showArchivedMembers
                           ? m.status === 'archived'
@@ -5168,15 +5198,48 @@ export const MemberSpacePage = () => {
                             <table className="w-full text-left border-collapse">
                               <thead className="bg-slate-50 border-b border-aaj-border">
                                 <tr>
-                                  <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
-                                    Architecte
-                                  </th>
-                                  <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
-                                    Statut
-                                  </th>
-                                  <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray">
-                                    Cotisation
-                                  </th>
+                                  {(
+                                    [
+                                      { key: 'name', label: 'Architecte' },
+                                      { key: 'status', label: 'Statut' },
+                                      { key: 'cotisation', label: 'Cotisation' },
+                                    ] as const
+                                  ).map(({ key, label }) => {
+                                    const active = adminMembersSort.key === key;
+                                    const Icon = !active
+                                      ? ArrowUpDown
+                                      : adminMembersSort.dir === 'asc'
+                                        ? ArrowUp
+                                        : ArrowDown;
+                                    return (
+                                      <th
+                                        key={key}
+                                        className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray"
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setAdminMembersSort((prev) =>
+                                              prev.key === key
+                                                ? {
+                                                    key,
+                                                    dir: prev.dir === 'asc' ? 'desc' : 'asc',
+                                                  }
+                                                : { key, dir: 'asc' }
+                                            )
+                                          }
+                                          className={`flex items-center gap-1.5 hover:text-aaj-royal transition-colors ${active ? 'text-aaj-royal' : ''}`}
+                                          aria-label={`Trier par ${label}`}
+                                        >
+                                          <span>{label}</span>
+                                          <Icon
+                                            size={12}
+                                            className={active ? 'opacity-100' : 'opacity-40'}
+                                          />
+                                        </button>
+                                      </th>
+                                    );
+                                  })}
                                   <th className="p-4 text-[10px] font-black uppercase tracking-widest text-aaj-gray text-right">
                                     Actions
                                   </th>
