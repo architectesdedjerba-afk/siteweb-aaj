@@ -21,27 +21,33 @@ import {
   AlertCircle,
   Clock,
 } from 'lucide-react';
-import { api, type UnescoPermit, type UnescoPermitStatus, type UnescoZone } from '../../lib/api';
 import {
-  PERMIT_NEXT_STATUSES,
-  PERMIT_STATUS_LABELS,
+  api,
+  type UnescoPermit,
+  type UnescoPermitStatus,
+  type UnescoZone,
+} from '../../lib/api';
+import {
+  PermitStatusesProvider,
   StatusBadge,
   formatDateTime,
+  permitNextStatuses,
+  useFetchPermitStatuses,
+  usePermitStatuses,
   zoneTypeLabel,
 } from './UnescoCommon';
 
-const STATUS_FILTERS: Array<{ key: 'all' | UnescoPermitStatus; label: string }> = [
-  { key: 'all', label: 'Toutes' },
-  { key: 'submitted', label: 'Déposées' },
-  { key: 'under_review', label: 'En instruction' },
-  { key: 'info_requested', label: 'Complément demandé' },
-  { key: 'decision_pending', label: 'Décision en attente' },
-  { key: 'approved', label: 'Favorables' },
-  { key: 'rejected', label: 'Défavorables' },
-  { key: 'withdrawn', label: 'Retirées' },
-];
-
 export function UnescoAdminPermits() {
+  const statuses = useFetchPermitStatuses();
+  return (
+    <PermitStatusesProvider statuses={statuses}>
+      <UnescoAdminPermitsInner />
+    </PermitStatusesProvider>
+  );
+}
+
+function UnescoAdminPermitsInner() {
+  const statuses = usePermitStatuses();
   const [permits, setPermits] = useState<UnescoPermit[]>([]);
   const [zones, setZones] = useState<UnescoZone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +57,18 @@ export function UnescoAdminPermits() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<UnescoPermit | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  // Filter chips are derived from the live status list — admin renames
+  // and custom statuses surface here without code changes.
+  const statusFilters = useMemo<Array<{ key: 'all' | UnescoPermitStatus; label: string }>>(
+    () => [
+      { key: 'all', label: 'Toutes' },
+      ...statuses
+        .filter((s) => s.isActive && !s.isInitial)
+        .map((s) => ({ key: s.key as UnescoPermitStatus, label: s.label })),
+    ],
+    [statuses]
+  );
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -139,7 +157,7 @@ export function UnescoAdminPermits() {
 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
         <div className="flex flex-wrap gap-2">
-          {STATUS_FILTERS.map((f) => {
+          {statusFilters.map((f) => {
             const count = f.key === 'all' ? permits.length : statusCounts[f.key] || 0;
             return (
               <button
@@ -262,7 +280,8 @@ function AdminPermitDetail({
       ? zonesById[permit.autoZoneId]
       : null;
 
-  const nextChoices: UnescoPermitStatus[] = PERMIT_NEXT_STATUSES[permit.status] ?? [];
+  const statuses = usePermitStatuses();
+  const nextChoices = permitNextStatuses(permit.status, statuses);
 
   const submit = async () => {
     if (!nextStatus && !message.trim()) {
@@ -441,8 +460,8 @@ function AdminPermitDetail({
             >
               <option value="">— Conserver le statut actuel —</option>
               {nextChoices.map((s) => (
-                <option key={s} value={s}>
-                  {PERMIT_STATUS_LABELS[s]}
+                <option key={s.key} value={s.key}>
+                  {s.label}
                 </option>
               ))}
             </select>

@@ -23,22 +23,57 @@ import {
   FileText,
   Eye,
   EyeOff,
+  Tag,
 } from 'lucide-react';
-import { api, type UnescoDocument, type UnescoKmzSource, type UnescoZone } from '../../lib/api';
+import {
+  api,
+  type UnescoDocument,
+  type UnescoKmzSource,
+  type UnescoPermitStatusDef,
+  type UnescoZone,
+} from '../../lib/api';
 import {
   DOCUMENT_CATEGORIES,
+  PermitStatusesProvider,
+  StatusBadge,
   documentCategoryLabel,
   formatDateTime,
+  useFetchPermitStatuses,
   zoneTypeLabel,
 } from './UnescoCommon';
 
-type Tab = 'kmz' | 'zones' | 'documents';
+type Tab = 'kmz' | 'zones' | 'documents' | 'statuses';
+
+// Curated palette for the status badge — admins pick a swatch instead
+// of typing raw Tailwind classes. Mirrors the system seeds.
+const STATUS_COLOR_PRESETS: Array<{ label: string; value: string }> = [
+  { label: 'Ardoise', value: 'bg-slate-100 text-slate-700 border-slate-200' },
+  { label: 'Ardoise (atténué)', value: 'bg-slate-100 text-slate-500 border-slate-200' },
+  { label: 'Bleu', value: 'bg-blue-50 text-blue-700 border-blue-200' },
+  { label: 'Indigo', value: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  { label: 'Violet', value: 'bg-purple-50 text-purple-700 border-purple-200' },
+  { label: 'Ambre', value: 'bg-amber-50 text-amber-700 border-amber-200' },
+  { label: 'Émeraude', value: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  { label: 'Rouge', value: 'bg-red-50 text-red-700 border-red-200' },
+  { label: 'Rose', value: 'bg-pink-50 text-pink-700 border-pink-200' },
+  { label: 'Cyan', value: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
+];
 
 export function UnescoAdminParams() {
+  const fetched = useFetchPermitStatuses();
+  return (
+    <PermitStatusesProvider statuses={fetched}>
+      <UnescoAdminParamsInner />
+    </PermitStatusesProvider>
+  );
+}
+
+function UnescoAdminParamsInner() {
   const [tab, setTab] = useState<Tab>('kmz');
   const [sources, setSources] = useState<UnescoKmzSource[]>([]);
   const [zones, setZones] = useState<UnescoZone[]>([]);
   const [documents, setDocuments] = useState<UnescoDocument[]>([]);
+  const [statuses, setStatuses] = useState<UnescoPermitStatusDef[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,14 +81,16 @@ export function UnescoAdminParams() {
     setLoading(true);
     setError(null);
     try {
-      const [kmz, zn, docs] = await Promise.all([
+      const [kmz, zn, docs, st] = await Promise.all([
         api.unesco.listKmzSources(),
         api.unesco.listZones(),
         api.unesco.listDocuments(),
+        api.unesco.listStatuses(),
       ]);
       setSources(kmz.items);
       setZones(zn.items);
       setDocuments(docs.items);
+      setStatuses(st.items);
     } catch (e: any) {
       setError(e?.message || 'Chargement impossible.');
     } finally {
@@ -99,6 +136,12 @@ export function UnescoAdminParams() {
           icon={<FolderOpen size={14} />}
           label={`Documents (${documents.length})`}
         />
+        <TabButton
+          active={tab === 'statuses'}
+          onClick={() => setTab('statuses')}
+          icon={<Tag size={14} />}
+          label={`Statuts (${statuses.length})`}
+        />
       </div>
 
       {loading && (
@@ -118,6 +161,9 @@ export function UnescoAdminParams() {
       )}
       {!loading && !error && tab === 'documents' && (
         <DocumentsPanel documents={documents} onReload={loadAll} />
+      )}
+      {!loading && !error && tab === 'statuses' && (
+        <StatusesPanel statuses={statuses} onReload={loadAll} />
       )}
     </div>
   );
@@ -1048,6 +1094,412 @@ function DocumentForm({
         >
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
           {initial ? 'Enregistrer' : 'Créer'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-4 py-2 border border-aaj-border text-[10px] font-black uppercase tracking-[2px] rounded hover:bg-slate-50"
+        >
+          Annuler
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
+// Permit statuses editor
+// ----------------------------------------------------------------------
+
+function StatusesPanel({
+  statuses,
+  onReload,
+}: {
+  statuses: UnescoPermitStatusDef[];
+  onReload: () => Promise<void>;
+}) {
+  const [isCreating, setIsCreating] = useState(false);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-sm text-aaj-gray">
+            {statuses.length} statut{statuses.length > 1 ? 's' : ''} — pilotez ici les libellés,
+            couleurs et transitions des actions d'instruction.
+          </p>
+          <p className="text-xs text-aaj-gray mt-1 max-w-2xl">
+            Les 8 statuts système (brouillon, déposée, en instruction, complément demandé,
+            décision en attente, avis favorable, avis défavorable, retirée) sont indispensables
+            au workflow et ne peuvent pas être supprimés. Vous pouvez en revanche les renommer,
+            les recolorer et ajuster leurs transitions sortantes. Les statuts personnalisés
+            créés ici s'insèrent comme étapes intermédiaires.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsCreating(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-aaj-royal text-white text-[10px] font-black uppercase tracking-[2px] rounded hover:bg-aaj-dark"
+        >
+          <Plus size={14} /> Nouveau statut
+        </button>
+      </div>
+
+      {isCreating && (
+        <StatusForm
+          allStatuses={statuses}
+          onSave={async (payload) => {
+            await api.unesco.createStatus(payload);
+            await onReload();
+            setIsCreating(false);
+          }}
+          onCancel={() => setIsCreating(false)}
+        />
+      )}
+
+      <ul className="space-y-2">
+        {statuses.map((s) => (
+          <StatusRow
+            key={s.key}
+            status={s}
+            allStatuses={statuses}
+            onReload={onReload}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function StatusRow({
+  status,
+  allStatuses,
+  onReload,
+}: {
+  status: UnescoPermitStatusDef;
+  allStatuses: UnescoPermitStatusDef[];
+  onReload: () => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const remove = async () => {
+    if (!window.confirm(`Supprimer le statut "${status.label}" ?`)) return;
+    setDeleting(true);
+    try {
+      await api.unesco.deleteStatus(status.key);
+      await onReload();
+    } catch (e: any) {
+      window.alert(e?.message || 'Suppression impossible.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <li className="border border-aaj-border rounded p-4 bg-slate-50">
+        <StatusForm
+          initial={status}
+          allStatuses={allStatuses}
+          onSave={async (payload) => {
+            await api.unesco.updateStatus(status.key, payload);
+            await onReload();
+            setEditing(false);
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      </li>
+    );
+  }
+
+  const transitionLabels = status.nextStatuses
+    .map((k) => allStatuses.find((s) => s.key === k)?.label ?? k)
+    .join(' · ');
+
+  return (
+    <li className="border border-aaj-border rounded p-4 flex items-start justify-between gap-3">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <StatusBadge status={status.key} />
+          <code className="text-[10px] text-aaj-gray bg-slate-50 border border-aaj-border px-1.5 py-0.5 rounded">
+            {status.key}
+          </code>
+          {status.isSystem && (
+            <span className="text-[9px] uppercase tracking-[2px] text-aaj-royal bg-aaj-royal/5 border border-aaj-royal/20 px-1.5 py-0.5 rounded font-black">
+              Système
+            </span>
+          )}
+          {status.isInitial && (
+            <span className="text-[9px] uppercase tracking-[2px] text-slate-700 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded font-black">
+              Initial
+            </span>
+          )}
+          {status.isTerminal && (
+            <span className="text-[9px] uppercase tracking-[2px] text-slate-700 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded font-black">
+              Terminal
+            </span>
+          )}
+          {status.isApplicantWithdrawTarget && (
+            <span className="text-[9px] uppercase tracking-[2px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-black">
+              Retrait demandeur
+            </span>
+          )}
+          {!status.isActive && (
+            <span className="text-[9px] uppercase tracking-[2px] text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded font-black">
+              Inactif
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-aaj-gray mt-2">
+          <span className="text-[10px] uppercase tracking-[2px] font-black mr-1">
+            Transitions →
+          </span>
+          {transitionLabels || <em>aucune (statut final)</em>}
+        </p>
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="p-2 hover:bg-slate-100 rounded text-aaj-gray"
+          aria-label="Modifier"
+        >
+          <Pencil size={14} />
+        </button>
+        {!status.isSystem && (
+          <button
+            type="button"
+            onClick={remove}
+            disabled={deleting}
+            className="p-2 hover:bg-red-50 rounded text-red-600 disabled:opacity-50"
+            aria-label="Supprimer"
+          >
+            {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+          </button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function StatusForm({
+  initial,
+  allStatuses,
+  onSave,
+  onCancel,
+}: {
+  initial?: UnescoPermitStatusDef;
+  allStatuses: UnescoPermitStatusDef[];
+  onSave: (payload: {
+    key: string;
+    label: string;
+    colorClass: string;
+    sortOrder: number;
+    isActive: boolean;
+    nextStatuses: string[];
+  }) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const isEdit = !!initial;
+  const [form, setForm] = useState({
+    key: initial?.key ?? '',
+    label: initial?.label ?? '',
+    colorClass: initial?.colorClass ?? STATUS_COLOR_PRESETS[0].value,
+    sortOrder: initial?.sortOrder ?? (allStatuses.length + 1) * 10,
+    isActive: initial?.isActive ?? true,
+    nextStatuses: initial?.nextStatuses ?? [],
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isTerminal = !!initial?.isTerminal;
+  const otherStatuses = useMemo(
+    () =>
+      allStatuses.filter(
+        (s) => s.key !== initial?.key && s.isActive && !s.isInitial
+      ),
+    [allStatuses, initial?.key]
+  );
+
+  const toggleNext = (key: string) => {
+    setForm((prev) => ({
+      ...prev,
+      nextStatuses: prev.nextStatuses.includes(key)
+        ? prev.nextStatuses.filter((k) => k !== key)
+        : [...prev.nextStatuses, key],
+    }));
+  };
+
+  const submit = async () => {
+    if (!form.label.trim()) {
+      setError('Libellé obligatoire.');
+      return;
+    }
+    if (!isEdit && !form.key.trim()) {
+      setError('Clé technique obligatoire.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({
+        key: form.key.trim(),
+        label: form.label.trim(),
+        colorClass: form.colorClass,
+        sortOrder: form.sortOrder,
+        isActive: form.isActive,
+        nextStatuses: form.nextStatuses,
+      });
+    } catch (e: any) {
+      setError(e?.message || 'Enregistrement échoué.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <label className="block">
+          <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
+            Libellé affiché *
+          </span>
+          <input
+            type="text"
+            value={form.label}
+            onChange={(e) => setForm({ ...form, label: e.target.value })}
+            className="w-full px-3 py-2 border border-aaj-border text-sm rounded"
+            placeholder="Ex. En instruction"
+          />
+        </label>
+        <label className="block">
+          <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
+            Clé technique{!isEdit && ' *'}
+          </span>
+          <input
+            type="text"
+            value={form.key}
+            onChange={(e) => setForm({ ...form, key: e.target.value })}
+            disabled={isEdit}
+            className="w-full px-3 py-2 border border-aaj-border text-sm rounded font-mono disabled:bg-slate-100 disabled:text-aaj-gray"
+            placeholder="ex. avis_complementaire"
+          />
+          {isEdit && (
+            <p className="text-[10px] text-aaj-gray mt-1">
+              La clé est immuable une fois le statut créé.
+            </p>
+          )}
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <label className="block">
+          <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
+            Couleur du badge
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {STATUS_COLOR_PRESETS.map((c) => {
+              const active = form.colorClass === c.value;
+              return (
+                <button
+                  type="button"
+                  key={c.value}
+                  onClick={() => setForm({ ...form, colorClass: c.value })}
+                  className={`px-2.5 py-1 border rounded text-[10px] uppercase tracking-widest font-black ${c.value} ${active ? 'ring-2 ring-aaj-dark ring-offset-1' : ''}`}
+                  title={c.label}
+                >
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
+              Ordre d'affichage
+            </span>
+            <input
+              type="number"
+              value={form.sortOrder}
+              onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) || 0 })}
+              className="w-full px-3 py-2 border border-aaj-border text-sm rounded"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
+              Visibilité
+            </span>
+            <select
+              value={form.isActive ? 'yes' : 'no'}
+              onChange={(e) => setForm({ ...form, isActive: e.target.value === 'yes' })}
+              disabled={initial?.isSystem && form.isActive}
+              className="w-full px-3 py-2 border border-aaj-border text-sm rounded bg-white disabled:bg-slate-100"
+            >
+              <option value="yes">Actif</option>
+              <option value="no" disabled={initial?.isSystem}>
+                Inactif
+              </option>
+            </select>
+            {initial?.isSystem && (
+              <p className="text-[10px] text-aaj-gray mt-1">
+                Statut système : reste toujours actif.
+              </p>
+            )}
+          </label>
+        </div>
+      </div>
+
+      <div className="block">
+        <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
+          Transitions sortantes autorisées
+        </span>
+        {isTerminal ? (
+          <p className="text-xs text-aaj-gray italic">
+            Statut terminal : aucune transition sortante. La demande est close lorsqu'elle
+            atteint cet état.
+          </p>
+        ) : otherStatuses.length === 0 ? (
+          <p className="text-xs text-aaj-gray">Aucun autre statut à connecter pour le moment.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {otherStatuses.map((s) => {
+              const checked = form.nextStatuses.includes(s.key);
+              return (
+                <label
+                  key={s.key}
+                  className={`inline-flex items-center gap-2 px-2.5 py-1 border rounded text-[10px] uppercase tracking-widest font-black cursor-pointer ${
+                    checked
+                      ? 'bg-aaj-dark text-white border-aaj-dark'
+                      : 'bg-white text-aaj-gray border-aaj-border hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="hidden"
+                    checked={checked}
+                    onChange={() => toggleNext(s.key)}
+                  />
+                  {s.label}
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {error && <div className="text-sm text-red-600">{error}</div>}
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={saving}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-aaj-royal text-white text-[10px] font-black uppercase tracking-[2px] rounded hover:bg-aaj-dark disabled:opacity-50"
+        >
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+          {isEdit ? 'Enregistrer' : 'Créer'}
         </button>
         <button
           type="button"

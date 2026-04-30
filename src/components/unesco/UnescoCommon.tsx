@@ -5,40 +5,97 @@
  * Shared UI primitives + helpers used across the UNESCO feature.
  */
 
-import type { UnescoPermitStatus } from '../../lib/api';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { api, type UnescoPermitStatus, type UnescoPermitStatusDef } from '../../lib/api';
 
-export const PERMIT_STATUS_LABELS: Record<UnescoPermitStatus, string> = {
-  draft: 'Brouillon',
-  submitted: 'Déposée',
-  under_review: 'En instruction',
-  info_requested: 'Complément demandé',
-  decision_pending: 'Décision en attente',
-  approved: 'Avis favorable',
-  rejected: 'Avis défavorable',
-  withdrawn: 'Retirée',
-};
+// Fallback definitions used until the live list from the API resolves
+// (or if the call fails). Mirrors the seed in migration 014 so badges
+// and dropdowns render with the historical look on first paint.
+export const DEFAULT_PERMIT_STATUSES: UnescoPermitStatusDef[] = [
+  { key: 'draft',            label: 'Brouillon',           colorClass: 'bg-slate-100 text-slate-700 border-slate-200',     sortOrder: 10, isSystem: true, isInitial: true,  isTerminal: false, allowsApplicantEdit: true,  isApplicantWithdrawTarget: false, nextStatuses: ['submitted', 'withdrawn'],                                                isActive: true, createdAt: null, updatedAt: null },
+  { key: 'submitted',        label: 'Déposée',             colorClass: 'bg-blue-50 text-blue-700 border-blue-200',         sortOrder: 20, isSystem: true, isInitial: false, isTerminal: false, allowsApplicantEdit: false, isApplicantWithdrawTarget: false, nextStatuses: ['under_review', 'info_requested', 'rejected', 'withdrawn'],               isActive: true, createdAt: null, updatedAt: null },
+  { key: 'under_review',     label: 'En instruction',      colorClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',   sortOrder: 30, isSystem: true, isInitial: false, isTerminal: false, allowsApplicantEdit: false, isApplicantWithdrawTarget: false, nextStatuses: ['info_requested', 'decision_pending', 'approved', 'rejected', 'withdrawn'],isActive: true, createdAt: null, updatedAt: null },
+  { key: 'info_requested',   label: 'Complément demandé',  colorClass: 'bg-amber-50 text-amber-700 border-amber-200',      sortOrder: 40, isSystem: true, isInitial: false, isTerminal: false, allowsApplicantEdit: true,  isApplicantWithdrawTarget: false, nextStatuses: ['under_review', 'decision_pending', 'rejected', 'withdrawn'],             isActive: true, createdAt: null, updatedAt: null },
+  { key: 'decision_pending', label: 'Décision en attente', colorClass: 'bg-purple-50 text-purple-700 border-purple-200',   sortOrder: 50, isSystem: true, isInitial: false, isTerminal: false, allowsApplicantEdit: false, isApplicantWithdrawTarget: false, nextStatuses: ['approved', 'rejected', 'info_requested'],                                isActive: true, createdAt: null, updatedAt: null },
+  { key: 'approved',         label: 'Avis favorable',      colorClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',sortOrder: 60, isSystem: true, isInitial: false, isTerminal: true,  allowsApplicantEdit: false, isApplicantWithdrawTarget: false, nextStatuses: [],                                                                       isActive: true, createdAt: null, updatedAt: null },
+  { key: 'rejected',         label: 'Avis défavorable',    colorClass: 'bg-red-50 text-red-700 border-red-200',            sortOrder: 70, isSystem: true, isInitial: false, isTerminal: true,  allowsApplicantEdit: false, isApplicantWithdrawTarget: false, nextStatuses: [],                                                                       isActive: true, createdAt: null, updatedAt: null },
+  { key: 'withdrawn',        label: 'Retirée',             colorClass: 'bg-slate-100 text-slate-500 border-slate-200',     sortOrder: 80, isSystem: true, isInitial: false, isTerminal: true,  allowsApplicantEdit: false, isApplicantWithdrawTarget: true,  nextStatuses: [],                                                                       isActive: true, createdAt: null, updatedAt: null },
+];
 
-export const PERMIT_STATUS_COLORS: Record<UnescoPermitStatus, string> = {
-  draft: 'bg-slate-100 text-slate-700 border-slate-200',
-  submitted: 'bg-blue-50 text-blue-700 border-blue-200',
-  under_review: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-  info_requested: 'bg-amber-50 text-amber-700 border-amber-200',
-  decision_pending: 'bg-purple-50 text-purple-700 border-purple-200',
-  approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  rejected: 'bg-red-50 text-red-700 border-red-200',
-  withdrawn: 'bg-slate-100 text-slate-500 border-slate-200',
-};
+const PermitStatusesContext = createContext<UnescoPermitStatusDef[]>(DEFAULT_PERMIT_STATUSES);
 
-export const PERMIT_NEXT_STATUSES: Record<UnescoPermitStatus, UnescoPermitStatus[]> = {
-  draft: ['submitted', 'withdrawn'],
-  submitted: ['under_review', 'info_requested', 'rejected', 'withdrawn'],
-  under_review: ['info_requested', 'decision_pending', 'approved', 'rejected', 'withdrawn'],
-  info_requested: ['under_review', 'decision_pending', 'rejected', 'withdrawn'],
-  decision_pending: ['approved', 'rejected', 'info_requested'],
-  approved: [],
-  rejected: [],
-  withdrawn: [],
-};
+export function PermitStatusesProvider({
+  statuses,
+  children,
+}: {
+  statuses: UnescoPermitStatusDef[] | null;
+  children: ReactNode;
+}) {
+  const value = useMemo(
+    () => (statuses && statuses.length > 0 ? statuses : DEFAULT_PERMIT_STATUSES),
+    [statuses]
+  );
+  return (
+    <PermitStatusesContext.Provider value={value}>{children}</PermitStatusesContext.Provider>
+  );
+}
+
+export function usePermitStatuses(): UnescoPermitStatusDef[] {
+  return useContext(PermitStatusesContext);
+}
+
+export function usePermitStatusDef(key: string): UnescoPermitStatusDef | null {
+  const list = usePermitStatuses();
+  return list.find((s) => s.key === key) ?? null;
+}
+
+// One-shot loader: each top-level UNESCO view calls this hook to fetch
+// the live status list and feed the context. The fetch is fire-and-forget
+// — failure simply keeps the DEFAULT_PERMIT_STATUSES fallback so the UI
+// never breaks if the new endpoint is unavailable.
+export function useFetchPermitStatuses(): UnescoPermitStatusDef[] | null {
+  const [statuses, setStatuses] = useState<UnescoPermitStatusDef[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.unesco
+      .listStatuses()
+      .then((res) => {
+        if (!cancelled) setStatuses(res.items);
+      })
+      .catch(() => {
+        if (!cancelled) setStatuses(DEFAULT_PERMIT_STATUSES);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return statuses;
+}
+
+export function permitStatusLabel(key: string, list: UnescoPermitStatusDef[]): string {
+  return list.find((s) => s.key === key)?.label ?? key;
+}
+
+export function permitStatusColor(key: string, list: UnescoPermitStatusDef[]): string {
+  return (
+    list.find((s) => s.key === key)?.colorClass ??
+    'bg-slate-100 text-slate-700 border-slate-200'
+  );
+}
+
+export function permitNextStatuses(
+  fromKey: string,
+  list: UnescoPermitStatusDef[]
+): UnescoPermitStatusDef[] {
+  const def = list.find((s) => s.key === fromKey);
+  if (!def) return [];
+  const order = new Map<string, number>();
+  list.forEach((s, i) => order.set(s.key, i));
+  return def.nextStatuses
+    .map((k) => list.find((s) => s.key === k && s.isActive))
+    .filter((s): s is UnescoPermitStatusDef => Boolean(s))
+    .sort((a, b) => (order.get(a.key) ?? 0) - (order.get(b.key) ?? 0));
+}
 
 export const DOCUMENT_CATEGORIES: Array<{ key: string; label: string }> = [
   { key: 'classement', label: 'Dossier de classement' },
@@ -93,11 +150,15 @@ export const PERMIT_MAIN_UPLOAD_SLOTS: Array<{
 ];
 
 export function StatusBadge({ status }: { status: UnescoPermitStatus }) {
+  const list = usePermitStatuses();
+  const def = list.find((s) => s.key === status);
+  const label = def?.label ?? status;
+  const color = def?.colorClass ?? 'bg-slate-100 text-slate-700 border-slate-200';
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 border rounded text-[10px] font-black uppercase tracking-widest ${PERMIT_STATUS_COLORS[status]}`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 border rounded text-[10px] font-black uppercase tracking-widest ${color}`}
     >
-      {PERMIT_STATUS_LABELS[status]}
+      {label}
     </span>
   );
 }

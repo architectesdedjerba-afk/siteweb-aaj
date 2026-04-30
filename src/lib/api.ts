@@ -284,6 +284,39 @@ export const api = {
 
     statusCounts: () =>
       http<{ counts: Record<string, number>; pendingReview: number }>('/unesco/status-counts'),
+
+    listStatuses: () =>
+      http<{ items: UnescoPermitStatusDef[] }>('/unesco/permit-statuses'),
+    createStatus: (payload: {
+      key: string;
+      label: string;
+      colorClass?: string;
+      sortOrder?: number;
+      isActive?: boolean;
+      nextStatuses?: string[];
+    }) =>
+      http<{ item: UnescoPermitStatusDef }>('/unesco/permit-statuses', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    updateStatus: (
+      key: string,
+      patch: Partial<{
+        label: string;
+        colorClass: string;
+        sortOrder: number;
+        isActive: boolean;
+        nextStatuses: string[];
+      }>
+    ) =>
+      http<{ item: UnescoPermitStatusDef }>(
+        `/unesco/permit-statuses/${encodeURIComponent(key)}`,
+        { method: 'PUT', body: JSON.stringify(patch) }
+      ),
+    deleteStatus: (key: string) =>
+      http<{ ok: true }>(`/unesco/permit-statuses/${encodeURIComponent(key)}`, {
+        method: 'DELETE',
+      }),
   },
 
   // ---- notifications ----
@@ -409,6 +442,12 @@ export interface UnescoDocument {
   updatedAt: string | null;
 }
 
+// The 8 historical statuses are seeded as system rows in
+// `unesco_permit_statuses` (migration 014) and remain referenced by the
+// PHP state machine. Custom statuses added later from "Paramètres
+// UNESCO → Statuts" widen this set at runtime, hence the `string`
+// fallback so untyped custom keys are accepted everywhere a status is
+// passed around.
 export type UnescoPermitStatus =
   | 'draft'
   | 'submitted'
@@ -417,7 +456,24 @@ export type UnescoPermitStatus =
   | 'decision_pending'
   | 'approved'
   | 'rejected'
-  | 'withdrawn';
+  | 'withdrawn'
+  | (string & {});
+
+export interface UnescoPermitStatusDef {
+  key: string;
+  label: string;
+  colorClass: string;
+  sortOrder: number;
+  isSystem: boolean;
+  isInitial: boolean;
+  isTerminal: boolean;
+  allowsApplicantEdit: boolean;
+  isApplicantWithdrawTarget: boolean;
+  nextStatuses: string[];
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
 
 export interface UnescoPermitEvent {
   id: string;
