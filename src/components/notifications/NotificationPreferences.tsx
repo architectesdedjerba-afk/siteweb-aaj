@@ -8,19 +8,27 @@
  * global ("all") pour couper toutes les notifications.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { BellOff, BellRing, Loader2, Save } from 'lucide-react';
 import {
   useNotifications,
   NOTIFICATION_TYPES,
   NotificationTypeMeta,
+  filterNotificationTypesForUser,
 } from '../../lib/NotificationContext';
+import { useAuth } from '../../lib/AuthContext';
 
 const KILL_SWITCH_TYPE = 'all';
 
 export const NotificationPreferences = () => {
-  const { preferences, getPreference, setPreference, refresh } = useNotifications();
+  const { getPreference, setPreference, refresh } = useNotifications();
+  const { can, isSuperAdmin } = useAuth();
   const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const visibleTypes = useMemo(
+    () => filterNotificationTypesForUser(NOTIFICATION_TYPES, { can, isSuperAdmin }),
+    [can, isSuperAdmin],
+  );
 
   const killSwitch = getPreference(KILL_SWITCH_TYPE);
   const allDisabled = killSwitch && killSwitch.inApp === false && killSwitch.email === false;
@@ -101,16 +109,27 @@ export const NotificationPreferences = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {NOTIFICATION_TYPES.map((meta) => (
-              <PreferenceRow
-                key={meta.type}
-                meta={meta}
-                pref={getPreference(meta.type)}
-                disabled={!!allDisabled}
-                busyKey={busyKey}
-                onChange={update}
-              />
-            ))}
+            {visibleTypes.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={3}
+                  className="px-4 py-6 text-center text-xs text-slate-500"
+                >
+                  Aucune catégorie de notification n’est applicable à votre profil.
+                </td>
+              </tr>
+            ) : (
+              visibleTypes.map((meta) => (
+                <PreferenceRow
+                  key={meta.type}
+                  meta={meta}
+                  pref={getPreference(meta.type)}
+                  disabled={!!allDisabled}
+                  busyKey={busyKey}
+                  onChange={update}
+                />
+              ))
+            )}
           </tbody>
         </table>
       </div>
