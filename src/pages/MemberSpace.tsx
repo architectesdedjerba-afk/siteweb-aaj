@@ -88,6 +88,13 @@ import {
   db,
 } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  PageTransition,
+  Reveal,
+  MagneticButton,
+  ParticleField,
+  GradientReveal,
+} from '../components/motion';
 import type { Role } from '../types';
 import {
   PERMISSION_GROUPS,
@@ -9265,119 +9272,153 @@ export const MemberSpacePage = () => {
   }
 
   return (
-    <div className="pt-16 min-h-[90vh] flex items-center justify-center bg-white px-4">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="max-w-md w-full bg-white p-10 lg:p-14 border border-aaj-border"
-      >
-        <div className="text-center mb-12">
-          <div className="w-16 h-16 bg-aaj-soft rounded flex items-center justify-center text-aaj-royal mx-auto mb-6 border border-aaj-royal/10">
-            <UserCircle size={40} />
-          </div>
-          <h1 className="text-3xl font-black mb-2 uppercase tracking-tight">
-            {isResetMode ? 'Réinitialisation' : 'Espace Adhérents'}
-          </h1>
-          <p className="text-aaj-gray font-bold text-[10px] uppercase tracking-[3px]">
-            {isResetMode ? 'Saisissez votre email' : 'Veuillez vous identifier'}
-          </p>
-        </div>
+    <PageTransition>
+      <div className="aaj-dark-surface relative min-h-screen flex items-center justify-center px-4 pt-24 pb-20 overflow-hidden">
+        <ParticleField className="z-0" density={70} />
 
-        {error && (
-          <div className="mb-8 p-4 bg-red-50 text-red-600 rounded border border-red-100 text-[11px] font-bold uppercase tracking-wider flex items-center gap-3">
-            <Shield size={16} />
-            {error}
-          </div>
-        )}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 aaj-hero-vignette pointer-events-none z-[1]"
+        />
 
-        {resetSent && (
-          <div className="mb-8 p-4 bg-green-50 text-green-600 rounded border border-green-100 text-[11px] font-bold uppercase tracking-wider flex items-center gap-3">
-            <CheckCircle2 size={16} />
-            Email de réinitialisation envoyé ! Vérifiez votre boîte de réception.
-          </div>
-        )}
+        <Reveal direction="up" duration={0.8} className="relative z-[2] w-full max-w-md">
+          <div className="aaj-glass-strong rounded-3xl p-10 md:p-12 backdrop-blur-2xl">
+            <Reveal direction="up" delay={0.1} className="text-center mb-10">
+              <div className="inline-flex items-center justify-center gap-3 mb-6">
+                <span className="w-8 h-px bg-aaj-cyan" aria-hidden="true" />
+                <span className="text-[10px] uppercase tracking-[5px] text-aaj-cyan font-black">
+                  {isResetMode ? 'Réinitialisation' : 'Connexion'}
+                </span>
+                <span className="w-8 h-px bg-aaj-cyan" aria-hidden="true" />
+              </div>
+              <div className="relative w-20 h-20 mx-auto mb-8">
+                <motion.div
+                  className="absolute inset-0 rounded-full"
+                  style={{
+                    background:
+                      'radial-gradient(circle, rgba(0,229,255,0.4) 0%, transparent 60%)',
+                    filter: 'blur(20px)',
+                  }}
+                  animate={{ scale: [1, 1.15, 1] }}
+                  transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                />
+                <div className="absolute inset-0 rounded-full border border-aaj-cyan/40 flex items-center justify-center text-aaj-cyan bg-aaj-cyan/5 backdrop-blur-md">
+                  <UserCircle size={36} />
+                </div>
+              </div>
+              <h1 className="font-display text-4xl md:text-5xl font-bold tracking-tighter leading-[0.95] mb-4">
+                <GradientReveal
+                  as="span"
+                  text={isResetMode ? 'Réinitialisation' : 'Espace Adhérents'}
+                  className="inline-block aaj-text-gradient-vibrant"
+                />
+              </h1>
+              <p className="text-white/60 text-[11px] font-bold uppercase tracking-[3px]">
+                {isResetMode ? 'Saisissez votre email' : 'Veuillez vous identifier'}
+              </p>
+            </Reveal>
 
-        <form
-          className="space-y-6"
-          onSubmit={
-            isResetMode
-              ? (e) => {
-                  e.preventDefault();
-                  handleForgotPassword();
-                }
-              : handleLogin
-          }
-        >
-          <div className="space-y-2">
-            <label className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1">
-              Email professionnel
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-slate-50 border border-aaj-border rounded px-6 py-4 focus:outline-none focus:ring-1 focus:ring-aaj-royal focus:bg-white transition-all text-sm font-medium"
-              placeholder="architecte@aaj.tn"
-              required
-            />
-          </div>
-          {!isResetMode && (
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase font-black tracking-[2px] text-aaj-gray ml-1">
-                Mot de passe
-              </label>
-              <PasswordInput
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-50 border border-aaj-border rounded px-6 py-4 focus:outline-none focus:ring-1 focus:ring-aaj-royal focus:bg-white transition-all text-sm font-medium"
-                placeholder="••••••••"
-                required
-              />
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-6 p-4 rounded-xl border border-aaj-magenta/30 bg-aaj-magenta/10 text-aaj-magenta text-[11px] font-bold uppercase tracking-wider flex items-center gap-3"
+              >
+                <Shield size={16} className="shrink-0" />
+                {error}
+              </motion.div>
+            )}
+
+            {resetSent && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-6 p-4 rounded-xl border border-aaj-cyan/30 bg-aaj-cyan/10 text-aaj-cyan text-[11px] font-bold uppercase tracking-wider flex items-center gap-3"
+              >
+                <CheckCircle2 size={16} className="shrink-0" />
+                Email de réinitialisation envoyé ! Vérifiez votre boîte de réception.
+              </motion.div>
+            )}
+
+            <form
+              className="space-y-5"
+              onSubmit={
+                isResetMode
+                  ? (e) => {
+                      e.preventDefault();
+                      handleForgotPassword();
+                    }
+                  : handleLogin
+              }
+            >
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase font-black tracking-[2.5px] text-white/50 ml-1">
+                  Email professionnel
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-aaj-night/60 border border-white/15 text-white rounded-xl px-5 py-4 focus:outline-none focus:border-aaj-cyan focus:bg-aaj-night transition-all text-sm font-medium placeholder:text-white/30"
+                  placeholder="architecte@aaj.tn"
+                  required
+                />
+              </div>
+              {!isResetMode && (
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-black tracking-[2.5px] text-white/50 ml-1">
+                    Mot de passe
+                  </label>
+                  <PasswordInput
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-aaj-night/60 border border-white/15 text-white rounded-xl px-5 py-4 focus:outline-none focus:border-aaj-cyan focus:bg-aaj-night transition-all text-sm font-medium placeholder:text-white/30"
+                    placeholder="••••••••"
+                    required
+                  />
+                </div>
+              )}
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleToggleResetMode}
+                  className="text-[10px] text-white/60 hover:text-aaj-cyan font-black uppercase tracking-[2.5px] transition-colors aaj-link-underline"
+                >
+                  {isResetMode ? 'Retour à la connexion' : 'Mot de passe oublié ?'}
+                </button>
+              </div>
+              <MagneticButton as="div" strength={0.2} className="w-full">
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full bg-aaj-cyan text-aaj-night py-4 rounded-full font-black uppercase tracking-[3px] text-[11px] hover:bg-white transition-colors active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_0_30px_rgba(0,229,255,0.35)]"
+                >
+                  {authLoading ? (
+                    <Loader2 className="animate-spin" size={18} />
+                  ) : isResetMode ? (
+                    'Réinitialiser mon mot de passe'
+                  ) : (
+                    'Se connecter'
+                  )}
+                </button>
+              </MagneticButton>
+            </form>
+
+            <div className="mt-10 pt-8 border-t border-white/10 text-center">
+              <p className="text-white/50 text-[11px] font-medium leading-relaxed uppercase tracking-wider">
+                Accès réservé aux membres de l&apos;AAJ.
+                <br />
+                <Link
+                  to="/demander-adhesion"
+                  className="text-aaj-cyan font-black hover:text-white transition-colors mt-2 inline-block aaj-link-underline"
+                >
+                  Demander une adhésion
+                </Link>
+              </p>
             </div>
-          )}
-          <div className="flex justify-end">
-            {!isResetMode ? (
-              <button
-                type="button"
-                onClick={handleToggleResetMode}
-                className="text-[11px] text-aaj-royal font-black uppercase tracking-widest hover:underline"
-              >
-                Mot de passe oublié ?
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleToggleResetMode}
-                className="text-[11px] text-aaj-royal font-black uppercase tracking-widest hover:underline"
-              >
-                Retour à la connexion
-              </button>
-            )}
           </div>
-          <button
-            type="submit"
-            disabled={authLoading}
-            className="w-full bg-aaj-dark text-white py-5 rounded font-black uppercase tracking-[3px] text-xs hover:bg-aaj-royal transition-all active:scale-[0.98] flex items-center justify-center gap-3"
-          >
-            {authLoading ? (
-              <Loader2 className="animate-spin" size={20} />
-            ) : isResetMode ? (
-              'Réinitialiser mon mot de passe'
-            ) : (
-              'Se connecter'
-            )}
-          </button>
-        </form>
-
-        <div className="mt-12 pt-8 border-t border-aaj-border text-center">
-          <p className="text-aaj-gray text-[11px] font-medium leading-relaxed uppercase tracking-wider">
-            Accès réservé aux membres de l&apos;AAJ. <br />
-            <Link to="/demander-adhesion" className="text-aaj-royal font-black hover:underline">
-              Demander une adhésion
-            </Link>
-          </p>
-        </div>
-      </motion.div>
-    </div>
+        </Reveal>
+      </div>
+    </PageTransition>
   );
 };
