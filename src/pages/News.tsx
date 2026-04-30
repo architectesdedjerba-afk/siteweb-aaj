@@ -6,7 +6,9 @@
 import { Calendar, ChevronRight, Loader2, CalendarX } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState } from "react";
+import { motion } from "motion/react";
 import { useFirestoreCollection } from "../lib/useFirestoreCollection";
+import { staggerContainer, staggerItem, inViewOnce } from "../lib/motion";
 import type { NewsItem } from "../types";
 
 // Fallback data when collection is empty
@@ -103,9 +105,19 @@ export const NewsPage = () => {
                   <h2 className="text-[12px] uppercase tracking-[2px] text-aaj-gray font-bold mb-8 flex items-center gap-4">
                     Prochains évènements <span className="flex-1 h-px bg-aaj-border" aria-hidden="true"></span>
                   </h2>
-                  <div className="space-y-8">
+                  <motion.div
+                    className="space-y-8"
+                    variants={staggerContainer}
+                    initial="hidden"
+                    whileInView="visible"
+                    viewport={inViewOnce}
+                  >
                     {visibleFuture.map((e, idx) => (
-                      <article key={e.id ?? idx} className="flex gap-6 items-start group">
+                      <motion.article
+                        key={e.id ?? idx}
+                        variants={staggerItem}
+                        className="flex gap-6 items-start group"
+                      >
                         <div className="min-w-[60px] h-[60px] bg-aaj-soft rounded flex flex-col items-center justify-center border border-aaj-royal/10" aria-hidden="true">
                           <span className="block text-2xl font-black text-aaj-royal leading-none">{new Date(e.date).getDate()}</span>
                           <span className="block text-[10px] uppercase tracking-widest font-bold text-aaj-dark">
@@ -119,9 +131,9 @@ export const NewsPage = () => {
                              En savoir plus <ChevronRight size={14} aria-hidden="true" />
                           </button>
                         </div>
-                      </article>
+                      </motion.article>
                     ))}
-                  </div>
+                  </motion.div>
                 </div>
               )}
 
@@ -130,17 +142,27 @@ export const NewsPage = () => {
                   <h2 className="text-[12px] uppercase tracking-[2px] text-aaj-gray font-bold mb-8 flex items-center gap-4">
                     Archives <span className="flex-1 h-px bg-aaj-border" aria-hidden="true"></span>
                   </h2>
-                  <div className="space-y-4">
+                  <motion.div
+                    className="space-y-4"
+                    variants={staggerContainer}
+                    initial="hidden"
+                    whileInView="visible"
+                    viewport={inViewOnce}
+                  >
                     {visiblePast.map((e, idx) => (
-                      <article key={e.id ?? idx} className="px-6 py-4 border border-aaj-border flex justify-between items-center bg-slate-50/50 rounded gap-4">
+                      <motion.article
+                        key={e.id ?? idx}
+                        variants={staggerItem}
+                        className="px-6 py-4 border border-aaj-border flex justify-between items-center bg-slate-50/50 rounded gap-4"
+                      >
                         <div className="flex items-center gap-6 text-sm min-w-0">
                           <time className="text-aaj-gray font-bold font-mono text-xs shrink-0" dateTime={e.date}>{e.date}</time>
                           <h4 className="font-bold text-aaj-dark uppercase text-xs tracking-wider truncate">{e.title}</h4>
                         </div>
                         <span className="text-[9px] uppercase tracking-[2px] font-black text-aaj-gray bg-white border border-aaj-border px-3 py-1 rounded shrink-0">Terminé</span>
-                      </article>
+                      </motion.article>
                     ))}
-                  </div>
+                  </motion.div>
                 </div>
               )}
             </div>

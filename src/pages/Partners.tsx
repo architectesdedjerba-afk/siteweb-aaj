@@ -6,12 +6,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Trophy, Star, ShieldCheck } from "lucide-react";
+import { motion } from "motion/react";
 import {
   DEFAULT_PAGE_PARTNERS,
   loadPagePartners,
   type PagePartnersContent,
   type PartnerIconKey,
 } from "../lib/pageContent";
+import { staggerContainer, staggerItem, hoverLift, inViewOnce } from "../lib/motion";
 
 const ICONS: Record<PartnerIconKey, typeof Trophy> = {
   trophy: Trophy,
@@ -49,14 +51,22 @@ export const PartnersPage = () => {
           {content.categoriesTitle} <span className="flex-1 h-px bg-aaj-border"></span>
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <motion.div
+          className="grid grid-cols-1 md:grid-cols-3 gap-8"
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={inViewOnce}
+        >
           {content.categories.map((cat, idx) => {
              const colors = TIER_COLORS[idx % TIER_COLORS.length];
              const featured = idx === content.featuredIndex;
              const Icon = ICONS[cat.iconKey] ?? Trophy;
              return (
-              <div
+              <motion.div
                 key={idx}
+                variants={staggerItem}
+                whileHover={hoverLift}
                 className={`flex flex-col h-full border group hover:border-aaj-royal transition-all rounded overflow-hidden ${
                   featured ? "border-aaj-royal shadow-xl md:-translate-y-2" : "border-aaj-border"
                 }`}
@@ -90,28 +100,35 @@ export const PartnersPage = () => {
                     Nous Contacter
                   </Link>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
-        </div>
+        </motion.div>
 
         <div className="mt-32">
           <h2 className="text-[12px] uppercase tracking-[2px] text-aaj-gray font-bold mb-12 flex items-center gap-4">
              {content.trustTitle} <span className="flex-1 h-px bg-aaj-border" aria-hidden="true"></span>
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+          <motion.div
+            className="grid grid-cols-2 md:grid-cols-5 gap-6"
+            variants={staggerContainer}
+            initial="hidden"
+            whileInView="visible"
+            viewport={inViewOnce}
+          >
             {Array.from({ length: content.trustPlaceholders }).map((_, i) => (
-              <div
+              <motion.div
                 key={i}
+                variants={staggerItem}
                 className="aspect-[3/2] bg-slate-50 flex items-center justify-center border border-aaj-border rounded hover:border-aaj-royal hover:bg-white transition-all"
                 aria-hidden="true"
               >
                 <span className="text-[9px] uppercase tracking-[3px] font-black text-aaj-gray-light">
                   À venir
                 </span>
-              </div>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         </div>
 
         <div className="mt-32 p-12 bg-aaj-soft rounded text-center border border-aaj-royal/10">

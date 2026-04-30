@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import Cropper, { type Area } from 'react-easy-crop';
 import { XCircle, ZoomIn, ZoomOut, Check } from 'lucide-react';
 

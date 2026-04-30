@@ -9,8 +9,10 @@
  */
 
 import { Download, FileText, User } from 'lucide-react';
+import { motion } from 'motion/react';
 import type { NewsItem } from '../types';
 import { newsCategoryStyle } from '../lib/memberConfig';
+import { hoverLift } from '../lib/motion';
 
 const IMAGE_EXTENSIONS = new Set([
   'jpg',
@@ -76,7 +78,11 @@ export function NewsPostCard({ item, onClick, compact = false }: NewsPostCardPro
   }`;
 
   return (
-    <article className={wrapperClass} onClick={onClick}>
+    <motion.article
+      className={wrapperClass}
+      onClick={onClick}
+      whileHover={onClick ? hoverLift : undefined}
+    >
       {/* Header */}
       <div className="flex items-center gap-3 px-5 pt-4 pb-3">
         {photo ? (
@@ -168,6 +174,6 @@ export function NewsPostCard({ item, onClick, compact = false }: NewsPostCardPro
           <Download size={14} className="text-aaj-gray shrink-0" />
         </a>
       )}
-    </article>
+    </motion.article>
   );
 }

@@ -3,21 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { MotionConfig, AnimatePresence, motion } from "motion/react";
 import { Navbar } from "./components/Navbar";
 import { Footer } from "./components/Footer";
-import { HomePage } from "./pages/Home";
-import { AboutPage } from "./pages/About";
-import { NewsPage } from "./pages/News";
-import { PartnersPage } from "./pages/Partners";
-import { JobsPage } from "./pages/Jobs";
-import { MemberSpacePage } from "./pages/MemberSpace";
-import { EventRegistrationPage } from "./pages/EventRegistration";
-import { MembershipApplicationPage } from "./pages/MembershipApplication";
-import { PartnerApplicationPage } from "./pages/PartnerApplication";
-import { ResetPasswordPage } from "./pages/ResetPassword";
-import { LegalNoticePage } from "./pages/LegalNotice";
-import { NotFoundPage } from "./pages/NotFound";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { CookieBanner } from "./components/CookieBanner";
@@ -25,8 +14,103 @@ import { AuthProvider, useAuth } from "./lib/AuthContext";
 import { NotificationProvider } from "./lib/NotificationContext";
 import { ToastProvider } from "./lib/toast";
 import { I18nProvider } from "./lib/i18n";
-import { ArrowUp } from "lucide-react";
-import { useState, useEffect } from "react";
+import { pageTransition } from "./lib/motion";
+import { ArrowUp, Loader2 } from "lucide-react";
+import { Suspense, lazy, useState, useEffect } from "react";
+
+/**
+ * Pages chargées paresseusement — chacune se retrouve dans son propre chunk
+ * Vite/Rollup, ce qui réduit drastiquement le bundle d'entrée. Comme nos
+ * pages sont des exports nommés, on mappe `m.XxxPage` → `default` pour
+ * satisfaire le contrat de `React.lazy`.
+ */
+const HomePage = lazy(() => import("./pages/Home").then((m) => ({ default: m.HomePage })));
+const AboutPage = lazy(() => import("./pages/About").then((m) => ({ default: m.AboutPage })));
+const NewsPage = lazy(() => import("./pages/News").then((m) => ({ default: m.NewsPage })));
+const PartnersPage = lazy(() => import("./pages/Partners").then((m) => ({ default: m.PartnersPage })));
+const JobsPage = lazy(() => import("./pages/Jobs").then((m) => ({ default: m.JobsPage })));
+const MemberSpacePage = lazy(() =>
+  import("./pages/MemberSpace").then((m) => ({ default: m.MemberSpacePage }))
+);
+const EventRegistrationPage = lazy(() =>
+  import("./pages/EventRegistration").then((m) => ({ default: m.EventRegistrationPage }))
+);
+const MembershipApplicationPage = lazy(() =>
+  import("./pages/MembershipApplication").then((m) => ({ default: m.MembershipApplicationPage }))
+);
+const PartnerApplicationPage = lazy(() =>
+  import("./pages/PartnerApplication").then((m) => ({ default: m.PartnerApplicationPage }))
+);
+const ResetPasswordPage = lazy(() =>
+  import("./pages/ResetPassword").then((m) => ({ default: m.ResetPasswordPage }))
+);
+const LegalNoticePage = lazy(() =>
+  import("./pages/LegalNotice").then((m) => ({ default: m.LegalNoticePage }))
+);
+const NotFoundPage = lazy(() => import("./pages/NotFound").then((m) => ({ default: m.NotFoundPage })));
+
+/**
+ * Fallback minimal pour les chunks de page en cours de chargement.
+ * Hauteur identique au viewport pour éviter un saut de layout pendant le
+ * fetch. Marqué `aria-live` pour les lecteurs d'écran.
+ */
+function RouteLoader() {
+  return (
+    <div
+      className="flex items-center justify-center min-h-[60vh] py-20"
+      role="status"
+      aria-live="polite"
+    >
+      <Loader2 className="animate-spin text-aaj-royal" size={32} aria-label="Chargement" />
+    </div>
+  );
+}
+
+/**
+ * Routes wrapped in AnimatePresence so each page transition fades in/out.
+ * Extracted as a child component so we can call `useLocation()` inside
+ * `<BrowserRouter>`. The motion wrapper is keyed on `pathname` to trigger
+ * exit/enter on every route change.
+ */
+function AnimatedRoutes() {
+  const location = useLocation();
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={location.pathname}
+        initial={pageTransition.initial}
+        animate={pageTransition.animate}
+        exit={pageTransition.exit}
+        transition={pageTransition.transition}
+      >
+        {/*
+         * Suspense INSIDE le motion.div : si on le mettait au-dessus
+         * d'AnimatePresence, son fallback remplacerait tout l'arbre des
+         * routes pendant le fetch et tuerait l'animation de sortie de la
+         * page précédente. Ici, l'exit anim joue jusqu'au bout, puis le
+         * nouveau motion.div monte avec son propre boundary qui affiche
+         * brièvement un loader si le chunk n'est pas encore chargé.
+         */}
+        <Suspense fallback={<RouteLoader />}>
+          <Routes location={location}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/aaj" element={<AboutPage />} />
+            <Route path="/evennements" element={<NewsPage />} />
+            <Route path="/partenaires" element={<PartnersPage />} />
+            <Route path="/emplois" element={<JobsPage />} />
+            <Route path="/espace-adherents" element={<MemberSpacePage />} />
+            <Route path="/inscription-evenement" element={<EventRegistrationPage />} />
+            <Route path="/demander-adhesion" element={<MembershipApplicationPage />} />
+            <Route path="/devenir-partenaire" element={<PartnerApplicationPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/mentions-legales" element={<LegalNoticePage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </Suspense>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
 
 // Chat bubble = bottom-6 (24px) + h-14 (56px) = 80px tall stack starting at
 // the bottom edge. When the user is logged in, the back-to-top button must
@@ -77,6 +161,7 @@ function BackToTopButton() {
 export default function App() {
   return (
     <ErrorBoundary>
+      <MotionConfig reducedMotion="user">
       <I18nProvider>
         <ToastProvider>
           <AuthProvider>
@@ -92,20 +177,7 @@ export default function App() {
             <div className="flex flex-col min-h-screen selection:bg-aaj-royal selection:text-white bg-white">
               <Navbar />
               <main id="main-content" className="grow" tabIndex={-1}>
-                <Routes>
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/aaj" element={<AboutPage />} />
-                  <Route path="/evennements" element={<NewsPage />} />
-                  <Route path="/partenaires" element={<PartnersPage />} />
-                  <Route path="/emplois" element={<JobsPage />} />
-                  <Route path="/espace-adherents" element={<MemberSpacePage />} />
-                  <Route path="/inscription-evenement" element={<EventRegistrationPage />} />
-                  <Route path="/demander-adhesion" element={<MembershipApplicationPage />} />
-                  <Route path="/devenir-partenaire" element={<PartnerApplicationPage />} />
-                  <Route path="/reset-password" element={<ResetPasswordPage />} />
-                  <Route path="/mentions-legales" element={<LegalNoticePage />} />
-                  <Route path="*" element={<NotFoundPage />} />
-                </Routes>
+                <AnimatedRoutes />
               </main>
               <Footer />
               <CookieBanner />
@@ -116,6 +188,7 @@ export default function App() {
           </AuthProvider>
         </ToastProvider>
       </I18nProvider>
+      </MotionConfig>
     </ErrorBoundary>
   );
 }

@@ -6,6 +6,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { X } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { slideUpFromBottom } from "../lib/motion";
 
 const STORAGE_KEY = "aaj_cookie_consent_v1";
 
@@ -30,15 +32,19 @@ export const CookieBanner = () => {
     setVisible(false);
   };
 
-  if (!visible) return null;
-
   return (
-    <div
-      role="dialog"
-      aria-labelledby="cookie-title"
-      aria-describedby="cookie-desc"
-      className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-md z-[150] bg-aaj-dark text-white border border-white/10 shadow-2xl p-6"
-    >
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          role="dialog"
+          aria-labelledby="cookie-title"
+          aria-describedby="cookie-desc"
+          variants={slideUpFromBottom}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-md z-[150] bg-aaj-dark text-white border border-white/10 shadow-2xl p-6"
+        >
       <div className="flex items-start gap-4">
         <div className="flex-1">
           <h2 id="cookie-title" className="text-xs font-black uppercase tracking-widest mb-2">Cookies essentiels</h2>
@@ -62,6 +68,8 @@ export const CookieBanner = () => {
           <X size={18} />
         </button>
       </div>
-    </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };
