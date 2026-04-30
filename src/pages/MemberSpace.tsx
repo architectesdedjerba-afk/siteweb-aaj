@@ -43,6 +43,7 @@ import {
   Landmark,
   MapPinned,
   FileCheck,
+  ClipboardList,
   Pin,
   PinOff,
   PanelLeftOpen,
@@ -129,6 +130,7 @@ import { useChatBadge } from '../lib/useChat';
 import { UnescoMemberView } from '../components/unesco/UnescoMemberView';
 import { UnescoAdminParams } from '../components/unesco/UnescoAdminParams';
 import { UnescoAdminPermits } from '../components/unesco/UnescoAdminPermits';
+import { UnescoAdminRequests } from '../components/unesco/UnescoAdminRequests';
 import { api as apiClient } from '../lib/api';
 import { useNotifications } from '../lib/NotificationContext';
 import { NotificationsList } from '../components/notifications/NotificationsList';
@@ -421,7 +423,8 @@ export const MemberSpacePage = () => {
   const canReviewUnesco =
     isAdmin ||
     userRole?.permissions?.unesco_manage === true ||
-    userRole?.permissions?.unesco_permits_review === true;
+    userRole?.permissions?.unesco_permits_review === true ||
+    userRole?.permissions?.unesco_requests_manage === true;
   const [unescoPendingReview, setUnescoPendingReview] = useState(0);
   useEffect(() => {
     if (!user || !canReviewUnesco) {
@@ -2884,6 +2887,13 @@ export const MemberSpacePage = () => {
               badge: chatPendingApprovals,
             },
             { id: 'admin-unesco', icon: <MapPinned size={18} />, label: 'Paramètres UNESCO', perm: 'unesco_manage' },
+            {
+              id: 'admin-unesco-requests',
+              icon: <ClipboardList size={18} />,
+              label: 'Demandes UNESCO',
+              perm: 'unesco_requests_manage',
+              badge: unescoPendingReview,
+            },
             {
               id: 'admin-unesco-permits',
               icon: <FileCheck size={18} />,
@@ -7488,6 +7498,17 @@ export const MemberSpacePage = () => {
                     exit={{ opacity: 0, x: -10 }}
                   >
                     <UnescoAdminParams />
+                  </motion.div>
+                )}
+
+                {activeTab === 'admin-unesco-requests' && can('unesco_requests_manage') && (
+                  <motion.div
+                    key="admin-unesco-requests"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                  >
+                    <UnescoAdminRequests />
                   </motion.div>
                 )}
 

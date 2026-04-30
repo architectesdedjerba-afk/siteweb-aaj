@@ -54,13 +54,14 @@ function handle_unesco(string $method, array $rest): void
 function unesco_require_view(): array
 {
     $user = require_auth();
-    if (($user['status'] ?? '') !== 'active' && !is_admin($user) && !user_has_permission($user, 'unesco_manage')) {
+    if (($user['status'] ?? '') !== 'active' && !is_admin($user) && !user_has_permission($user, 'unesco_manage') && !user_has_permission($user, 'unesco_requests_manage')) {
         json_error('forbidden', 'Compte inactif.', 403);
     }
     if (!(is_admin($user)
         || user_has_permission($user, 'unesco_view')
         || user_has_permission($user, 'unesco_manage')
         || user_has_permission($user, 'unesco_permits_review')
+        || user_has_permission($user, 'unesco_requests_manage')
         || user_has_permission($user, 'unesco_permits_submit'))) {
         json_error('forbidden', 'Accès à Djerba UNESCO non autorisé.', 403);
     }
@@ -79,7 +80,10 @@ function unesco_require_manage(): array
 function unesco_require_review(): array
 {
     $user = require_auth();
-    if (!(is_admin($user) || user_has_permission($user, 'unesco_manage') || user_has_permission($user, 'unesco_permits_review'))) {
+    if (!(is_admin($user)
+        || user_has_permission($user, 'unesco_manage')
+        || user_has_permission($user, 'unesco_permits_review')
+        || user_has_permission($user, 'unesco_requests_manage'))) {
         json_error('forbidden', 'Droits d\'instruction requis.', 403);
     }
     return $user;
@@ -695,7 +699,7 @@ function unesco_permit_access(string $id, bool $requireWrite = false): array
     $row = $stmt->fetch();
     if (!$row) json_error('not_found', 'Demande introuvable.', 404);
 
-    $isReviewer = is_admin($user) || user_has_permission($user, 'unesco_manage') || user_has_permission($user, 'unesco_permits_review');
+    $isReviewer = is_admin($user) || user_has_permission($user, 'unesco_manage') || user_has_permission($user, 'unesco_permits_review') || user_has_permission($user, 'unesco_requests_manage');
     $isOwner = $row['applicant_uid'] === $user['uid'];
     if (!$isReviewer && !$isOwner) json_error('forbidden', 'Accès refusé.', 403);
 
@@ -705,7 +709,7 @@ function unesco_permit_access(string $id, bool $requireWrite = false): array
 function unesco_permits_list(): void
 {
     $user = require_auth();
-    $isReviewer = is_admin($user) || user_has_permission($user, 'unesco_manage') || user_has_permission($user, 'unesco_permits_review');
+    $isReviewer = is_admin($user) || user_has_permission($user, 'unesco_manage') || user_has_permission($user, 'unesco_permits_review') || user_has_permission($user, 'unesco_requests_manage');
 
     $status = (string)($_GET['status'] ?? '');
     $scope = (string)($_GET['scope'] ?? ($isReviewer ? 'all' : 'mine'));
@@ -1108,7 +1112,7 @@ function unesco_permit_fetch(string $id): array
 
     // events (hide internal notes from non-reviewers)
     $user = current_user();
-    $isReviewer = $user && (is_admin($user) || user_has_permission($user, 'unesco_manage') || user_has_permission($user, 'unesco_permits_review'));
+    $isReviewer = $user && (is_admin($user) || user_has_permission($user, 'unesco_manage') || user_has_permission($user, 'unesco_permits_review') || user_has_permission($user, 'unesco_requests_manage'));
     $ev = db()->prepare('SELECT * FROM unesco_permit_events WHERE permit_id = ? ORDER BY created_at ASC');
     $ev->execute([$id]);
     $events = [];
@@ -1182,11 +1186,11 @@ function unesco_permit_notify_reviewers(string $permitId): void
         $permit = $stmt->fetch();
         if (!$permit) return;
 
-        // Collect reviewer emails — admins + explicit unesco_permits_review perm.
+        // Collect reviewer emails — admins + agents d'administration.
         $reviewers = db()->query(
             "SELECT email, role, display_name FROM users
               WHERE status = 'active'
-                AND (role IN ('admin', 'super-admin') OR role = 'representative')"
+                AND role IN ('admin', 'super-admin', 'representative', 'agent-administration')"
         )->fetchAll();
 
         $title = (string)($permit['title'] ?? 'Nouvelle demande UNESCO');
@@ -1199,7 +1203,7 @@ function unesco_permit_notify_reviewers(string $permitId): void
         $reviewerEmails = [];
         foreach ($reviewers ?? [] as $r) {
             if (!$r['email']) continue;
-            if (!in_array($r['role'], ['admin', 'super-admin'], true)) continue;
+            if (!in_array($r['role'], ['admin', 'super-admin', 'agent-administration'], true)) continue;
             $reviewerEmails[] = (string)$r['email'];
         }
         $allRecipients = notification_admin_recipients('unesco_permit_review_requested', $reviewerEmails);
@@ -1292,7 +1296,7 @@ function unesco_permit_notify_applicant(string $permitId, string $toStatus, stri
 function unesco_status_counts(): void
 {
     $user = require_auth();
-    $isReviewer = is_admin($user) || user_has_permission($user, 'unesco_manage') || user_has_permission($user, 'unesco_permits_review');
+    $isReviewer = is_admin($user) || user_has_permission($user, 'unesco_manage') || user_has_permission($user, 'unesco_permits_review') || user_has_permission($user, 'unesco_requests_manage');
     if (!$isReviewer) {
         $stmt = db()->prepare(
             'SELECT status, COUNT(*) AS c FROM unesco_permits WHERE applicant_uid = ? GROUP BY status'

@@ -28,6 +28,7 @@ const ALL_PERMISSION_KEYS = [
     'chat_manage',
     'unesco_manage',
     'unesco_permits_review',
+    'unesco_requests_manage',
     'accounts_create',
     'roles_manage',
     'config_manage',
@@ -73,7 +74,18 @@ function default_roles(): array
                 'profileRequests_manage', 'messages_inbox',
                 'chat_use', 'chat_create_channel', 'chat_manage',
                 'unesco_view', 'unesco_permits_submit',
-                'unesco_manage', 'unesco_permits_review',
+                'unesco_manage', 'unesco_permits_review', 'unesco_requests_manage',
+            ]),
+        ],
+        [
+            'id' => 'agent-administration',
+            'name' => "Agent d'administration",
+            'description' => "Agent dédié à la gestion des demandes déposées dans la section Djerba UNESCO.",
+            'isSystem' => true,
+            'isAllAccess' => false,
+            'permissions' => permissions_keys_for([
+                'dashboard_view', 'profile_edit', 'chat_use',
+                'unesco_view', 'unesco_requests_manage',
             ]),
         ],
         [
