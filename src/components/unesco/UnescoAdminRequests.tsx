@@ -389,7 +389,7 @@ function UnescoAdminRequestsInner() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[900px]">
               <thead className="bg-slate-50 border-b border-aaj-border">
                 <tr>
                   <SortHeader
