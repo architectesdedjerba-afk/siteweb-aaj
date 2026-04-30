@@ -1111,6 +1111,26 @@ function DocumentForm({
 // Permit statuses editor
 // ----------------------------------------------------------------------
 
+// Plain-French description of each status's role in the workflow,
+// shown in place of the technical "Initial / Terminal / Système" badges.
+function statusRoleSentence(s: UnescoPermitStatusDef): string {
+  if (s.isInitial) return 'Étape de départ — la demande commence ici';
+  if (s.isApplicantWithdrawTarget) return 'Retrait — le demandeur a abandonné';
+  if (s.isTerminal) return 'Étape finale — la demande est close';
+  return 'Étape intermédiaire';
+}
+
+// Simple slug from the label so admins never have to think about a
+// "technical key" — the backend sanitizes again and rejects collisions.
+function slugifyLabel(label: string): string {
+  return label
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
 function StatusesPanel({
   statuses,
   onReload,
@@ -1123,19 +1143,11 @@ function StatusesPanel({
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <p className="text-sm text-aaj-gray">
-            {statuses.length} statut{statuses.length > 1 ? 's' : ''} — pilotez ici les libellés,
-            couleurs et transitions des actions d'instruction.
-          </p>
-          <p className="text-xs text-aaj-gray mt-1 max-w-2xl">
-            Les 8 statuts système (brouillon, déposée, en instruction, complément demandé,
-            décision en attente, avis favorable, avis défavorable, retirée) sont indispensables
-            au workflow et ne peuvent pas être supprimés. Vous pouvez en revanche les renommer,
-            les recolorer et ajuster leurs transitions sortantes. Les statuts personnalisés
-            créés ici s'insèrent comme étapes intermédiaires.
-          </p>
-        </div>
+        <p className="text-sm text-aaj-gray max-w-2xl">
+          Renommez les statuts, changez leurs couleurs et choisissez vers quel statut chacun
+          peut basculer. Les 8 statuts par défaut sont protégés et ne peuvent pas être
+          supprimés.
+        </p>
         <button
           type="button"
           onClick={() => setIsCreating(true)}
@@ -1219,44 +1231,20 @@ function StatusRow({
 
   return (
     <li className="border border-aaj-border rounded p-4 flex items-start justify-between gap-3">
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 space-y-1.5">
         <div className="flex items-center gap-2 flex-wrap">
           <StatusBadge status={status.key} />
-          <code className="text-[10px] text-aaj-gray bg-slate-50 border border-aaj-border px-1.5 py-0.5 rounded">
-            {status.key}
-          </code>
-          {status.isSystem && (
-            <span className="text-[9px] uppercase tracking-[2px] text-aaj-royal bg-aaj-royal/5 border border-aaj-royal/20 px-1.5 py-0.5 rounded font-black">
-              Système
-            </span>
-          )}
-          {status.isInitial && (
-            <span className="text-[9px] uppercase tracking-[2px] text-slate-700 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded font-black">
-              Initial
-            </span>
-          )}
-          {status.isTerminal && (
-            <span className="text-[9px] uppercase tracking-[2px] text-slate-700 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded font-black">
-              Terminal
-            </span>
-          )}
-          {status.isApplicantWithdrawTarget && (
-            <span className="text-[9px] uppercase tracking-[2px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-black">
-              Retrait demandeur
-            </span>
-          )}
           {!status.isActive && (
-            <span className="text-[9px] uppercase tracking-[2px] text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded font-black">
-              Inactif
-            </span>
+            <span className="text-[10px] text-aaj-gray italic">(masqué)</span>
           )}
         </div>
-        <p className="text-xs text-aaj-gray mt-2">
-          <span className="text-[10px] uppercase tracking-[2px] font-black mr-1">
-            Transitions →
-          </span>
-          {transitionLabels || <em>aucune (statut final)</em>}
-        </p>
+        <p className="text-xs text-aaj-gray">{statusRoleSentence(status)}</p>
+        {!status.isTerminal && (
+          <p className="text-xs text-aaj-dark">
+            <span className="text-aaj-gray">Mène vers :</span>{' '}
+            {transitionLabels || <em className="text-aaj-gray">aucune transition configurée</em>}
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
         <button
@@ -1264,6 +1252,7 @@ function StatusRow({
           onClick={() => setEditing(true)}
           className="p-2 hover:bg-slate-100 rounded text-aaj-gray"
           aria-label="Modifier"
+          title="Modifier"
         >
           <Pencil size={14} />
         </button>
@@ -1274,6 +1263,7 @@ function StatusRow({
             disabled={deleting}
             className="p-2 hover:bg-red-50 rounded text-red-600 disabled:opacity-50"
             aria-label="Supprimer"
+            title="Supprimer"
           >
             {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
           </button>
@@ -1303,17 +1293,20 @@ function StatusForm({
 }) {
   const isEdit = !!initial;
   const [form, setForm] = useState({
-    key: initial?.key ?? '',
     label: initial?.label ?? '',
     colorClass: initial?.colorClass ?? STATUS_COLOR_PRESETS[0].value,
     sortOrder: initial?.sortOrder ?? (allStatuses.length + 1) * 10,
     isActive: initial?.isActive ?? true,
     nextStatuses: initial?.nextStatuses ?? [],
   });
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isTerminal = !!initial?.isTerminal;
+  // Other statuses this one can transition to. Initial-state statuses
+  // can't be re-entered (no going back to "Brouillon" once submitted),
+  // so we hide them from the choice list.
   const otherStatuses = useMemo(
     () =>
       allStatuses.filter(
@@ -1332,20 +1325,21 @@ function StatusForm({
   };
 
   const submit = async () => {
-    if (!form.label.trim()) {
-      setError('Libellé obligatoire.');
+    const label = form.label.trim();
+    if (!label) {
+      setError('Donnez un nom à ce statut.');
       return;
     }
-    if (!isEdit && !form.key.trim()) {
-      setError('Clé technique obligatoire.');
-      return;
-    }
+    // For new statuses, derive the technical identifier from the label
+    // — admins shouldn't have to think about it. Backend sanitizes
+    // again and rejects empty / collision.
+    const key = isEdit ? (initial?.key ?? '') : slugifyLabel(label) || `statut_${Date.now()}`;
     setSaving(true);
     setError(null);
     try {
       await onSave({
-        key: form.key.trim(),
-        label: form.label.trim(),
+        key,
+        label,
         colorClass: form.colorClass,
         sortOrder: form.sortOrder,
         isActive: form.isActive,
@@ -1359,109 +1353,53 @@ function StatusForm({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <label className="block">
-          <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
-            Libellé affiché *
-          </span>
-          <input
-            type="text"
-            value={form.label}
-            onChange={(e) => setForm({ ...form, label: e.target.value })}
-            className="w-full px-3 py-2 border border-aaj-border text-sm rounded"
-            placeholder="Ex. En instruction"
-          />
-        </label>
-        <label className="block">
-          <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
-            Clé technique{!isEdit && ' *'}
-          </span>
-          <input
-            type="text"
-            value={form.key}
-            onChange={(e) => setForm({ ...form, key: e.target.value })}
-            disabled={isEdit}
-            className="w-full px-3 py-2 border border-aaj-border text-sm rounded font-mono disabled:bg-slate-100 disabled:text-aaj-gray"
-            placeholder="ex. avis_complementaire"
-          />
-          {isEdit && (
-            <p className="text-[10px] text-aaj-gray mt-1">
-              La clé est immuable une fois le statut créé.
-            </p>
-          )}
-        </label>
-      </div>
+    <div className="space-y-5">
+      <label className="block">
+        <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
+          Nom du statut
+        </span>
+        <input
+          type="text"
+          value={form.label}
+          onChange={(e) => setForm({ ...form, label: e.target.value })}
+          className="w-full px-3 py-2 border border-aaj-border text-sm rounded"
+          placeholder="Ex. En instruction"
+          autoFocus={!isEdit}
+        />
+      </label>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <label className="block">
-          <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
-            Couleur du badge
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {STATUS_COLOR_PRESETS.map((c) => {
-              const active = form.colorClass === c.value;
-              return (
-                <button
-                  type="button"
-                  key={c.value}
-                  onClick={() => setForm({ ...form, colorClass: c.value })}
-                  className={`px-2.5 py-1 border rounded text-[10px] uppercase tracking-widest font-black ${c.value} ${active ? 'ring-2 ring-aaj-dark ring-offset-1' : ''}`}
-                  title={c.label}
-                >
-                  {c.label}
-                </button>
-              );
-            })}
-          </div>
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
-              Ordre d'affichage
-            </span>
-            <input
-              type="number"
-              value={form.sortOrder}
-              onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) || 0 })}
-              className="w-full px-3 py-2 border border-aaj-border text-sm rounded"
-            />
-          </label>
-          <label className="block">
-            <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
-              Visibilité
-            </span>
-            <select
-              value={form.isActive ? 'yes' : 'no'}
-              onChange={(e) => setForm({ ...form, isActive: e.target.value === 'yes' })}
-              disabled={initial?.isSystem && form.isActive}
-              className="w-full px-3 py-2 border border-aaj-border text-sm rounded bg-white disabled:bg-slate-100"
-            >
-              <option value="yes">Actif</option>
-              <option value="no" disabled={initial?.isSystem}>
-                Inactif
-              </option>
-            </select>
-            {initial?.isSystem && (
-              <p className="text-[10px] text-aaj-gray mt-1">
-                Statut système : reste toujours actif.
-              </p>
-            )}
-          </label>
+      <div className="block">
+        <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
+          Couleur du badge
+        </span>
+        <div className="flex flex-wrap gap-2">
+          {STATUS_COLOR_PRESETS.map((c) => {
+            const active = form.colorClass === c.value;
+            return (
+              <button
+                type="button"
+                key={c.value}
+                onClick={() => setForm({ ...form, colorClass: c.value })}
+                className={`px-2.5 py-1 border rounded text-[10px] uppercase tracking-widest font-black ${c.value} ${active ? 'ring-2 ring-aaj-dark ring-offset-1' : ''}`}
+                title={c.label}
+              >
+                {form.label.trim() || c.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       <div className="block">
         <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
-          Transitions sortantes autorisées
+          Vers quels statuts peut-on basculer ?
         </span>
         {isTerminal ? (
           <p className="text-xs text-aaj-gray italic">
-            Statut terminal : aucune transition sortante. La demande est close lorsqu'elle
-            atteint cet état.
+            Ce statut clôture la demande, il ne mène vers aucun autre statut.
           </p>
         ) : otherStatuses.length === 0 ? (
-          <p className="text-xs text-aaj-gray">Aucun autre statut à connecter pour le moment.</p>
+          <p className="text-xs text-aaj-gray">Aucun autre statut disponible pour l'instant.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {otherStatuses.map((s) => {
@@ -1488,6 +1426,52 @@ function StatusForm({
           </div>
         )}
       </div>
+
+      {/* Advanced options — hidden by default to keep the form readable. */}
+      {(!initial?.isSystem || isEdit) && (
+        <div className="border-t border-aaj-border pt-3">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="text-[10px] uppercase tracking-[2px] font-black text-aaj-gray hover:text-aaj-dark inline-flex items-center gap-1"
+          >
+            {showAdvanced ? '▾' : '▸'} Options avancées
+          </button>
+          {showAdvanced && (
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
+                  Position dans la liste
+                </span>
+                <input
+                  type="number"
+                  value={form.sortOrder}
+                  onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-aaj-border text-sm rounded"
+                />
+                <p className="text-[10px] text-aaj-gray mt-1">
+                  Plus le nombre est petit, plus le statut apparaît tôt.
+                </p>
+              </label>
+              {!initial?.isSystem && (
+                <label className="block">
+                  <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
+                    Affichage
+                  </span>
+                  <select
+                    value={form.isActive ? 'yes' : 'no'}
+                    onChange={(e) => setForm({ ...form, isActive: e.target.value === 'yes' })}
+                    className="w-full px-3 py-2 border border-aaj-border text-sm rounded bg-white"
+                  >
+                    <option value="yes">Visible</option>
+                    <option value="no">Masqué</option>
+                  </select>
+                </label>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {error && <div className="text-sm text-red-600">{error}</div>}
 
