@@ -59,7 +59,13 @@ export const Navbar = () => {
       }`}
       aria-label="Navigation principale"
     >
-      <div className="max-w-7xl mx-auto px-6 h-full">
+      <div
+        className={`h-full ${
+          location.pathname.startsWith("/espace-adherents")
+            ? "w-full px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10"
+            : "max-w-7xl mx-auto px-6"
+        }`}
+      >
         <div className="flex justify-between items-center h-full">
           <Link to="/" className="flex items-center gap-1 group" aria-label="Accueil AAJ">
             <span
