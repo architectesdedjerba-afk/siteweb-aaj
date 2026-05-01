@@ -845,7 +845,7 @@ function PermitsListForMember({
         </div>
       ) : (
         <div className="overflow-x-auto border border-aaj-border rounded">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[700px]">
             <thead className="bg-slate-50 border-b border-aaj-border">
               <tr className="text-[10px] uppercase tracking-[2px] text-aaj-gray">
                 <th className="text-left px-4 py-3">Projet</th>

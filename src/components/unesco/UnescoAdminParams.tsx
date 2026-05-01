@@ -104,11 +104,11 @@ function UnescoAdminParamsInner() {
 
   return (
     <div>
-      <div className="mb-8 pb-6 border-b border-aaj-border">
+      <div className="mb-6 md:mb-8 pb-4 md:pb-6 border-b border-aaj-border">
         <span className="text-[10px] uppercase tracking-[3px] text-aaj-royal font-black">
           Administration
         </span>
-        <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tight mt-2">
+        <h2 className="text-2xl sm:text-3xl md:text-4xl font-black uppercase tracking-tight mt-2 break-words">
           Paramètres UNESCO
         </h2>
         <p className="mt-3 text-sm text-aaj-gray max-w-3xl leading-relaxed">
@@ -230,7 +230,7 @@ function KmzPanel({
 
   return (
     <div className="space-y-6">
-      <div className="border border-aaj-border rounded p-5">
+      <div className="border border-aaj-border rounded p-3 sm:p-4 md:p-5">
         <h3 className="text-[10px] uppercase tracking-[3px] text-aaj-gray font-black mb-4">
           Ajouter un fichier KMZ / KML
         </h3>
@@ -260,7 +260,7 @@ function KmzPanel({
             />
           </label>
         </div>
-        <div className="mt-4 flex items-center gap-3">
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -292,7 +292,7 @@ function KmzPanel({
         </div>
       ) : (
         <div className="overflow-x-auto border border-aaj-border rounded">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[600px]">
             <thead className="bg-slate-50 border-b border-aaj-border">
               <tr className="text-[10px] uppercase tracking-[2px] text-aaj-gray">
                 <th className="text-left px-4 py-3">Titre</th>

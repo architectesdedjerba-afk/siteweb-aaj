@@ -2,16 +2,16 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * UNESCO admin — gestion globale des demandes déposées dans la section
- * Djerba UNESCO. Vue tableau pensée pour le rôle "Agent d'administration".
- *
- * Diffère de UnescoAdminPermits (instruction) :
- *  - tableau dense avec tri par colonne
- *  - cartes de synthèse par statut
- *  - filtres + recherche full-text
- *  - export CSV de la sélection courante
- *  - panneau de détail latéral avec changement de statut rapide
- *    et historique en lecture seule (sans note interne / réaffectation)
+ * UNESCO admin — vue unifiée de gestion des demandes déposées dans la
+ * section Djerba UNESCO. Issue de la fusion de l'ex-onglet "Instruction
+ * UNESCO" dans "Demandes UNESCO" : un seul espace pour l'agent
+ * d'administration ET pour l'administrateur, avec :
+ *  - tableau dense triable + cartes de synthèse + recherche + export CSV
+ *  - drawer latéral de détail avec :
+ *      · changement de statut + commentaire (visible demandeur)
+ *      · note interne (masquée pour le demandeur)
+ *      · réaffectation manuelle de la zone UNESCO
+ *      · historique complet (statuts, notes, fichiers)
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -31,6 +31,7 @@ import {
   Paperclip,
   MapPin as MapPinIcon,
   RefreshCw,
+  Lock,
 } from 'lucide-react';
 import { api, type UnescoPermit, type UnescoPermitStatus, type UnescoZone } from '../../lib/api';
 import {
@@ -389,7 +390,7 @@ function UnescoAdminRequestsInner() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[900px]">
               <thead className="bg-slate-50 border-b border-aaj-border">
                 <tr>
                   <SortHeader
@@ -601,12 +602,14 @@ function RequestDetailDrawer({
 }) {
   const [nextStatus, setNextStatus] = useState<UnescoPermitStatus | ''>('');
   const [message, setMessage] = useState('');
+  const [internal, setInternal] = useState(false);
   const [posting, setPosting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     setNextStatus('');
     setMessage('');
+    setInternal(false);
     setErr(null);
   }, [permit?.id]);
 
@@ -634,15 +637,28 @@ function RequestDetailDrawer({
       await api.unesco.addPermitEvent(permit.id, {
         toStatus: nextStatus || null,
         message: message.trim() || undefined,
-        isInternal: false,
+        isInternal: internal,
       });
       setNextStatus('');
       setMessage('');
+      setInternal(false);
       await onChanged();
     } catch (e: any) {
       setErr(e?.message || 'Échec de la mise à jour.');
     } finally {
       setPosting(false);
+    }
+  };
+
+  const reassignZone = async (zoneId: string) => {
+    if (!permit) return;
+    try {
+      await api.unesco.updatePermit(permit.id, {
+        finalZoneId: (zoneId || null) as any,
+      });
+      await onChanged();
+    } catch (e: any) {
+      setErr(e?.message || 'Réaffectation impossible.');
     }
   };
 
@@ -753,6 +769,23 @@ function RequestDetailDrawer({
                   Aucune zone détectée (coordonnées manquantes ou hors périmètre).
                 </p>
               )}
+              <label className="block mt-3">
+                <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
+                  Réaffecter la zone
+                </span>
+                <select
+                  value={permit.finalZoneId || ''}
+                  onChange={(e) => void reassignZone(e.target.value)}
+                  className="w-full px-3 py-2 border border-aaj-border text-sm rounded bg-white"
+                >
+                  <option value="">— Laisser la détection automatique —</option>
+                  {Object.values(zonesById).map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.name} ({zoneTypeLabel(z.zoneType)})
+                    </option>
+                  ))}
+                </select>
+              </label>
             </section>
 
             <section className="border-t border-aaj-border pt-4">
@@ -785,33 +818,51 @@ function RequestDetailDrawer({
                 <h4 className="text-[10px] uppercase tracking-[3px] text-aaj-gray font-black mb-2">
                   Mise à jour rapide
                 </h4>
-                <label className="block">
-                  <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
-                    Nouveau statut
-                  </span>
-                  <select
-                    value={nextStatus}
-                    onChange={(e) => setNextStatus(e.target.value as UnescoPermitStatus)}
-                    className="w-full px-3 py-2 border border-aaj-border text-sm rounded bg-white"
-                  >
-                    <option value="">— Conserver le statut actuel —</option>
-                    {nextChoices.map((s) => (
-                      <option key={s.key} value={s.key}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
+                      Nouveau statut
+                    </span>
+                    <select
+                      value={nextStatus}
+                      onChange={(e) => setNextStatus(e.target.value as UnescoPermitStatus)}
+                      className="w-full px-3 py-2 border border-aaj-border text-sm rounded bg-white"
+                    >
+                      <option value="">— Conserver le statut actuel —</option>
+                      {nextChoices.map((s) => (
+                        <option key={s.key} value={s.key}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="inline-flex items-center gap-2 md:mt-7 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={internal}
+                      onChange={(e) => setInternal(e.target.checked)}
+                    />
+                    <span className="inline-flex items-center gap-1">
+                      <Lock size={12} /> Note interne (masquée pour le demandeur)
+                    </span>
+                  </label>
+                </div>
                 <label className="block mt-3">
                   <span className="block text-[10px] font-black uppercase tracking-[2px] text-aaj-gray mb-1.5">
-                    Commentaire (visible par le demandeur)
+                    {internal
+                      ? 'Note interne (visible uniquement par les administrateurs)'
+                      : 'Commentaire (visible par le demandeur)'}
                   </span>
                   <textarea
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     rows={3}
                     className="w-full px-3 py-2 border border-aaj-border text-sm rounded"
-                    placeholder="Motif, justification, demande de complément…"
+                    placeholder={
+                      internal
+                        ? 'Information interne, référence, contexte…'
+                        : 'Motif, justification, demande de complément…'
+                    }
                   />
                 </label>
                 {err && <p className="text-sm text-red-600 mt-2">{err}</p>}

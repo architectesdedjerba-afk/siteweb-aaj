@@ -42,7 +42,6 @@ import {
   MessagesSquare,
   Landmark,
   MapPinned,
-  FileCheck,
   ClipboardList,
   Pin,
   PinOff,
@@ -150,9 +149,6 @@ const UnescoMemberView = lazy(() =>
 );
 const UnescoAdminParams = lazy(() =>
   import('../components/unesco/UnescoAdminParams').then((m) => ({ default: m.UnescoAdminParams }))
-);
-const UnescoAdminPermits = lazy(() =>
-  import('../components/unesco/UnescoAdminPermits').then((m) => ({ default: m.UnescoAdminPermits }))
 );
 const UnescoAdminRequests = lazy(() =>
   import('../components/unesco/UnescoAdminRequests').then((m) => ({
@@ -481,7 +477,10 @@ export const MemberSpacePage = () => {
 
   // Lit ?tab=... au chargement (ex: lien depuis le drawer cloche).
   useEffect(() => {
-    const tab = searchParams.get('tab');
+    let tab = searchParams.get('tab');
+    // Backward compat: l'ancien onglet "Instruction UNESCO" a fusionné
+    // dans "Demandes UNESCO". Redirige les liens / bookmarks éventuels.
+    if (tab === 'admin-unesco-permits') tab = 'admin-unesco-requests';
     if (tab && tab !== activeTab) setActiveTab(tab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
@@ -3001,14 +3000,13 @@ export const MemberSpacePage = () => {
               perm: 'unesco_requests_manage',
               badge: unescoPendingReview,
             },
-            {
-              id: 'admin-unesco-permits',
-              icon: <FileCheck size={18} />,
-              label: 'Instruction UNESCO',
-              perm: 'unesco_permits_review',
-              badge: unescoPendingReview,
-            },
-          ].filter((item) => can(item.perm));
+          ].filter((item) =>
+            // Special-case: the merged Demandes UNESCO tab is also accessible
+            // to anyone who held the legacy unesco_permits_review permission.
+            item.id === 'admin-unesco-requests'
+              ? can('unesco_requests_manage') || can('unesco_permits_review')
+              : can(item.perm)
+          );
 
           if (adminItems.length === 0) return null;
 
@@ -3278,7 +3276,7 @@ export const MemberSpacePage = () => {
             </motion.div>
           </div>
         )}
-        <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 py-4 md:py-6">
           {/* Header Dashboard — welcome strip with cyan accent line */}
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -3294,7 +3292,7 @@ export const MemberSpacePage = () => {
                   Espace Privé
                 </span>
               </div>
-              <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tighter leading-none">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-black uppercase tracking-tighter leading-tight break-words">
                 Bienvenue, <span className="text-aaj-royal">{userProfile?.displayName || 'Cher Confrère'}</span>
               </h1>
             </div>
@@ -4927,14 +4925,14 @@ export const MemberSpacePage = () => {
                     exit={{ opacity: 0, x: -10 }}
                     className="space-y-8"
                   >
-                    <div className="flex justify-between items-center">
-                      <h2 className="text-2xl font-black uppercase tracking-tighter">
+                    <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 md:gap-4">
+                      <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tighter break-words">
                         Gestion des Adhésions
                       </h2>
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-2 md:gap-3">
                         <button
                           onClick={() => setShowArchivedMembers((v) => !v)}
-                          className={`px-4 py-3 rounded text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border ${
+                          className={`px-3 sm:px-4 py-2.5 sm:py-3 rounded text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border ${
                             showArchivedMembers
                               ? 'bg-slate-200 text-aaj-dark border-slate-300'
                               : 'bg-white text-aaj-gray border-aaj-border hover:text-aaj-dark'
@@ -4951,7 +4949,7 @@ export const MemberSpacePage = () => {
                         </button>
                         <button
                           onClick={() => setIsAddMemberModalOpen(true)}
-                          className="bg-aaj-dark text-white px-6 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center gap-2"
+                          className="bg-aaj-dark text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center gap-2"
                         >
                           <Plus size={14} /> Ajouter un Membre
                         </button>
@@ -5057,10 +5055,10 @@ export const MemberSpacePage = () => {
                     })()}
 
                     {/* Recherche & filtres */}
-                    <div className="border border-aaj-border rounded p-4 bg-slate-50/50 space-y-3">
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                    <div className="border border-aaj-border rounded p-3 sm:p-4 bg-slate-50/50 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
                         {/* Barre de recherche */}
-                        <div className="md:col-span-4 relative">
+                        <div className="sm:col-span-2 lg:col-span-4 relative">
                           <Search
                             size={14}
                             className="absolute left-3 top-1/2 -translate-y-1/2 text-aaj-gray pointer-events-none"
@@ -5084,7 +5082,7 @@ export const MemberSpacePage = () => {
                         </div>
 
                         {/* Filtre statut */}
-                        <div className="md:col-span-2">
+                        <div className="lg:col-span-2">
                           <select
                             value={adminMembersStatusFilter}
                             onChange={(e) =>
@@ -5101,7 +5099,7 @@ export const MemberSpacePage = () => {
                         </div>
 
                         {/* Filtre cotisation */}
-                        <div className="md:col-span-2">
+                        <div className="lg:col-span-2">
                           <select
                             value={adminMembersCotisationFilter}
                             onChange={(e) =>
@@ -5118,7 +5116,7 @@ export const MemberSpacePage = () => {
                         </div>
 
                         {/* Filtre catégorie */}
-                        <div className="md:col-span-2">
+                        <div className="lg:col-span-2">
                           <select
                             value={adminMembersCategoryFilter}
                             onChange={(e) => setAdminMembersCategoryFilter(e.target.value)}
@@ -5134,7 +5132,7 @@ export const MemberSpacePage = () => {
                         </div>
 
                         {/* Filtre ville */}
-                        <div className="md:col-span-2">
+                        <div className="lg:col-span-2">
                           <select
                             value={adminMembersCityFilter}
                             onChange={(e) => setAdminMembersCityFilter(e.target.value)}
@@ -5269,8 +5267,8 @@ export const MemberSpacePage = () => {
                               {showArchivedMembers ? 'membre(s) archivé(s)' : 'membre(s)'}
                             </span>
                           </div>
-                          <div className="border border-aaj-border rounded overflow-hidden">
-                            <table className="w-full text-left border-collapse">
+                          <div className="border border-aaj-border rounded overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[820px]">
                               <thead className="bg-slate-50 border-b border-aaj-border">
                                 <tr>
                                   {(
@@ -7704,29 +7702,16 @@ export const MemberSpacePage = () => {
                   </motion.div>
                 )}
 
-                {activeTab === 'admin-unesco-requests' && can('unesco_requests_manage') && (
-                  <motion.div
-                    key="admin-unesco-requests"
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
-                  >
-                    <Suspense fallback={<TabLoader />}>
-                      <UnescoAdminRequests />
-                    </Suspense>
-                  </motion.div>
-                )}
-
-                {activeTab === 'admin-unesco-permits' &&
-                  (can('unesco_permits_review') || can('unesco_manage')) && (
+                {activeTab === 'admin-unesco-requests' &&
+                  (can('unesco_requests_manage') || can('unesco_permits_review')) && (
                     <motion.div
-                      key="admin-unesco-permits"
+                      key="admin-unesco-requests"
                       initial={{ opacity: 0, x: 10 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -10 }}
                     >
                       <Suspense fallback={<TabLoader />}>
-                        <UnescoAdminPermits />
+                        <UnescoAdminRequests />
                       </Suspense>
                     </motion.div>
                   )}
