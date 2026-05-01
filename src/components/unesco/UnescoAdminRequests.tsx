@@ -45,6 +45,7 @@ import {
   usePermitStatuses,
   zoneTypeLabel,
 } from './UnescoCommon';
+import { UnescoMap, type UnescoGeoJson } from './UnescoMap';
 
 type StatusFilter = 'all' | UnescoPermitStatus;
 
@@ -77,6 +78,7 @@ function UnescoAdminRequestsInner() {
   );
   const [permits, setPermits] = useState<UnescoPermit[]>([]);
   const [zones, setZones] = useState<UnescoZone[]>([]);
+  const [geojson, setGeojson] = useState<UnescoGeoJson | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,13 +96,19 @@ function UnescoAdminRequestsInner() {
       else setLoading(true);
       setError(null);
       try {
-        const [list, zn] = await Promise.all([
+        // GeoJSON is loaded once (heavy payload, doesn't change with permits)
+        // — re-fetched only when not yet present, so silent refreshes from
+        // status updates don't re-download the KMZ tiles.
+        const geojsonNeeded = !geojson;
+        const [list, zn, gj] = await Promise.all([
           api.unesco.listPermits({ scope: 'all' }),
           api.unesco.listZones(),
+          geojsonNeeded ? api.unesco.geojson() : Promise.resolve(null),
         ]);
         // Drafts are not yet "deposited" requests — hide them from this view.
         setPermits(list.items.filter((p) => p.status !== 'draft'));
         setZones(zn.items);
+        if (gj) setGeojson(gj as UnescoGeoJson);
       } catch (e: any) {
         setError(e?.message || 'Chargement impossible.');
       } finally {
@@ -108,7 +116,7 @@ function UnescoAdminRequestsInner() {
         setRefreshing(false);
       }
     },
-    []
+    [geojson]
   );
 
   useEffect(() => {
@@ -523,6 +531,7 @@ function UnescoAdminRequestsInner() {
         permit={selectedDetail}
         loading={detailLoading}
         zonesById={zonesById}
+        geojson={geojson}
         onClose={() => setSelectedId(null)}
         onChanged={async () => {
           if (selectedId) await loadDetail(selectedId);
@@ -591,12 +600,14 @@ function RequestDetailDrawer({
   permit,
   loading,
   zonesById,
+  geojson,
   onClose,
   onChanged,
 }: {
   permit: UnescoPermit | null;
   loading: boolean;
   zonesById: Record<string, UnescoZone>;
+  geojson: UnescoGeoJson | null;
   onClose: () => void;
   onChanged: () => Promise<void>;
 }) {
@@ -786,6 +797,56 @@ function RequestDetailDrawer({
                   ))}
                 </select>
               </label>
+            </section>
+
+            <section className="border-t border-aaj-border pt-4">
+              <h4 className="text-[10px] uppercase tracking-[3px] text-aaj-gray font-black mb-2 flex items-center gap-2">
+                <MapPinIcon size={12} /> Localisation du projet
+              </h4>
+              {permit.latitude != null && permit.longitude != null ? (
+                <p className="text-xs text-aaj-gray mb-2 tabular-nums">
+                  {permit.latitude.toFixed(5)}, {permit.longitude.toFixed(5)}
+                  {' · '}
+                  <a
+                    href={`https://www.google.com/maps?q=${permit.latitude},${permit.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-aaj-royal hover:underline"
+                  >
+                    Ouvrir dans Google Maps ↗
+                  </a>
+                </p>
+              ) : (
+                <p className="text-xs text-aaj-gray mb-2">
+                  Coordonnées non renseignées par le demandeur.
+                </p>
+              )}
+              <div className="rounded overflow-hidden border border-aaj-border">
+                <UnescoMap
+                  geojson={geojson}
+                  marker={
+                    permit.latitude != null && permit.longitude != null
+                      ? {
+                          lat: permit.latitude,
+                          lng: permit.longitude,
+                          label: permit.title,
+                        }
+                      : null
+                  }
+                  focusBbox={
+                    permit.latitude != null && permit.longitude != null
+                      ? [
+                          permit.longitude - 0.005,
+                          permit.latitude - 0.005,
+                          permit.longitude + 0.005,
+                          permit.latitude + 0.005,
+                        ]
+                      : null
+                  }
+                  fitKey={permit.id}
+                  height={280}
+                />
+              </div>
             </section>
 
             <section className="border-t border-aaj-border pt-4">
