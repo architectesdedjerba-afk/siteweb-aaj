@@ -2865,7 +2865,7 @@ export const MemberSpacePage = () => {
     const sidebarContent = (
       <>
         <div className="flex items-center justify-between gap-2 mb-5 px-2">
-          <span className="text-[9px] uppercase tracking-[3px] text-aaj-gray font-black">
+          <span className="text-[9px] uppercase tracking-[3px] text-aaj-cyan font-black">
             Navigation
           </span>
           <div className="flex items-center gap-1">
@@ -2876,7 +2876,7 @@ export const MemberSpacePage = () => {
                 sidebarPinned ? 'Désépingler (masquer automatiquement)' : 'Épingler le menu'
               }
               aria-pressed={sidebarPinned}
-              className="p-1.5 text-aaj-gray hover:text-aaj-royal rounded hover:bg-slate-50"
+              className="p-1.5 text-aaj-gray hover:text-aaj-cyan rounded hover:bg-aaj-soft transition-colors"
             >
               {sidebarPinned ? <PinOff size={14} /> : <Pin size={14} />}
             </button>
@@ -2885,7 +2885,7 @@ export const MemberSpacePage = () => {
                 type="button"
                 onClick={() => setSidebarOpen(false)}
                 title="Fermer"
-                className="p-1.5 text-aaj-gray hover:text-aaj-royal rounded hover:bg-slate-50"
+                className="p-1.5 text-aaj-gray hover:text-aaj-cyan rounded hover:bg-aaj-soft transition-colors"
               >
                 <X size={14} />
               </button>
@@ -2911,16 +2911,16 @@ export const MemberSpacePage = () => {
               onClick={() => selectTab(item.id)}
               className={`w-full flex items-center justify-between px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] transition-all ${
                 activeTab === item.id
-                  ? 'bg-aaj-dark text-white shadow-lg'
-                  : 'text-aaj-gray hover:bg-slate-50 border border-transparent hover:border-aaj-border'
+                  ? 'bg-aaj-night text-white shadow-[0_0_20px_rgba(0,229,255,0.25)] border border-aaj-cyan/40'
+                  : 'text-aaj-gray hover:bg-aaj-soft border border-transparent hover:border-aaj-cyan/30'
               }`}
             >
               <div className="flex items-center gap-4">
-                <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>{item.icon}</span>
+                <span className={activeTab === item.id ? 'text-aaj-cyan' : ''}>{item.icon}</span>
                 {item.label}
               </div>
               {item.badge > 0 && (
-                <span className="min-w-5 h-5 px-1.5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
+                <span className="min-w-5 h-5 px-1.5 bg-aaj-magenta text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse shadow-[0_0_12px_rgba(255,61,113,0.5)]">
                   {item.badge}
                 </span>
               )}
@@ -2934,9 +2934,9 @@ export const MemberSpacePage = () => {
               setIsContactModalOpen(true);
               if (!sidebarPinned) setSidebarOpen(false);
             }}
-            className="w-full flex items-center gap-4 px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] text-aaj-gray hover:bg-aaj-dark hover:text-white border border-aaj-border hover:border-aaj-dark transition-all"
+            className="group w-full flex items-center gap-4 px-6 py-4 rounded text-[11px] font-black uppercase tracking-[2px] text-aaj-gray hover:bg-aaj-night hover:text-white border border-aaj-border hover:border-aaj-cyan/40 hover:shadow-[0_0_20px_rgba(0,229,255,0.2)] transition-all"
           >
-            <MessageSquare size={18} className="text-aaj-royal" />
+            <MessageSquare size={18} className="text-aaj-royal group-hover:text-aaj-cyan transition-colors" />
             Contacter l&apos;administration
           </button>
         </div>
@@ -3013,7 +3013,8 @@ export const MemberSpacePage = () => {
           return (
             <div className="mt-12 space-y-1">
               <h3 className="text-[10px] font-black uppercase tracking-[3px] text-aaj-gray px-6 mb-4 mt-8 flex items-center gap-2">
-                <Shield size={12} className="text-aaj-royal" /> Administration
+                <Shield size={12} className="text-aaj-cyan" /> Administration
+                <span className="flex-1 h-px bg-aaj-cyan/30 ml-2" aria-hidden="true" />
               </h3>
               {adminItems.map((item) => (
                 <button
@@ -3026,11 +3027,11 @@ export const MemberSpacePage = () => {
                   }`}
                 >
                   <div className="flex items-center gap-4">
-                    <span className={activeTab === item.id ? 'text-aaj-royal' : ''}>{item.icon}</span>
+                    <span className={activeTab === item.id ? 'text-aaj-cyan' : ''}>{item.icon}</span>
                     {item.label}
                   </div>
                   {item.badge > 0 && (
-                    <span className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
+                    <span className="w-5 h-5 bg-aaj-magenta text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse shadow-[0_0_12px_rgba(255,61,113,0.5)]">
                       {item.badge}
                     </span>
                   )}
@@ -3276,14 +3277,23 @@ export const MemberSpacePage = () => {
           </div>
         )}
         <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 py-4 md:py-6">
-          {/* Header Dashboard */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 pb-4 border-b border-aaj-border">
+          {/* Header Dashboard — welcome strip with cyan accent line */}
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            className="relative flex flex-col md:flex-row md:items-center justify-between mb-6 pb-4"
+          >
+            <div className="absolute bottom-0 inset-x-0 h-px bg-gradient-to-r from-aaj-cyan/40 via-aaj-border to-transparent" aria-hidden="true" />
             <div>
-              <span className="text-[10px] uppercase tracking-[3px] text-aaj-royal font-black mb-1 block">
-                Espace Privé
-              </span>
+              <div className="inline-flex items-center gap-3 mb-2">
+                <span className="w-6 h-px bg-aaj-cyan" aria-hidden="true" />
+                <span className="text-[10px] uppercase tracking-[3px] text-aaj-cyan font-black">
+                  Espace Privé
+                </span>
+              </div>
               <h1 className="text-xl sm:text-2xl md:text-3xl font-black uppercase tracking-tighter leading-tight break-words">
-                Bienvenue, {userProfile?.displayName || 'Cher Confrère'}
+                Bienvenue, <span className="text-aaj-royal">{userProfile?.displayName || 'Cher Confrère'}</span>
               </h1>
             </div>
             <div className="mt-4 md:mt-0 flex items-center gap-4">
@@ -3291,7 +3301,7 @@ export const MemberSpacePage = () => {
                 <span className="block text-[10px] uppercase font-black tracking-widest text-aaj-gray">
                   Statut Adhérent
                 </span>
-                <span className="text-sm font-bold text-aaj-royal uppercase tracking-widest">
+                <span className="text-sm font-bold uppercase tracking-widest text-aaj-cyan">
                   {userProfile?.role === 'admin'
                     ? 'Administrateur'
                     : userProfile?.role === 'representative'
@@ -3301,12 +3311,13 @@ export const MemberSpacePage = () => {
               </div>
               <button
                 onClick={handleLogout}
-                className="w-10 h-10 border border-aaj-border flex items-center justify-center text-red-500 hover:bg-red-50 transition-colors rounded"
+                className="w-10 h-10 border border-aaj-border flex items-center justify-center text-aaj-magenta hover:bg-aaj-magenta hover:text-white hover:border-aaj-magenta transition-all rounded shadow-sm"
+                aria-label="Se déconnecter"
               >
                 <LogOut size={18} />
               </button>
             </div>
-          </div>
+          </motion.div>
 
           {/* Floating "open menu" button surfaces when the sidebar is
               auto-hidden (pin released) and currently closed. */}
