@@ -54,11 +54,37 @@ export interface UnescoGeoJson {
   }>;
 }
 
+/**
+ * A single point of interest rendered on top of the zone GeoJSON. Used
+ * for the multi-pin overview (e.g. all UNESCO permit requests). Distinct
+ * from the singular `marker` prop, which keeps the legacy single-pin
+ * behaviour for the permit submission form and the admin detail drawer.
+ */
+export interface UnescoMapMarker {
+  id: string;
+  lat: number;
+  lng: number;
+  label?: string;
+  /** Hex / CSS colour for the circle (default: aaj royal blue). */
+  color?: string;
+  /** Tooltip / aria label shown on hover. Falls back to `label`. */
+  tooltip?: string;
+  onClick?: () => void;
+}
+
 interface UnescoMapProps {
   geojson: UnescoGeoJson | null;
   onZoneClick?: (props: Record<string, any>) => void;
   onPick?: (coords: { lat: number; lng: number }) => void;
   marker?: { lat: number; lng: number; label?: string } | null;
+  /**
+   * Multi-pin overlay. Re-rendered as a fresh layer whenever the array
+   * identity changes — pass a stable reference (useMemo) when the same
+   * dataset is shown twice in a row to avoid flicker.
+   */
+  markers?: UnescoMapMarker[];
+  /** When true, fits the view to the markers' combined bounding box on first render. */
+  fitToMarkers?: boolean;
   height?: number | string;
   fitKey?: string | number;
   /**
@@ -79,6 +105,8 @@ export function UnescoMap({
   onZoneClick,
   onPick,
   marker,
+  markers,
+  fitToMarkers = false,
   height = 480,
   fitKey,
   focusBbox,
@@ -87,6 +115,7 @@ export function UnescoMap({
   const mapRef = useRef<L.Map | null>(null);
   const geoLayerRef = useRef<L.GeoJSON | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
+  const multiMarkersLayerRef = useRef<L.LayerGroup | null>(null);
   const pickHandlerRef = useRef<UnescoMapProps['onPick']>(onPick);
   const zoneHandlerRef = useRef<UnescoMapProps['onZoneClick']>(onZoneClick);
   // Snapshot of every rendered feature's geometry + properties, kept in
@@ -237,6 +266,7 @@ export function UnescoMap({
       mapRef.current = null;
       geoLayerRef.current = null;
       markerRef.current = null;
+      multiMarkersLayerRef.current = null;
     };
   }, []);
 
@@ -370,6 +400,52 @@ export function UnescoMap({
       { padding: [32, 32], maxZoom: 16 }
     );
   }, [focusBbox?.[0], focusBbox?.[1], focusBbox?.[2], focusBbox?.[3]]);
+
+  // --- multi-marker overlay (admin overview of all permit requests) ---
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    // Always tear down the previous layer first, then rebuild — simpler
+    // than diffing and avoids stale onClick handlers when the parent
+    // re-renders with a new array.
+    if (multiMarkersLayerRef.current) {
+      map.removeLayer(multiMarkersLayerRef.current);
+      multiMarkersLayerRef.current = null;
+    }
+    const list = markers ?? [];
+    if (list.length === 0) return;
+
+    const group = L.layerGroup();
+    list.forEach((m) => {
+      const c = L.circleMarker([m.lat, m.lng], {
+        radius: 8,
+        weight: 2,
+        color: '#ffffff',
+        fillColor: m.color ?? '#2563EB',
+        fillOpacity: 0.95,
+        // Native cursor hint when the pin is interactive
+        bubblingMouseEvents: false,
+      });
+      const tip = m.tooltip ?? m.label;
+      if (tip) c.bindTooltip(tip, { direction: 'top', offset: L.point(0, -4) });
+      if (m.onClick) {
+        c.on('click', (ev: L.LeafletMouseEvent) => {
+          // Prevent the underlying map click (which would otherwise
+          // trigger onPick handlers in the picker mode) from firing.
+          L.DomEvent.stopPropagation(ev);
+          m.onClick!();
+        });
+      }
+      c.addTo(group);
+    });
+    group.addTo(map);
+    multiMarkersLayerRef.current = group;
+
+    if (fitToMarkers && list.length > 0) {
+      const bounds = L.latLngBounds(list.map((m) => [m.lat, m.lng] as [number, number]));
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+    }
+  }, [markers, fitToMarkers]);
 
   const heightStyle = typeof height === 'number' ? `${height}px` : height;
   return (
