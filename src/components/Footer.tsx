@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Facebook, Mail, MapPin, ArrowUpRight } from "lucide-react";
 import { Marquee } from "./motion";
 
@@ -26,6 +26,11 @@ const MARQUEE_WORDS = [
 
 export const Footer = () => {
   const year = new Date().getFullYear();
+  const location = useLocation();
+  const isAdminSpace = location.pathname.startsWith("/espace-adherents");
+  const wrapperWidth = isAdminSpace
+    ? "w-full px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10"
+    : "max-w-7xl mx-auto px-6";
 
   return (
     <footer className="relative bg-aaj-night text-white border-t border-white/10 overflow-hidden">
@@ -52,7 +57,7 @@ export const Footer = () => {
         </Marquee>
       </div>
 
-      <div className="relative max-w-7xl mx-auto px-6 py-16 grid grid-cols-1 md:grid-cols-12 gap-12">
+      <div className={`relative ${wrapperWidth} py-16 grid grid-cols-1 md:grid-cols-12 gap-12`}>
         <div className="md:col-span-5 space-y-6">
           <Link to="/" className="inline-block">
             <span className="font-display font-bold text-5xl tracking-tighter text-white">
@@ -152,7 +157,7 @@ export const Footer = () => {
       </div>
 
       <div className="relative border-t border-white/10">
-        <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-[10px] uppercase tracking-[3px] font-black">
+        <div className={`${wrapperWidth} py-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-[10px] uppercase tracking-[3px] font-black`}>
           <span className="text-white/40">
             © {year} — Association des Architectes de Jerba
           </span>

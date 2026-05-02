@@ -195,6 +195,33 @@ const TabLoader = () => (
 );
 
 /**
+ * Compact stat block (label + colored count) used inside dashboard cards
+ * such as the UNESCO requests management card.
+ */
+const DASH_STAT_TONES: Record<string, string> = {
+  indigo: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  red: 'bg-red-50 text-red-700 border-red-200',
+  slate: 'bg-slate-50 text-slate-700 border-slate-200',
+};
+const DashStat = ({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: keyof typeof DASH_STAT_TONES;
+}) => (
+  <div
+    className={`px-3 py-2 border rounded text-center min-w-[88px] ${DASH_STAT_TONES[tone] ?? DASH_STAT_TONES.slate}`}
+  >
+    <div className="text-2xl font-black tabular-nums leading-none">{value}</div>
+    <div className="text-[9px] font-black uppercase tracking-[2px] mt-1">{label}</div>
+  </div>
+);
+
+/**
  * Format a contact-message reply timestamp. The firebase shim wraps `*At`
  * fields in {seconds, toDate()}; the optimistic-update path right after a
  * POST puts the raw ISO string from the API. Accept either, return ' • DD/MM/YYYY HH:MM'.
@@ -531,9 +558,11 @@ export const MemberSpacePage = () => {
     userRole?.permissions?.unesco_permits_review === true ||
     userRole?.permissions?.unesco_requests_manage === true;
   const [unescoPendingReview, setUnescoPendingReview] = useState(0);
+  const [unescoStatusCounts, setUnescoStatusCounts] = useState<Record<string, number>>({});
   useEffect(() => {
     if (!user || !canReviewUnesco) {
       setUnescoPendingReview(0);
+      setUnescoStatusCounts({});
       return;
     }
     let cancelled = false;
@@ -541,7 +570,9 @@ export const MemberSpacePage = () => {
       apiClient.unesco
         .statusCounts()
         .then((r) => {
-          if (!cancelled) setUnescoPendingReview(r.pendingReview);
+          if (cancelled) return;
+          setUnescoPendingReview(r.pendingReview);
+          setUnescoStatusCounts(r.counts || {});
         })
         .catch(() => {});
     };
@@ -3478,6 +3509,64 @@ export const MemberSpacePage = () => {
                         );
                       })}
                     </div>
+
+                    {/* Carte Administration : gestion des demandes UNESCO.
+                        Visible uniquement pour les rôles ayant accès à
+                        l'onglet "Demandes UNESCO" (Agent d'administration
+                        ou Administrateur). Click → ouvre l'onglet de gestion. */}
+                    {(can('unesco_requests_manage') || can('unesco_permits_review')) && (
+                      <div>
+                        <h3 className="text-[10px] uppercase tracking-[3px] text-aaj-royal font-black flex items-center gap-4 mb-6">
+                          Administration <span className="h-px flex-1 bg-aaj-border"></span>
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('admin-unesco-requests')}
+                          aria-label="Ouvrir la gestion des demandes UNESCO"
+                          className="w-full text-left border border-aaj-border rounded bg-white group hover:border-aaj-royal transition-all overflow-hidden"
+                        >
+                          <div className="h-1.5 bg-aaj-royal" aria-hidden="true" />
+                          <div className="p-6 flex flex-col md:flex-row md:items-center gap-6 md:gap-10">
+                            <div className="flex items-center gap-4 md:flex-1">
+                              <div className="w-12 h-12 rounded bg-blue-50 border border-blue-100 flex items-center justify-center text-aaj-royal group-hover:bg-aaj-royal group-hover:text-white transition-colors shrink-0">
+                                <ClipboardList size={20} />
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-aaj-royal block">
+                                  Djerba UNESCO
+                                </span>
+                                <p className="text-lg font-black uppercase tracking-tight">
+                                  Gestion des demandes
+                                </p>
+                                <p className="text-[10px] font-bold text-aaj-gray uppercase tracking-wide mt-0.5">
+                                  Consultation, instruction, décision
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4 md:gap-6 flex-wrap">
+                              <DashStat
+                                label="En attente"
+                                value={unescoPendingReview}
+                                tone="indigo"
+                              />
+                              <DashStat
+                                label="Favorables"
+                                value={unescoStatusCounts.approved || 0}
+                                tone="emerald"
+                              />
+                              <DashStat
+                                label="Défavorables"
+                                value={unescoStatusCounts.rejected || 0}
+                                tone="red"
+                              />
+                            </div>
+                            <div className="text-[10px] font-black uppercase tracking-[2px] px-4 py-2 rounded bg-blue-50 text-aaj-royal group-hover:bg-aaj-royal group-hover:text-white transition-all md:ml-auto">
+                              Gérer →
+                            </div>
+                          </div>
+                        </button>
+                      </div>
+                    )}
                   </motion.div>
                 )}
 

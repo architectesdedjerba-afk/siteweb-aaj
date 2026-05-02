@@ -32,6 +32,8 @@ import {
   MapPin as MapPinIcon,
   RefreshCw,
   Lock,
+  Map as MapIcon,
+  Table as TableIcon,
 } from 'lucide-react';
 import { api, type UnescoPermit, type UnescoPermitStatus, type UnescoZone } from '../../lib/api';
 import {
@@ -45,11 +47,34 @@ import {
   usePermitStatuses,
   zoneTypeLabel,
 } from './UnescoCommon';
+import { UnescoMap, type UnescoGeoJson, type UnescoMapMarker } from './UnescoMap';
 
 type StatusFilter = 'all' | UnescoPermitStatus;
 
 type SortKey = 'submittedAt' | 'updatedAt' | 'title' | 'applicant' | 'status' | 'city';
 type SortDir = 'asc' | 'desc';
+
+/**
+ * Solid hex colour per permit status — used for the map pins so a
+ * reviewer can read the dossier load at a glance: red = rejected,
+ * green = favourable, amber/blue = ongoing instruction. Mirrors the
+ * Tailwind palette behind PERMIT_STATUS_COLORS in UnescoCommon, but
+ * picked from the saturated ~600 ring so dots stay readable on top of
+ * Esri imagery (which already shifts cool).
+ */
+const PERMIT_PIN_COLORS: Record<string, string> = {
+  draft: '#64748b',           // slate-500
+  submitted: '#2563EB',       // blue-600
+  under_review: '#4F46E5',    // indigo-600
+  info_requested: '#D97706',  // amber-600
+  decision_pending: '#7C3AED',// violet-600
+  approved: '#059669',        // emerald-600
+  rejected: '#DC2626',        // red-600
+  withdrawn: '#94a3b8',       // slate-400
+};
+
+const pinColorFor = (status: string): string =>
+  PERMIT_PIN_COLORS[status] ?? PERMIT_PIN_COLORS.submitted;
 
 export function UnescoAdminRequests() {
   const fetched = useFetchPermitStatuses();
@@ -77,7 +102,9 @@ function UnescoAdminRequestsInner() {
   );
   const [permits, setPermits] = useState<UnescoPermit[]>([]);
   const [zones, setZones] = useState<UnescoZone[]>([]);
+  const [geojson, setGeojson] = useState<UnescoGeoJson | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showMap, setShowMap] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -94,13 +121,19 @@ function UnescoAdminRequestsInner() {
       else setLoading(true);
       setError(null);
       try {
-        const [list, zn] = await Promise.all([
+        // GeoJSON is loaded once (heavy payload, doesn't change with permits)
+        // — re-fetched only when not yet present, so silent refreshes from
+        // status updates don't re-download the KMZ tiles.
+        const geojsonNeeded = !geojson;
+        const [list, zn, gj] = await Promise.all([
           api.unesco.listPermits({ scope: 'all' }),
           api.unesco.listZones(),
+          geojsonNeeded ? api.unesco.geojson() : Promise.resolve(null),
         ]);
         // Drafts are not yet "deposited" requests — hide them from this view.
         setPermits(list.items.filter((p) => p.status !== 'draft'));
         setZones(zn.items);
+        if (gj) setGeojson(gj as UnescoGeoJson);
       } catch (e: any) {
         setError(e?.message || 'Chargement impossible.');
       } finally {
@@ -108,7 +141,7 @@ function UnescoAdminRequestsInner() {
         setRefreshing(false);
       }
     },
-    []
+    [geojson]
   );
 
   useEffect(() => {
@@ -175,6 +208,29 @@ function UnescoAdminRequestsInner() {
       setSortDir('desc');
     }
   };
+
+  // Map markers for the overview — derived from the same `sorted` list
+  // that feeds the table, so any active status filter / search applies
+  // to the map too. Permits without coordinates are silently skipped.
+  const mapMarkers = useMemo<UnescoMapMarker[]>(
+    () =>
+      sorted
+        .filter((p) => p.latitude != null && p.longitude != null)
+        .map((p) => ({
+          id: p.id,
+          lat: p.latitude as number,
+          lng: p.longitude as number,
+          color: pinColorFor(p.status),
+          label: p.title,
+          tooltip: `${p.title} — ${permitStatusLabel(p.status, statuses)}`,
+          onClick: () => setSelectedId(p.id),
+        })),
+    [sorted, statuses]
+  );
+  const mapMarkersWithoutCoords = useMemo(
+    () => sorted.filter((p) => p.latitude == null || p.longitude == null).length,
+    [sorted]
+  );
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -366,6 +422,20 @@ function UnescoAdminRequestsInner() {
           </button>
           <button
             type="button"
+            onClick={() => setShowMap((v) => !v)}
+            aria-pressed={showMap}
+            title={showMap ? 'Masquer la carte' : 'Afficher la carte'}
+            className={`inline-flex items-center gap-2 px-3 py-2 border rounded text-[10px] font-black uppercase tracking-[2px] transition-colors ${
+              showMap
+                ? 'bg-aaj-dark text-white border-aaj-dark'
+                : 'bg-white text-aaj-gray border-aaj-border hover:bg-slate-50'
+            }`}
+          >
+            {showMap ? <TableIcon size={14} /> : <MapIcon size={14} />}
+            {showMap ? 'Masquer carte' : 'Voir carte'}
+          </button>
+          <button
+            type="button"
             onClick={exportCsv}
             disabled={sorted.length === 0}
             className="inline-flex items-center gap-2 px-3 py-2 border border-aaj-border rounded text-[10px] font-black uppercase tracking-[2px] hover:bg-slate-50 disabled:opacity-50"
@@ -374,6 +444,51 @@ function UnescoAdminRequestsInner() {
           </button>
         </div>
       </div>
+
+      {/* Carte d'ensemble — tous les projets de la sélection courante,
+          colorés par statut. La sélection (filtres / recherche) du
+          tableau s'applique à la carte. Cliquer un pin ouvre le drawer. */}
+      {showMap && (
+        <div className="mb-6">
+          <div className="rounded overflow-hidden border border-aaj-border bg-white">
+            <UnescoMap
+              geojson={geojson}
+              markers={mapMarkers}
+              fitToMarkers={mapMarkers.length > 0}
+              fitKey={`overview-${mapMarkers.length}`}
+              height={420}
+            />
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-aaj-gray">
+            <span className="font-black uppercase tracking-[2px] text-aaj-dark">
+              {mapMarkers.length} projet{mapMarkers.length > 1 ? 's' : ''} sur la carte
+            </span>
+            {mapMarkersWithoutCoords > 0 && (
+              <span className="text-amber-700">
+                ({mapMarkersWithoutCoords} sans coordonnées)
+              </span>
+            )}
+            <span className="h-3 w-px bg-aaj-border" aria-hidden="true" />
+            {[
+              { key: 'submitted', label: 'Déposées' },
+              { key: 'under_review', label: 'En instruction' },
+              { key: 'info_requested', label: 'Complément' },
+              { key: 'decision_pending', label: 'Décision' },
+              { key: 'approved', label: 'Favorables' },
+              { key: 'rejected', label: 'Défavorables' },
+            ].map((s) => (
+              <span key={s.key} className="inline-flex items-center gap-1.5">
+                <span
+                  className="inline-block w-2.5 h-2.5 rounded-full border border-white shadow-sm"
+                  style={{ background: pinColorFor(s.key) }}
+                  aria-hidden="true"
+                />
+                {s.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Tableau */}
       <div className="border border-aaj-border rounded overflow-hidden bg-white">
@@ -523,6 +638,7 @@ function UnescoAdminRequestsInner() {
         permit={selectedDetail}
         loading={detailLoading}
         zonesById={zonesById}
+        geojson={geojson}
         onClose={() => setSelectedId(null)}
         onChanged={async () => {
           if (selectedId) await loadDetail(selectedId);
@@ -591,12 +707,14 @@ function RequestDetailDrawer({
   permit,
   loading,
   zonesById,
+  geojson,
   onClose,
   onChanged,
 }: {
   permit: UnescoPermit | null;
   loading: boolean;
   zonesById: Record<string, UnescoZone>;
+  geojson: UnescoGeoJson | null;
   onClose: () => void;
   onChanged: () => Promise<void>;
 }) {
@@ -786,6 +904,56 @@ function RequestDetailDrawer({
                   ))}
                 </select>
               </label>
+            </section>
+
+            <section className="border-t border-aaj-border pt-4">
+              <h4 className="text-[10px] uppercase tracking-[3px] text-aaj-gray font-black mb-2 flex items-center gap-2">
+                <MapPinIcon size={12} /> Localisation du projet
+              </h4>
+              {permit.latitude != null && permit.longitude != null ? (
+                <p className="text-xs text-aaj-gray mb-2 tabular-nums">
+                  {permit.latitude.toFixed(5)}, {permit.longitude.toFixed(5)}
+                  {' · '}
+                  <a
+                    href={`https://www.google.com/maps?q=${permit.latitude},${permit.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-aaj-royal hover:underline"
+                  >
+                    Ouvrir dans Google Maps ↗
+                  </a>
+                </p>
+              ) : (
+                <p className="text-xs text-aaj-gray mb-2">
+                  Coordonnées non renseignées par le demandeur.
+                </p>
+              )}
+              <div className="rounded overflow-hidden border border-aaj-border">
+                <UnescoMap
+                  geojson={geojson}
+                  marker={
+                    permit.latitude != null && permit.longitude != null
+                      ? {
+                          lat: permit.latitude,
+                          lng: permit.longitude,
+                          label: permit.title,
+                        }
+                      : null
+                  }
+                  focusBbox={
+                    permit.latitude != null && permit.longitude != null
+                      ? [
+                          permit.longitude - 0.005,
+                          permit.latitude - 0.005,
+                          permit.longitude + 0.005,
+                          permit.latitude + 0.005,
+                        ]
+                      : null
+                  }
+                  fitKey={permit.id}
+                  height={280}
+                />
+              </div>
             </section>
 
             <section className="border-t border-aaj-border pt-4">
