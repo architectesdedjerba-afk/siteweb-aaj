@@ -3070,7 +3070,7 @@ export const MemberSpacePage = () => {
               </div>
               <form onSubmit={handleForcedPasswordChange} className="p-8 space-y-6">
                 {forcePwdError && (
-                  <div className="p-4 bg-red-50 text-red-600 rounded border border-red-100 text-[11px] font-bold uppercase tracking-wider flex items-center gap-3">
+                  <div className="p-4 bg-aaj-magenta/10 text-aaj-magenta rounded border border-aaj-magenta/30 text-[11px] font-bold uppercase tracking-wider flex items-center gap-3">
                     <XCircle size={16} />
                     {forcePwdError}
                   </div>
@@ -3105,7 +3105,7 @@ export const MemberSpacePage = () => {
                 <button
                   type="submit"
                   disabled={forcePwdSubmitting}
-                  className="w-full bg-aaj-dark text-white py-4 rounded font-black uppercase tracking-[3px] text-xs hover:bg-aaj-royal transition-all active:scale-[0.98] flex items-center justify-center gap-3"
+                  className="w-full bg-aaj-dark text-white py-4 rounded font-black uppercase tracking-[3px] text-xs hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all active:scale-[0.98] flex items-center justify-center gap-3"
                 >
                   {forcePwdSubmitting ? (
                     <Loader2 className="animate-spin" size={20} />
@@ -3200,7 +3200,7 @@ export const MemberSpacePage = () => {
                 <button
                   type="button"
                   onClick={() => setWelcomeBannerDismissed(true)}
-                  className="w-full bg-aaj-dark text-white py-3 rounded font-black uppercase tracking-[3px] text-xs hover:bg-aaj-royal transition-all active:scale-[0.98]"
+                  className="w-full bg-aaj-dark text-white py-3 rounded font-black uppercase tracking-[3px] text-xs hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all active:scale-[0.98]"
                 >
                   J&apos;ai compris — accéder à la plateforme
                 </button>
@@ -3216,13 +3216,13 @@ export const MemberSpacePage = () => {
               animate={{ opacity: 1, scale: 1 }}
               className="relative bg-white w-full max-w-lg shadow-2xl rounded overflow-hidden"
             >
-              <div className="p-8 border-b border-aaj-border bg-red-50/60">
+              <div className="p-8 border-b border-aaj-border bg-aaj-magenta/10">
                 <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-red-100 rounded flex items-center justify-center text-red-600 flex-shrink-0">
+                  <div className="w-12 h-12 bg-aaj-magenta/15 rounded flex items-center justify-center text-aaj-magenta flex-shrink-0">
                     <XCircle size={24} />
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase tracking-[3px] text-red-600 font-black block">
+                    <span className="text-[10px] uppercase tracking-[3px] text-aaj-magenta font-black block">
                       Période d&apos;essai expirée
                     </span>
                     <h3 className="text-xl font-black uppercase tracking-tight text-aaj-dark mt-1">
@@ -3268,7 +3268,7 @@ export const MemberSpacePage = () => {
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="w-full bg-aaj-dark text-white py-3 rounded font-black uppercase tracking-[3px] text-xs hover:bg-aaj-royal transition-all active:scale-[0.98] flex items-center justify-center gap-3"
+                  className="w-full bg-aaj-dark text-white py-3 rounded font-black uppercase tracking-[3px] text-xs hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all active:scale-[0.98] flex items-center justify-center gap-3"
                 >
                   <LogOut size={16} /> Se déconnecter
                 </button>
@@ -3402,7 +3402,7 @@ export const MemberSpacePage = () => {
                             Cotisation
                           </span>
                           <div className="text-4xl font-black text-aaj-dark mb-2">2026</div>
-                          <div className="inline-block px-3 py-1 bg-green-50 text-green-600 text-[10px] font-black uppercase tracking-[2px] rounded border border-green-100 mx-auto">
+                          <div className="inline-block px-3 py-1 bg-aaj-cyan/10 text-aaj-cyan text-[10px] font-black uppercase tracking-[2px] rounded border border-aaj-cyan/30 mx-auto">
                             À jour
                           </div>
                           <p className="text-[10px] text-aaj-gray mt-6 font-bold uppercase tracking-widest leading-relaxed">
@@ -3468,7 +3468,7 @@ export const MemberSpacePage = () => {
                                   )}
                                 </div>
                                 <div
-                                  className={`text-[9px] font-black px-2 py-1 uppercase rounded bg-green-50 text-green-600 group-hover:bg-aaj-royal group-hover:text-white transition-all`}
+                                  className={`text-[9px] font-black px-2 py-1 uppercase rounded bg-aaj-cyan/10 text-aaj-cyan group-hover:bg-aaj-royal group-hover:text-white transition-all`}
                                 >
                                   Consulter
                                 </div>
@@ -3711,7 +3711,7 @@ export const MemberSpacePage = () => {
                               className={[
                                 'p-6 border rounded bg-white hover:border-aaj-royal group transition-all space-y-4',
                                 isArchived
-                                  ? 'border-amber-300 bg-amber-50/40'
+                                  ? 'border-aaj-amber/50 bg-aaj-amber/10'
                                   : 'border-aaj-border',
                               ].join(' ')}
                             >
@@ -3748,7 +3748,7 @@ export const MemberSpacePage = () => {
                                       </>
                                     )}
                                     {isArchived && (
-                                      <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 flex items-center gap-1">
+                                      <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-aaj-amber/15 text-aaj-amber border border-aaj-amber/40 flex items-center gap-1">
                                         <Archive size={10} /> Archivé
                                       </span>
                                     )}
@@ -3772,7 +3772,7 @@ export const MemberSpacePage = () => {
                                       type="button"
                                       onClick={() => handleArchivePV(pv)}
                                       disabled={inFlight}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-aaj-border bg-white text-[10px] font-black uppercase tracking-widest text-aaj-dark hover:border-amber-500 hover:text-amber-600 transition-colors disabled:opacity-50"
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-aaj-border bg-white text-[10px] font-black uppercase tracking-widest text-aaj-dark hover:border-aaj-amber hover:text-aaj-amber transition-colors disabled:opacity-50"
                                       title={isArchived ? 'Désarchiver' : 'Archiver'}
                                     >
                                       {isArchived ? (
@@ -3789,7 +3789,7 @@ export const MemberSpacePage = () => {
                                       type="button"
                                       onClick={() => handleDeletePV(pv)}
                                       disabled={inFlight}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-aaj-border bg-white text-[10px] font-black uppercase tracking-widest text-aaj-dark hover:border-red-500 hover:text-red-600 transition-colors disabled:opacity-50"
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-aaj-border bg-white text-[10px] font-black uppercase tracking-widest text-aaj-dark hover:border-aaj-magenta hover:text-aaj-magenta transition-colors disabled:opacity-50"
                                       title="Supprimer"
                                     >
                                       <Trash2 size={12} /> Supprimer
@@ -3974,7 +3974,7 @@ export const MemberSpacePage = () => {
                                   </div>
                                   <button
                                     onClick={() => setSelectedCommune(town)}
-                                    className="w-full bg-aaj-dark text-white py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all group-hover:scale-[1.02]"
+                                    className="w-full bg-aaj-dark text-white py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all group-hover:scale-[1.02]"
                                   >
                                     Consulter les PV
                                   </button>
@@ -4321,7 +4321,7 @@ export const MemberSpacePage = () => {
                                       libraryFileInputRef.current.value = '';
                                     }
                                   }}
-                                  className="bg-red-50 text-red-500 px-4 rounded hover:bg-red-100 transition-colors"
+                                  className="bg-aaj-magenta/10 text-aaj-magenta px-4 rounded hover:bg-aaj-magenta/15 transition-colors"
                                 >
                                   <XCircle size={16} />
                                 </button>
@@ -4399,7 +4399,7 @@ export const MemberSpacePage = () => {
                           <button
                             type="submit"
                             disabled={isSaving}
-                            className="bg-aaj-dark text-white px-12 py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all flex items-center gap-3 shadow-lg shadow-aaj-dark/20 disabled:bg-aaj-gray"
+                            className="bg-aaj-dark text-white px-12 py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center gap-3 shadow-lg shadow-aaj-dark/20 disabled:bg-aaj-gray"
                           >
                             {isSaving ? (
                               <Loader2 size={16} className="animate-spin" />
@@ -4471,7 +4471,7 @@ export const MemberSpacePage = () => {
                                       Archivé
                                     </span>
                                   )}
-                                  <span className="text-[9px] font-black uppercase tracking-widest text-aaj-royal bg-blue-50 px-2 py-0.5 rounded">
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-aaj-royal bg-aaj-electric/10 px-2 py-0.5 rounded">
                                     {doc.category}
                                   </span>
                                   {doc.subCategory && (
@@ -4519,8 +4519,8 @@ export const MemberSpacePage = () => {
                                 disabled={archivingDocId === doc.id}
                                 className={`p-2 transition-colors disabled:opacity-50 ${
                                   doc.archived
-                                    ? 'text-emerald-600 hover:text-emerald-700'
-                                    : 'text-aaj-gray hover:text-amber-600'
+                                    ? 'text-aaj-cyan hover:text-aaj-cyan'
+                                    : 'text-aaj-gray hover:text-aaj-amber'
                                 }`}
                                 title={doc.archived ? 'Restaurer' : 'Archiver'}
                               >
@@ -4534,7 +4534,7 @@ export const MemberSpacePage = () => {
                               </button>
                               <button
                                 onClick={() => handleDeleteDocument(doc.id)}
-                                className="p-2 text-aaj-gray hover:text-red-500 transition-colors"
+                                className="p-2 text-aaj-gray hover:text-aaj-magenta transition-colors"
                                 title="Supprimer"
                               >
                                 <Trash2 size={18} />
@@ -4677,11 +4677,11 @@ export const MemberSpacePage = () => {
                               </div>
                               <div className="flex items-center gap-3">
                                 {msg.replied ? (
-                                  <span className="text-[9px] font-black text-green-600 bg-green-50 px-2.5 py-1 rounded border border-green-100 uppercase tracking-widest">
+                                  <span className="text-[9px] font-black text-aaj-cyan bg-aaj-cyan/10 px-2.5 py-1 rounded border border-aaj-cyan/30 uppercase tracking-widest">
                                     Traité
                                   </span>
                                 ) : (
-                                  <span className="text-[9px] font-black text-amber-600 bg-amber-50 px-2.5 py-1 rounded border border-amber-100 uppercase tracking-widest">
+                                  <span className="text-[9px] font-black text-aaj-amber bg-aaj-amber/10 px-2.5 py-1 rounded border border-aaj-amber/30 uppercase tracking-widest">
                                     En attente
                                   </span>
                                 )}
@@ -4689,10 +4689,10 @@ export const MemberSpacePage = () => {
                             </div>
 
                             {msg.replied && msg.replyMessage && (
-                              <div className="mt-4 border-l-4 border-green-500 bg-green-50/60 p-4 rounded">
+                              <div className="mt-4 border-l-4 border-aaj-cyan bg-aaj-cyan/10 p-4 rounded">
                                 <div className="flex items-center gap-2 mb-2">
-                                  <CheckCircle2 size={12} className="text-green-600" />
-                                  <span className="text-[9px] font-black uppercase tracking-widest text-green-700">
+                                  <CheckCircle2 size={12} className="text-aaj-cyan" />
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-aaj-cyan">
                                     Réponse de l&apos;administration
                                     {formatReplyTimestamp(msg.repliedAt)}
                                   </span>
@@ -4774,7 +4774,7 @@ export const MemberSpacePage = () => {
                       <h2 className="text-2xl font-black uppercase tracking-tighter">Mon Profil</h2>
                       <button
                         onClick={() => setIsRequestModalOpen(true)}
-                        className="bg-aaj-dark text-white px-8 py-3 rounded text-[11px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center gap-3"
+                        className="bg-aaj-dark text-white px-8 py-3 rounded text-[11px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center gap-3"
                       >
                         <Settings size={16} />
                         Demander une modification
@@ -4782,14 +4782,14 @@ export const MemberSpacePage = () => {
                     </div>
 
                     {pendingUserRequests.some((r) => r.status === 'pending') && (
-                      <div className="p-4 bg-amber-50 border border-amber-100 rounded flex items-center justify-between">
+                      <div className="p-4 bg-aaj-amber/10 border border-aaj-amber/30 rounded flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <Loader2 size={16} className="text-amber-600 animate-spin" />
-                          <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">
+                          <Loader2 size={16} className="text-aaj-amber animate-spin" />
+                          <p className="text-[10px] font-black uppercase tracking-widest text-aaj-amber">
                             Une demande de modification est en cours d&apos;examen
                           </p>
                         </div>
-                        <span className="text-[9px] font-bold text-amber-600 italic">
+                        <span className="text-[9px] font-bold text-aaj-amber italic">
                           Soumis le{' '}
                           {pendingUserRequests
                             .find((r) => r.status === 'pending')
@@ -4949,7 +4949,7 @@ export const MemberSpacePage = () => {
                         </button>
                         <button
                           onClick={() => setIsAddMemberModalOpen(true)}
-                          className="bg-aaj-dark text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center gap-2"
+                          className="bg-aaj-dark text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center gap-2"
                         >
                           <Plus size={14} /> Ajouter un Membre
                         </button>
@@ -4963,10 +4963,10 @@ export const MemberSpacePage = () => {
                       );
                       if (pendingApps.length === 0) return null;
                       return (
-                        <div className="border border-amber-200 rounded overflow-hidden bg-amber-50/50">
-                          <div className="bg-amber-100/60 px-5 py-3 border-b border-amber-200 flex items-center gap-3">
-                            <Shield size={16} className="text-amber-700" />
-                            <h3 className="text-[11px] font-black uppercase tracking-widest text-amber-800">
+                        <div className="border border-aaj-amber/40 rounded overflow-hidden bg-aaj-amber/10">
+                          <div className="bg-aaj-amber/15 px-5 py-3 border-b border-aaj-amber/40 flex items-center gap-3">
+                            <Shield size={16} className="text-aaj-amber" />
+                            <h3 className="text-[11px] font-black uppercase tracking-widest text-aaj-amber">
                               Demandes d&apos;adhésion en attente ({pendingApps.length})
                             </h3>
                           </div>
@@ -5012,7 +5012,7 @@ export const MemberSpacePage = () => {
                                     <button
                                       onClick={() => handleApproveApplication(app)}
                                       disabled={approvingApplicationId === app.id}
-                                      className="px-4 py-2 bg-green-600 text-white rounded text-[10px] font-black uppercase tracking-widest hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                                      className="px-4 py-2 bg-aaj-cyan text-aaj-night text-white rounded text-[10px] font-black uppercase tracking-widest hover:bg-white transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                                     >
                                       {approvingApplicationId === app.id ? (
                                         <Loader2 size={12} className="animate-spin" />
@@ -5040,7 +5040,7 @@ export const MemberSpacePage = () => {
                                     <button
                                       onClick={() => handleDeleteApplication(app)}
                                       disabled={approvingApplicationId === app.id}
-                                      className="px-3 py-2 text-aaj-gray hover:text-red-600 transition-colors"
+                                      className="px-3 py-2 text-aaj-gray hover:text-aaj-magenta transition-colors"
                                       title="Supprimer"
                                     >
                                       <Trash2 size={14} />
@@ -5372,11 +5372,11 @@ export const MemberSpacePage = () => {
                                               <Trash2 size={10} /> Archivé
                                             </span>
                                           ) : member.status === 'suspended' ? (
-                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-700 text-[9px] font-black uppercase tracking-widest border border-red-100">
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-aaj-magenta/10 text-aaj-magenta text-[9px] font-black uppercase tracking-widest border border-aaj-magenta/30">
                                               <XCircle size={10} /> Suspendu
                                             </span>
                                           ) : (
-                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-[9px] font-black uppercase tracking-widest border border-green-100">
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-aaj-cyan/10 text-aaj-cyan text-[9px] font-black uppercase tracking-widest border border-aaj-cyan/30">
                                               <CheckCircle2 size={10} /> Actif
                                             </span>
                                           )}
@@ -5387,11 +5387,11 @@ export const MemberSpacePage = () => {
                                               {currentYearLabel}
                                             </p>
                                             {currentYearPaid ? (
-                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[9px] font-black uppercase tracking-widest border border-green-100">
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-aaj-cyan/10 text-aaj-cyan text-[9px] font-black uppercase tracking-widest border border-aaj-cyan/30">
                                                 <CheckCircle2 size={9} /> Payée
                                               </span>
                                             ) : (
-                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[9px] font-black uppercase tracking-widest border border-amber-100">
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-aaj-amber/10 text-aaj-amber text-[9px] font-black uppercase tracking-widest border border-aaj-amber/30">
                                                 <XCircle size={9} /> Non payée
                                               </span>
                                             )}
@@ -5411,13 +5411,13 @@ export const MemberSpacePage = () => {
                                             <>
                                               <button
                                                 onClick={() => handleRestoreMember(member)}
-                                                className="text-[10px] font-black text-green-600 uppercase tracking-widest hover:underline px-3"
+                                                className="text-[10px] font-black text-aaj-cyan uppercase tracking-widest hover:underline px-3"
                                               >
                                                 Restaurer
                                               </button>
                                               <button
                                                 onClick={() => handleDeleteMember(member)}
-                                                className="text-[10px] font-black text-red-600 uppercase tracking-widest hover:underline px-3 inline-flex items-center gap-1"
+                                                className="text-[10px] font-black text-aaj-magenta uppercase tracking-widest hover:underline px-3 inline-flex items-center gap-1"
                                                 title="Supprimer définitivement — irréversible"
                                               >
                                                 <Trash2 size={11} /> Supprimer
@@ -5427,7 +5427,7 @@ export const MemberSpacePage = () => {
                                             <>
                                               <button
                                                 onClick={() => handleToggleSuspense(member)}
-                                                className={`text-[10px] font-black uppercase tracking-widest hover:underline px-3 ${member.status === 'suspended' ? 'text-green-600' : 'text-red-500'}`}
+                                                className={`text-[10px] font-black uppercase tracking-widest hover:underline px-3 ${member.status === 'suspended' ? 'text-aaj-cyan' : 'text-aaj-magenta'}`}
                                               >
                                                 {member.status === 'suspended'
                                                   ? 'Reprendre'
@@ -5478,7 +5478,7 @@ export const MemberSpacePage = () => {
                       </div>
                       <button
                         onClick={() => setIsAddRoleModalOpen(true)}
-                        className="bg-aaj-dark text-white px-6 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center gap-2"
+                        className="bg-aaj-dark text-white px-6 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center gap-2"
                       >
                         <Plus size={14} /> Ajouter un rôle
                       </button>
@@ -5512,7 +5512,7 @@ export const MemberSpacePage = () => {
                                     {!r.isSystem && (
                                       <button
                                         onClick={() => handleDeleteRole(r)}
-                                        className="text-red-500 hover:text-red-700 transition-colors"
+                                        className="text-aaj-magenta hover:text-aaj-magenta transition-colors"
                                         title="Supprimer ce rôle"
                                       >
                                         <Trash2 size={12} />
@@ -5681,7 +5681,7 @@ export const MemberSpacePage = () => {
                                             {member.displayName || '—'}
                                           </p>
                                           {isSelf && (
-                                            <span className="px-2 py-0.5 rounded-full bg-blue-50 text-aaj-royal text-[8px] font-black uppercase tracking-widest border border-blue-100">
+                                            <span className="px-2 py-0.5 rounded-full bg-aaj-electric/10 text-aaj-royal text-[8px] font-black uppercase tracking-widest border border-aaj-electric/30">
                                               Vous
                                             </span>
                                           )}
@@ -5775,8 +5775,8 @@ export const MemberSpacePage = () => {
                       <div
                         className={`p-4 rounded border text-[11px] font-bold uppercase tracking-widest ${
                           configMessage.type === 'success'
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                            : 'bg-red-50 border-red-200 text-red-700'
+                            ? 'bg-aaj-cyan/10 border-aaj-cyan/30 text-aaj-cyan'
+                            : 'bg-aaj-magenta/10 border-aaj-magenta/30 text-aaj-magenta'
                         }`}
                       >
                         {configMessage.text}
@@ -5809,7 +5809,7 @@ export const MemberSpacePage = () => {
                             type="button"
                             onClick={handleTestMail}
                             disabled={mailTest.sending}
-                            className="bg-aaj-dark text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                            className="bg-aaj-dark text-white px-6 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                           >
                             {mailTest.sending ? (
                               <Loader2 className="animate-spin" size={12} />
@@ -5821,7 +5821,7 @@ export const MemberSpacePage = () => {
                         </div>
 
                         {mailTest.error && (
-                          <div className="p-3 rounded border bg-red-50 border-red-200 text-red-700 text-[11px] font-bold uppercase tracking-widest">
+                          <div className="p-3 rounded border bg-aaj-magenta/10 border-aaj-magenta/30 text-aaj-magenta text-[11px] font-bold uppercase tracking-widest">
                             {mailTest.error}
                           </div>
                         )}
@@ -5830,8 +5830,8 @@ export const MemberSpacePage = () => {
                           <div
                             className={`p-3 rounded border text-[11px] ${
                               mailTest.result.ok
-                                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                                : 'bg-red-50 border-red-200 text-red-800'
+                                ? 'bg-aaj-cyan/10 border-aaj-cyan/30 text-aaj-cyan'
+                                : 'bg-aaj-magenta/10 border-aaj-magenta/30 text-aaj-magenta'
                             }`}
                           >
                             <div className="font-black uppercase tracking-widest mb-2">
@@ -5923,7 +5923,7 @@ export const MemberSpacePage = () => {
                                 type="button"
                                 onClick={handleUpdateMemberType}
                                 disabled={configSaving}
-                                className="bg-aaj-dark text-white px-4 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center justify-center gap-2"
+                                className="bg-aaj-dark text-white px-4 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center justify-center gap-2"
                               >
                                 <CheckCircle2 size={12} /> Enregistrer
                               </button>
@@ -5961,7 +5961,7 @@ export const MemberSpacePage = () => {
                                   type="button"
                                   onClick={() => handleRemoveMemberType(t.letter)}
                                   disabled={configSaving}
-                                  className="text-red-500 hover:text-red-700 transition-colors"
+                                  className="text-aaj-magenta hover:text-aaj-magenta transition-colors"
                                   title="Supprimer"
                                 >
                                   <Trash2 size={14} />
@@ -6003,7 +6003,7 @@ export const MemberSpacePage = () => {
                           type="button"
                           onClick={handleAddMemberType}
                           disabled={configSaving}
-                          className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center justify-center gap-2"
+                          className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center justify-center gap-2"
                         >
                           <Plus size={12} /> Ajouter
                         </button>
@@ -6050,7 +6050,7 @@ export const MemberSpacePage = () => {
                           type="button"
                           onClick={() => handleAddVille(newVilleInput)}
                           disabled={configSaving}
-                          className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center justify-center gap-2"
+                          className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center justify-center gap-2"
                         >
                           <Plus size={12} /> Ajouter
                         </button>
@@ -6063,7 +6063,7 @@ export const MemberSpacePage = () => {
                               type="button"
                               onClick={() => handleRemoveVille(v)}
                               disabled={configSaving}
-                              className="text-red-500 hover:text-red-700 transition-colors"
+                              className="text-aaj-magenta hover:text-aaj-magenta transition-colors"
                               title="Supprimer"
                             >
                               <Trash2 size={12} />
@@ -6118,7 +6118,7 @@ export const MemberSpacePage = () => {
                           type="button"
                           onClick={() => handleAddNewsCategory(newNewsCategoryInput)}
                           disabled={configSaving}
-                          className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center justify-center gap-2"
+                          className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center justify-center gap-2"
                         >
                           <Plus size={12} /> Ajouter
                         </button>
@@ -6141,7 +6141,7 @@ export const MemberSpacePage = () => {
                                 type="button"
                                 onClick={() => handleRemoveNewsCategory(cat)}
                                 disabled={configSaving}
-                                className="text-red-500 hover:text-red-700 transition-colors"
+                                className="text-aaj-magenta hover:text-aaj-magenta transition-colors"
                                 title="Supprimer"
                               >
                                 <Trash2 size={12} />
@@ -6197,7 +6197,7 @@ export const MemberSpacePage = () => {
                           type="button"
                           onClick={() => handleAddCommissionType(newCommissionTypeInput)}
                           disabled={configSaving}
-                          className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center justify-center gap-2"
+                          className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center justify-center gap-2"
                         >
                           <Plus size={12} /> Ajouter
                         </button>
@@ -6210,7 +6210,7 @@ export const MemberSpacePage = () => {
                               type="button"
                               onClick={() => handleRemoveCommissionType(t)}
                               disabled={configSaving}
-                              className="text-red-500 hover:text-red-700 transition-colors"
+                              className="text-aaj-magenta hover:text-aaj-magenta transition-colors"
                               title="Supprimer"
                             >
                               <Trash2 size={12} />
@@ -6249,7 +6249,7 @@ export const MemberSpacePage = () => {
                             type="button"
                             onClick={handleSaveCommissionColors}
                             disabled={configSaving || Object.keys(colorDrafts).length === 0}
-                            className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                           >
                             <Save size={12} /> Enregistrer
                           </button>
@@ -6277,7 +6277,7 @@ export const MemberSpacePage = () => {
                                   <span className="text-[10px] font-bold uppercase tracking-wider text-aaj-gray">
                                     {current}
                                     {isDirty && (
-                                      <span className="ml-2 text-amber-600">· Non enregistré</span>
+                                      <span className="ml-2 text-aaj-amber">· Non enregistré</span>
                                     )}
                                   </span>
                                 </div>
@@ -6312,7 +6312,7 @@ export const MemberSpacePage = () => {
                       <h2 className="text-2xl font-black uppercase tracking-tighter">
                         Gestion des Partenaires
                       </h2>
-                      <button className="bg-aaj-dark text-white px-6 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center gap-2">
+                      <button className="bg-aaj-dark text-white px-6 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center gap-2">
                         <Plus size={14} /> Nouveau Partenaire
                       </button>
                     </div>
@@ -6326,9 +6326,9 @@ export const MemberSpacePage = () => {
                           <div
                             className={`absolute top-4 right-4 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded border ${
                               partner.level === 'Platine'
-                                ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                ? 'bg-aaj-amber/10 text-aaj-amber border-aaj-amber/30'
                                 : partner.level === 'Or'
-                                  ? 'bg-yellow-50 text-yellow-700 border-yellow-100'
+                                  ? 'bg-aaj-amber/10 text-aaj-amber border-aaj-amber/30'
                                   : 'bg-slate-50 text-slate-700 border-slate-100'
                             }`}
                           >
@@ -6361,7 +6361,7 @@ export const MemberSpacePage = () => {
                             <button className="flex-1 text-[9px] font-black uppercase tracking-widest text-aaj-royal border border-aaj-royal/20 py-2 rounded hover:bg-aaj-royal hover:text-white transition-all">
                               Gérer
                             </button>
-                            <button className="flex-1 text-[9px] font-black uppercase tracking-widest text-red-500 border border-red-500/20 py-2 rounded hover:bg-red-50 transition-all">
+                            <button className="flex-1 text-[9px] font-black uppercase tracking-widest text-aaj-magenta border border-aaj-magenta/30 py-2 rounded hover:bg-aaj-magenta/10 transition-all">
                               Retirer
                             </button>
                           </div>
@@ -6394,7 +6394,7 @@ export const MemberSpacePage = () => {
                       {adminMessages.map((msg) => (
                         <div
                           key={msg.id}
-                          className={`p-8 border rounded transition-all ${msg.status === 'unread' ? 'bg-blue-50/30 border-aaj-royal/30' : 'bg-white border-aaj-border opacity-70'}`}
+                          className={`p-8 border rounded transition-all ${msg.status === 'unread' ? 'bg-aaj-electric/10/30 border-aaj-royal/30' : 'bg-white border-aaj-border opacity-70'}`}
                         >
                           <div className="flex flex-col md:flex-row justify-between gap-8">
                             <div className="flex-1">
@@ -6437,10 +6437,10 @@ export const MemberSpacePage = () => {
                               )}
 
                               {msg.replied && msg.replyMessage && (
-                                <div className="mt-6 border-l-4 border-green-500 bg-green-50/60 p-4 rounded">
+                                <div className="mt-6 border-l-4 border-aaj-cyan bg-aaj-cyan/10 p-4 rounded">
                                   <div className="flex items-center gap-2 mb-2">
-                                    <CheckCircle2 size={12} className="text-green-600" />
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-green-700">
+                                    <CheckCircle2 size={12} className="text-aaj-cyan" />
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-aaj-cyan">
                                       Réponse envoyée
                                       {formatReplyTimestamp(msg.repliedAt)}
                                     </span>
@@ -6505,7 +6505,7 @@ export const MemberSpacePage = () => {
                                     onClick={() =>
                                       handleUpdateMessageStatus(msg.id, { replied: !msg.replied })
                                     }
-                                    className={`w-10 h-5 rounded-full relative transition-all cursor-pointer ${msg.replied ? 'bg-green-500' : 'bg-slate-200'}`}
+                                    className={`w-10 h-5 rounded-full relative transition-all cursor-pointer ${msg.replied ? 'bg-aaj-cyan/100' : 'bg-slate-200'}`}
                                   >
                                     <div
                                       className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${msg.replied ? 'left-6' : 'left-1'}`}
@@ -6514,12 +6514,12 @@ export const MemberSpacePage = () => {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {msg.replied ? (
-                                    <CheckCircle2 size={12} className="text-green-600" />
+                                    <CheckCircle2 size={12} className="text-aaj-cyan" />
                                   ) : (
-                                    <Loader2 size={12} className="text-amber-500" />
+                                    <Loader2 size={12} className="text-aaj-amber" />
                                   )}
                                   <span
-                                    className={`text-[9px] font-black uppercase tracking-widest ${msg.replied ? 'text-green-600' : 'text-amber-600'}`}
+                                    className={`text-[9px] font-black uppercase tracking-widest ${msg.replied ? 'text-aaj-cyan' : 'text-aaj-amber'}`}
                                   >
                                     {msg.replied ? 'Déjà Répondu' : 'En attente de réponse'}
                                   </span>
@@ -6547,7 +6547,7 @@ export const MemberSpacePage = () => {
                                     onClick={() =>
                                       handleUpdateMessageStatus(msg.id, { status: 'read' })
                                     }
-                                    className="w-full py-2 bg-aaj-dark text-white rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all"
+                                    className="w-full py-2 bg-aaj-dark text-white rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all"
                                   >
                                     Marquer comme lu
                                   </button>
@@ -6673,7 +6673,7 @@ export const MemberSpacePage = () => {
                                   <button
                                     type="button"
                                     onClick={() => removePvFile(idx)}
-                                    className="text-aaj-gray hover:text-red-600 transition-colors"
+                                    className="text-aaj-gray hover:text-aaj-magenta transition-colors"
                                     aria-label="Retirer ce fichier"
                                   >
                                     <X size={16} />
@@ -6757,7 +6757,7 @@ export const MemberSpacePage = () => {
                         <button
                           type="button"
                           onClick={() => selectTab('publish-job')}
-                          className="inline-flex items-center gap-2 bg-aaj-dark text-white px-5 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all"
+                          className="inline-flex items-center gap-2 bg-aaj-dark text-white px-5 py-3 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all"
                         >
                           <Plus size={14} /> Publier une offre
                         </button>
@@ -6833,7 +6833,7 @@ export const MemberSpacePage = () => {
                                     className={`inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[2px] px-2.5 py-1 rounded border ${
                                       isOffer
                                         ? 'bg-aaj-soft text-aaj-royal border-aaj-royal/20'
-                                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-aaj-cyan/10 text-aaj-cyan border-aaj-cyan/30'
                                     }`}
                                   >
                                     {isOffer ? 'Offre' : 'Demande'}
@@ -7063,7 +7063,7 @@ export const MemberSpacePage = () => {
                       {jobItems.filter((j) => (j.status || 'pending') === 'pending').length ===
                       0 ? (
                         <div className="p-8 border border-dashed border-aaj-border rounded text-center bg-slate-50/50">
-                          <CheckCircle2 size={32} className="mx-auto text-emerald-200 mb-3" />
+                          <CheckCircle2 size={32} className="mx-auto text-aaj-cyan/40 mb-3" />
                           <p className="text-[11px] font-black uppercase tracking-widest text-aaj-gray">
                             Toutes les demandes ont été traitées.
                           </p>
@@ -7083,7 +7083,7 @@ export const MemberSpacePage = () => {
                                       className={`inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[2px] px-2.5 py-1 rounded border ${
                                         j.kind === 'offer'
                                           ? 'bg-aaj-soft text-aaj-royal border-aaj-royal/20'
-                                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                          : 'bg-aaj-cyan/10 text-aaj-cyan border-aaj-cyan/30'
                                       }`}
                                     >
                                       {j.kind === 'offer' ? 'Offre' : 'Demande'}
@@ -7129,14 +7129,14 @@ export const MemberSpacePage = () => {
                                   <button
                                     type="button"
                                     onClick={() => handleRejectJob(j.id)}
-                                    className="px-5 py-2 border border-red-200 text-red-500 rounded text-[10px] font-black uppercase tracking-widest hover:bg-red-50 transition-colors"
+                                    className="px-5 py-2 border border-aaj-magenta/30 text-aaj-magenta rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-magenta/10 transition-colors"
                                   >
                                     Rejeter
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleApproveJob(j.id)}
-                                    className="px-5 py-2 bg-emerald-600 text-white rounded text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100"
+                                    className="px-5 py-2 bg-aaj-cyan text-aaj-night text-white rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-cyan transition-colors shadow-lg shadow-aaj-cyan/20"
                                   >
                                     Publier
                                   </button>
@@ -7177,10 +7177,10 @@ export const MemberSpacePage = () => {
                                 const status = j.status || 'pending';
                                 const statusClass =
                                   status === 'approved'
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    ? 'bg-aaj-cyan/10 text-aaj-cyan border-aaj-cyan/30'
                                     : status === 'rejected'
-                                      ? 'bg-red-50 text-red-700 border-red-200'
-                                      : 'bg-amber-50 text-amber-700 border-amber-200';
+                                      ? 'bg-aaj-magenta/10 text-aaj-magenta border-aaj-magenta/30'
+                                      : 'bg-aaj-amber/10 text-aaj-amber border-aaj-amber/40';
                                 return (
                                   <tr
                                     key={j.id}
@@ -7218,7 +7218,7 @@ export const MemberSpacePage = () => {
                                           <button
                                             type="button"
                                             onClick={() => handleApproveJob(j.id)}
-                                            className="text-[9px] font-black uppercase tracking-widest text-emerald-700 hover:underline"
+                                            className="text-[9px] font-black uppercase tracking-widest text-aaj-cyan hover:underline"
                                           >
                                             Publier
                                           </button>
@@ -7227,7 +7227,7 @@ export const MemberSpacePage = () => {
                                           <button
                                             type="button"
                                             onClick={() => handleRejectJob(j.id)}
-                                            className="text-[9px] font-black uppercase tracking-widest text-amber-700 hover:underline"
+                                            className="text-[9px] font-black uppercase tracking-widest text-aaj-amber hover:underline"
                                           >
                                             Rejeter
                                           </button>
@@ -7235,7 +7235,7 @@ export const MemberSpacePage = () => {
                                         <button
                                           type="button"
                                           onClick={() => handleDeleteJob(j.id)}
-                                          className="text-[9px] font-black uppercase tracking-widest text-red-600 hover:underline"
+                                          className="text-[9px] font-black uppercase tracking-widest text-aaj-magenta hover:underline"
                                         >
                                           Supprimer
                                         </button>
@@ -7267,7 +7267,7 @@ export const MemberSpacePage = () => {
                     <div className="space-y-6">
                       {profileRequests.filter((r) => r.status === 'pending').length === 0 ? (
                         <div className="p-12 border border-dashed border-aaj-border rounded text-center bg-slate-50/50">
-                          <CheckCircle2 size={48} className="mx-auto text-green-200 mb-4" />
+                          <CheckCircle2 size={48} className="mx-auto text-aaj-cyan/40 mb-4" />
                           <p className="text-sm font-black uppercase tracking-widest text-aaj-gray">
                             Toutes les demandes ont été traitées
                           </p>
@@ -7343,13 +7343,13 @@ export const MemberSpacePage = () => {
                               <div className="p-6 bg-slate-50 border-t border-aaj-border flex justify-end gap-4">
                                 <button
                                   onClick={() => handleRejectProfileChange(request.id)}
-                                  className="px-6 py-2 border border-red-200 text-red-500 rounded text-[10px] font-black uppercase tracking-widest hover:bg-red-50 transition-colors"
+                                  className="px-6 py-2 border border-aaj-magenta/30 text-aaj-magenta rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-magenta/10 transition-colors"
                                 >
                                   Rejeter
                                 </button>
                                 <button
                                   onClick={() => handleApproveProfileChange(request)}
-                                  className="px-6 py-2 bg-green-600 text-white rounded text-[10px] font-black uppercase tracking-widest hover:bg-green-700 transition-colors shadow-lg shadow-green-100"
+                                  className="px-6 py-2 bg-aaj-cyan text-aaj-night text-white rounded text-[10px] font-black uppercase tracking-widest hover:bg-white transition-colors shadow-lg shadow-aaj-cyan/20"
                                 >
                                   Approuver & Appliquer
                                 </button>
@@ -7462,7 +7462,7 @@ export const MemberSpacePage = () => {
                                   fileMimeType: '',
                                 })
                               }
-                              className="bg-red-50 text-red-500 px-4 rounded hover:bg-red-100 transition-colors"
+                              className="bg-aaj-magenta/10 text-aaj-magenta px-4 rounded hover:bg-aaj-magenta/15 transition-colors"
                             >
                               <XCircle size={16} />
                             </button>
@@ -7473,7 +7473,7 @@ export const MemberSpacePage = () => {
                       <button
                         type="submit"
                         disabled={isSaving || newsUploading}
-                        className="w-full bg-aaj-dark text-white px-12 py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                        className="w-full bg-aaj-dark text-white px-12 py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                       >
                         {isSaving ? (
                           <Loader2 size={14} className="animate-spin" />
@@ -7529,7 +7529,7 @@ export const MemberSpacePage = () => {
                                       await deleteDoc(doc(db, 'news', item.id));
                                     }
                                   }}
-                                  className="text-aaj-gray hover:text-red-500 transition-colors"
+                                  className="text-aaj-gray hover:text-aaj-magenta transition-colors"
                                 >
                                   <Trash2 size={16} />
                                 </button>
@@ -7602,9 +7602,9 @@ export const MemberSpacePage = () => {
                               <div
                                 className={`text-[9px] font-black uppercase tracking-[2px] px-3 py-1 rounded border mb-6 ${
                                   partner.level === 'Platine'
-                                    ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                    ? 'bg-aaj-amber/10 text-aaj-amber border-aaj-amber/30'
                                     : partner.level === 'Or'
-                                      ? 'bg-yellow-50 text-yellow-700 border-yellow-100'
+                                      ? 'bg-aaj-amber/10 text-aaj-amber border-aaj-amber/30'
                                       : 'bg-slate-50 text-slate-700 border-slate-100'
                                 }`}
                               >
@@ -7885,7 +7885,7 @@ export const MemberSpacePage = () => {
                     <button
                       type="submit"
                       disabled={isSaving}
-                      className="bg-aaj-dark text-white px-8 py-3 rounded text-[11px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all flex items-center gap-3 shadow-lg shadow-aaj-dark/20"
+                      className="bg-aaj-dark text-white px-8 py-3 rounded text-[11px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center gap-3 shadow-lg shadow-aaj-dark/20"
                     >
                       {isSaving ? (
                         <Loader2 size={16} className="animate-spin" />
@@ -8146,7 +8146,7 @@ export const MemberSpacePage = () => {
                                 : entry.paidAt?.toDate?.()?.toLocaleDateString('fr-FR') || '-'
                               : '-';
                             return (
-                              <tr key={year} className={isCurrent ? 'bg-blue-50/30' : ''}>
+                              <tr key={year} className={isCurrent ? 'bg-aaj-electric/10/30' : ''}>
                                 <td className="p-3">
                                   <input
                                     type="checkbox"
@@ -8164,11 +8164,11 @@ export const MemberSpacePage = () => {
                                 </td>
                                 <td className="p-3">
                                   {isPaid ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[9px] font-black uppercase tracking-widest border border-green-100">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-aaj-cyan/10 text-aaj-cyan text-[9px] font-black uppercase tracking-widest border border-aaj-cyan/30">
                                       <CheckCircle2 size={9} /> Payée
                                     </span>
                                   ) : (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[9px] font-black uppercase tracking-widest border border-amber-100">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-aaj-amber/10 text-aaj-amber text-[9px] font-black uppercase tracking-widest border border-aaj-amber/30">
                                       <XCircle size={9} /> Non payée
                                     </span>
                                   )}
@@ -8188,7 +8188,7 @@ export const MemberSpacePage = () => {
                                 <td className="p-3 text-right">
                                   <button
                                     onClick={() => toggleCotisationYear(year)}
-                                    className={`text-[10px] font-black uppercase tracking-widest hover:underline px-2 ${isPaid ? 'text-red-500' : 'text-green-600'}`}
+                                    className={`text-[10px] font-black uppercase tracking-widest hover:underline px-2 ${isPaid ? 'text-aaj-magenta' : 'text-aaj-cyan'}`}
                                   >
                                     {isPaid ? 'Annuler' : 'Valider'}
                                   </button>
@@ -8218,7 +8218,7 @@ export const MemberSpacePage = () => {
                       <button
                         onClick={payMultipleYears}
                         disabled={editSelectedYears.length === 0}
-                        className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-royal transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="bg-aaj-dark text-white px-5 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
                       >
                         <CheckCircle2 size={12} />
                         Payer{' '}
@@ -8238,7 +8238,7 @@ export const MemberSpacePage = () => {
                   <button
                     onClick={handleSaveMember}
                     disabled={isSaving}
-                    className="flex-1 bg-aaj-dark text-white py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all flex items-center justify-center gap-3 disabled:opacity-60"
+                    className="flex-1 bg-aaj-dark text-white py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center justify-center gap-3 disabled:opacity-60"
                   >
                     {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}{' '}
                     Enregistrer la fiche
@@ -8248,14 +8248,14 @@ export const MemberSpacePage = () => {
                       <button
                         onClick={() => handleRestoreMember(editingMember)}
                         disabled={isSaving}
-                        className="px-6 border border-green-200 text-green-700 rounded font-black uppercase tracking-widest text-[11px] hover:bg-green-50 transition-all flex items-center gap-2 disabled:opacity-60"
+                        className="px-6 border border-aaj-cyan/30 text-aaj-cyan rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-cyan/10 transition-all flex items-center gap-2 disabled:opacity-60"
                       >
                         <CheckCircle2 size={14} /> Restaurer
                       </button>
                       <button
                         onClick={() => handleDeleteMember(editingMember)}
                         disabled={isSaving}
-                        className="px-6 border border-red-200 text-red-600 rounded font-black uppercase tracking-widest text-[11px] hover:bg-red-50 transition-all flex items-center gap-2 disabled:opacity-60"
+                        className="px-6 border border-aaj-magenta/30 text-aaj-magenta rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-magenta/10 transition-all flex items-center gap-2 disabled:opacity-60"
                         title="Supprimer définitivement — irréversible"
                       >
                         <Trash2 size={14} /> Supprimer
@@ -8335,7 +8335,7 @@ export const MemberSpacePage = () => {
                         className={`inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[2px] px-2.5 py-1 rounded border ${
                           jobDetail.kind === 'offer'
                             ? 'bg-aaj-soft text-aaj-royal border-aaj-royal/20'
-                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-aaj-cyan/10 text-aaj-cyan border-aaj-cyan/30'
                         }`}
                       >
                         {jobDetail.kind === 'offer' ? 'Offre' : 'Demande'}
@@ -8526,7 +8526,7 @@ export const MemberSpacePage = () => {
                     <button
                       type="submit"
                       disabled={isSaving}
-                      className="flex-1 bg-aaj-dark text-white py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                      className="flex-1 bg-aaj-dark text-white py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {isSaving ? (
                         <Loader2 size={16} className="animate-spin" />
@@ -8708,9 +8708,9 @@ export const MemberSpacePage = () => {
                     </div>
                   </div>
 
-                  <div className="bg-amber-50 border border-amber-100 p-6 rounded flex items-start gap-4">
-                    <Shield size={20} className="text-amber-600 mt-1 flex-shrink-0" />
-                    <p className="text-[10px] text-amber-800 font-bold uppercase tracking-tight leading-relaxed">
+                  <div className="bg-aaj-amber/10 border border-aaj-amber/30 p-6 rounded flex items-start gap-4">
+                    <Shield size={20} className="text-aaj-amber mt-1 flex-shrink-0" />
+                    <p className="text-[10px] text-aaj-amber font-bold uppercase tracking-tight leading-relaxed">
                       En ajoutant un membre manuellement, vous certifiez que ses documents ont été
                       vérifiés par le bureau national. Il recevra un accès immédiat avec le rôle
                       Adhérent.
@@ -8721,7 +8721,7 @@ export const MemberSpacePage = () => {
                   <button
                     onClick={handleAddMember}
                     disabled={isSaving}
-                    className="flex-1 bg-aaj-dark text-white py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all flex items-center justify-center gap-3"
+                    className="flex-1 bg-aaj-dark text-white py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center justify-center gap-3"
                   >
                     {isSaving ? (
                       <Loader2 size={16} className="animate-spin" />
@@ -8811,7 +8811,7 @@ export const MemberSpacePage = () => {
                   <button
                     onClick={handleCreateRole}
                     disabled={isSaving || !newRoleForm.name.trim()}
-                    className="flex-1 bg-aaj-dark text-white py-3 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 bg-aaj-dark text-white py-3 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSaving ? 'Création...' : 'Créer le rôle'}
                   </button>
@@ -8848,9 +8848,9 @@ export const MemberSpacePage = () => {
                   <div>
                     <div className="flex items-center gap-3 mb-2">
                       {createdCredentials.emailSent ? (
-                        <CheckCircle2 size={22} className="text-green-600" />
+                        <CheckCircle2 size={22} className="text-aaj-cyan" />
                       ) : (
-                        <XCircle size={22} className="text-red-500" />
+                        <XCircle size={22} className="text-aaj-magenta" />
                       )}
                       <h3 className="text-xl font-black uppercase tracking-tight text-aaj-dark">
                         {createdCredentials.mode === 'approved'
@@ -8899,7 +8899,7 @@ export const MemberSpacePage = () => {
                         Mot de passe temporaire
                       </div>
                       <div className="flex gap-2">
-                        <div className="flex-1 font-mono text-sm bg-amber-50 border border-amber-200 rounded px-3 py-2 select-all">
+                        <div className="flex-1 font-mono text-sm bg-aaj-amber/10 border border-aaj-amber/40 rounded px-3 py-2 select-all">
                           {createdCredentials.tempPassword}
                         </div>
                         <button
@@ -8943,7 +8943,7 @@ export const MemberSpacePage = () => {
                         /* clipboard blocked */
                       }
                     }}
-                    className="flex-1 bg-aaj-dark text-white py-3 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all"
+                    className="flex-1 bg-aaj-dark text-white py-3 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all"
                   >
                     {credentialsCopied === 'all' ? 'Copié !' : 'Copier tout'}
                   </button>
@@ -9094,7 +9094,7 @@ export const MemberSpacePage = () => {
                                 editLibraryFileInputRef.current.value = '';
                               }
                             }}
-                            className="bg-red-50 text-red-500 px-4 rounded hover:bg-red-100 transition-colors"
+                            className="bg-aaj-magenta/10 text-aaj-magenta px-4 rounded hover:bg-aaj-magenta/15 transition-colors"
                             aria-label="Annuler le remplacement"
                           >
                             <XCircle size={16} />
@@ -9193,7 +9193,7 @@ export const MemberSpacePage = () => {
                     <button
                       type="submit"
                       disabled={isSaving}
-                      className="bg-aaj-dark text-white px-12 py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-royal transition-all flex items-center gap-3 shadow-lg shadow-aaj-dark/20 disabled:bg-aaj-gray"
+                      className="bg-aaj-dark text-white px-12 py-4 rounded font-black uppercase tracking-widest text-[11px] hover:bg-aaj-night hover:shadow-[0_0_24px_rgba(0,229,255,0.35)] transition-all flex items-center gap-3 shadow-lg shadow-aaj-dark/20 disabled:bg-aaj-gray"
                     >
                       {isSaving ? (
                         <Loader2 size={16} className="animate-spin" />
