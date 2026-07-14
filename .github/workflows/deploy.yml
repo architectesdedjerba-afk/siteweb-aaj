@@ -35,7 +35,31 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Deploy frontend via FTP(S)
+      # Deploy en 2 phases pour éviter la fenêtre où index.html référence
+      # des assets non encore uploadés (cause du bug récurrent "page sans CSS"
+      # observé en prod) :
+      #   Phase 1 : pousser les assets hashés (index-XXXX.css/js, motion-*, images)
+      #   Phase 2 : pousser index.html, .htaccess et le reste (atomic switch)
+      - name: Deploy frontend assets first (atomic phase 1)
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
+          local-dir: ./dist/assets/
+          server-dir: ./assets/
+          state-name: .ftp-deploy-assets-state.json
+          dangerous-clean-slate: false
+          log-level: minimal
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            **/.env*
+
+      - name: Deploy frontend index.html + root files (atomic phase 2)
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_HOST }}
@@ -45,6 +69,7 @@ jobs:
           port: 21
           local-dir: ./dist/
           server-dir: ./
+          state-name: .ftp-deploy-root-state.json
           dangerous-clean-slate: false
           log-level: minimal
           exclude: |
@@ -52,6 +77,8 @@ jobs:
             **/.git*/**
             **/node_modules/**
             **/.env*
+            assets/**
+            **/assets/**
 
       - name: Deploy PHP API via FTP(S)
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
